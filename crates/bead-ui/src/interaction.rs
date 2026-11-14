@@ -89,6 +89,18 @@ impl Session {
                 }
         })
     }
+    /// What the pointer hovers: the topmost focusable node, else the deepest `visible_on_hover`
+    /// group (spec 0280), so a group's hover-only children show over its plain background.
+    fn hover_target(&self, x: f32, y: f32) -> String {
+        self.hit(x, y, false)
+            .map(|node| node.id.clone())
+            .or_else(|| {
+                self.generation
+                    .as_ref()?
+                    .hover_group_at(&self.current, x, y)
+            })
+            .unwrap_or_default()
+    }
     /// Pointer press: the hit control's action sees `bead.pressed` false (a new gesture);
     /// every drag step that follows sees it true until [`Session::release`].
     pub fn click(&mut self, x: f32, y: f32) -> Result<Option<Scene>, Diagnostic> {
@@ -421,9 +433,7 @@ impl Session {
         let deferred_gesture = self.deferred_gesture;
         let canceled = self.track_deferred_pointer(x, y);
         if deferred_gesture {
-            let hovered = self
-                .hit(x, y, false)
-                .map_or(String::new(), |node| node.id.clone());
+            let hovered = self.hover_target(x, y);
             let mut changes = BTreeMap::from([("bead.hovered".into(), Value::Text(hovered))]);
             if canceled && self.stores.get("bead.pressed") == Some(&Value::Bool(true)) {
                 changes.insert("bead.pressed".into(), Value::Bool(false));
@@ -525,9 +535,7 @@ impl Session {
                 Ok(None)
             };
         }
-        let id = self
-            .hit(x, y, false)
-            .map_or(String::new(), |node| node.id.clone());
+        let id = self.hover_target(x, y);
         let mut changes: BTreeMap<String, Value> =
             BTreeMap::from([("bead.hovered".into(), Value::Text(id))]);
         if canceled {

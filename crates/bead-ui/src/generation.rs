@@ -240,6 +240,7 @@ pub struct Generation {
     pub(super) markup_entry: Option<PathBuf>,
     markup_frontend: Option<frontend::LuauFrontEnd>,
     materialized: std::cell::RefCell<Option<crate::materialized::Cached>>,
+    poses: std::cell::RefCell<crate::materialized::Poses>,
     view_reads: std::cell::RefCell<BTreeSet<String>>,
     view_reads_overflow: std::cell::Cell<bool>,
     pub(super) root: PathBuf,
@@ -280,9 +281,17 @@ impl Generation {
         }
     }
     pub(super) fn animation_deadline(&self) -> Option<std::time::Instant> {
-        self.markup_frontend
-            .as_ref()
-            .and_then(frontend::LuauFrontEnd::animation_deadline)
+        let frontend = self.markup_frontend.as_ref()?;
+        let poses = if self.poses.borrow().active() {
+            frontend.next_build_frame()
+        } else {
+            None
+        };
+        frontend.animation_deadline().into_iter().chain(poses).min()
+    }
+    /// The deepest `visible_on_hover` group of `scene` under the pointer (spec 0280).
+    pub(super) fn hover_group_at(&self, scene: &Scene, x: f32, y: f32) -> Option<String> {
+        self.poses.borrow().group_at(scene, x, y)
     }
     pub(super) fn animation_snapshot(&self) -> Option<frontend::AnimationSnapshot> {
         self.markup_frontend
@@ -540,6 +549,7 @@ impl Generation {
             markup_entry: None,
             markup_frontend: None,
             materialized: Default::default(),
+            poses: Default::default(),
             view_reads: Default::default(),
             view_reads_overflow: Default::default(),
             root: loader.root.clone(),
@@ -755,6 +765,7 @@ impl Generation {
             markup_entry: Some(entry.to_path_buf()),
             markup_frontend,
             materialized: Default::default(),
+            poses: Default::default(),
             view_reads: Default::default(),
             view_reads_overflow: Default::default(),
             root: loader.root,
@@ -778,6 +789,8 @@ impl Generation {
         #[cfg(test)]
         MATERIALIZE_CALLS.set(MATERIALIZE_CALLS.get() + 1);
         let (mut scene, nodes) = self.materialize_view(stores, palette, viewport)?;
+        let now = bead_core::animation::build_clock() as f64 * 1e-9;
+        self.poses.borrow_mut().pose(&mut scene, stores, now);
         for primitive in &mut scene.primitives {
             if let Primitive::Image { path, .. } = primitive
                 && path.to_str().is_some_and(|p| p.ends_with(".themed.svg"))
@@ -901,6 +914,9 @@ impl Generation {
                 }
             }
             result.scene.asset_data = self.assets.clone();
+            self.poses
+                .borrow_mut()
+                .set_hooks(&view, &result.scene, palette)?;
             *self.materialized.borrow_mut() = None;
             *self.materialized.borrow_mut() = crate::materialized::Cached::new(
                 raw,

@@ -7,9 +7,10 @@ return function(ui, tokens)
     -- Review metrics in logical px (spec 0274): the corner radii and type sizes tiles, rows and chips share.
     local metrics={radius=table.freeze{panel=24,tile=18,row=12,chip=18},text=table.freeze{caption=12,label=13,body=14,title=16}}
     local kit = {tokens=tokens, motion=table.freeze(motion), metrics=table.freeze(metrics)}
-    -- Hover fill one step deeper while the pointer is down (`bead.pressed` is global, the hover fill is per node).
-    local function hover_amount() return ui.resolve_for_check(ui.bind("bead.pressed")) and .12 or .08 end
-    local function press_fill(base) return ui.tint(base,"onSurface",hover_amount()) end
+    -- Press feedback (spec 0280): the hover tint one step deeper while the pointer is down on the node
+    -- (`pressed_fill`), and a .97 scale (`press_scale`); both are paint-only, no Luau run per press.
+    local function hover_tint(base) return ui.tint(base,"onSurface",.08) end
+    local function press_tint(base) return ui.tint(base,"onSurface",.12) end
     -- Label box beside an icon: the glyph baseline sits `ascent` (about 1.03 em) below the box top, so the cap
     -- height centres in a box of about 1.35 em; a taller box leaves the label above the icon's centre.
     local function label_h(size) return math.ceil(size*1.35) end
@@ -28,7 +29,7 @@ return function(ui, tokens)
         return e
     end
     function kit.Button(p)
-        return ui.Button(props(p,{height=40,padding=tokens.spacing.sm,radius=tokens.radii.small,
+        return ui.Button(props(p,{height=40,padding=tokens.spacing.sm,radius=tokens.radii.small,press_scale=.97,
             font_size=tokens.text.body*4/3,fill="surfaceContainer",color="onSurface",hover_fill="surfaceContainerHigh"}))
     end
     function kit.IconButton(p)
@@ -189,14 +190,15 @@ return function(ui, tokens)
             end
             body=ui.Row{id="body",width=main_w,height=p.height,padding_left=pad,gap=text_x-pad-tile_glyph-2,align="center",table.unpack(children)}
         end
-        local kids={kit.Button{id="main",width=main_w,height=p.height,padding=0,radius=radius,fill="transparent",
-            hover_fill=ui.alpha("onSurface",hover_amount()),aria_label=p.aria_label or p.label,on_activate=armed and p.on_activate or nil,body}}
+        local kids={kit.Button{id="main",width=main_w,height=p.height,padding=0,radius=radius,fill="transparent",press_scale=1,
+            hover_fill=ui.alpha("onSurface",.08),pressed_fill=ui.alpha("onSurface",.12),aria_label=p.aria_label or p.label,on_activate=armed and p.on_activate or nil,body}}
         if p.on_detail then
-            kids[2]=kit.Button{id="detail-open",width=40,height=p.height,padding=0,radius=radius,fill="transparent",
-                hover_fill=ui.alpha("onSurface",hover_amount()),aria_label=p.detail_label or p.label,on_activate=p.on_detail,
+            kids[2]=kit.Button{id="detail-open",width=40,height=p.height,padding=0,radius=radius,fill="transparent",press_scale=1,
+                hover_fill=ui.alpha("onSurface",.08),pressed_fill=ui.alpha("onSurface",.12),aria_label=p.detail_label or p.label,on_activate=p.on_detail,
                 ui.Row{id="chevron-row",width=40,height=p.height,align="center",justify="center",glyph("chevron","chevron_right",color)}}
         end
-        return ui.Row(props(kids,{id=p.id,width=p.width,height=p.height,radius=radius,align="center",
+        -- The whole tile scales while either of its buttons is pressed.
+        return ui.Row(props(kids,{id=p.id,width=p.width,height=p.height,radius=radius,align="center",press_scale=.97,
             position=p.position,left=p.left,top=p.top,border_width=1,border_color=ui.alpha("outline",armed and .12 or .06),
             fill=armed and (p.on and "primaryContainer" or "surfaceContainer") or ui.alpha("surfaceContainer",.4)}))
     end
@@ -320,7 +322,7 @@ return function(ui, tokens)
             pill[#pill+1]=kit.Button{id="option-"..i,width=width,height=option_h,padding=0,padding_top=(option_h-20)/2,shrink=0,
                 radius=tokens.radii.full,selected=chosen,justify="center",align="center",
                 fill=chosen and "primary" or "transparent",
-                hover_fill=live and press_fill(base) or (chosen and "primary" or "transparent"),
+                hover_fill=live and hover_tint(base) or (chosen and "primary" or "transparent"),pressed_fill=live and press_tint(base) or nil,
                 aria_label=(p.aria_label or "")..": "..o.label,on_activate=live and ui.action(p.on_change,o.id) or nil,
                 ui.Text{id="label",text=o.label,width=width,height=20,text_align="center",
                     font_size=size,font_weight=500,color=ui.alpha(ink,live and 1 or .4)}}
@@ -439,9 +441,9 @@ return function(ui, tokens)
         local extra=compact and (icon+tokens.spacing.xs+tokens.spacing.hairline) or (icon+tokens.spacing.xs+tokens.spacing.hairline/2)
         local width=padding+text_width+(has_icon and extra or 0)
         local base=p.selected and "primary" or "surfaceContainerHigh"
-        local pressed=value(ui.bind("bead.pressed"),false)
         local out=props(p,{width=width,height=math.max(34,size+tokens.spacing.md),padding=0,radius=tokens.radii.full,activate_on_release=true,focus_ring=false,
-            fill=ui.alpha(base,alpha),hover_fill=p.on_activate and ui.tint(base,"onSurface",pressed and .12 or .08) or ui.alpha(base,alpha),aria_label=p.label},
+            fill=ui.alpha(base,alpha),hover_fill=p.on_activate and hover_tint(base) or ui.alpha(base,alpha),
+            pressed_fill=p.on_activate and press_tint(base) or nil,aria_label=p.label},
             {label=true,label_width=true,glyph=true,compact=true,selected=true})
         if has_icon and label=="" then
             return kit.IconButton(props(out,{text=p.glyph,family=tokens.fonts.icon,font_size=icon,color=ink,text_align="center"}))
@@ -508,7 +510,7 @@ return function(ui, tokens)
         end
         kids[#kids+1]=ui.Text{id="label",text=text,width=label_w,height=label_h(metrics.text.label),shrink=0,font_size=metrics.text.label,font_weight=500,color=ink}
         local width=2*pad+label_w+(p.icon and glyph_px+2+tokens.spacing.sm or 0)
-        return kit.Button(props(p,{width=width,height=36,padding=0,radius=metrics.radius.chip,shrink=0,fill=base,hover_fill=press_fill(base),
+        return kit.Button(props(p,{width=width,height=36,padding=0,radius=metrics.radius.chip,shrink=0,fill=base,hover_fill=hover_tint(base),pressed_fill=press_tint(base),
             aria_label=text,
             ui.Row{id="content",width=width,height=36,align="center",justify="center",gap=tokens.spacing.sm,table.unpack(kids)}},
             {text=true,icon=true,on=true}))
@@ -541,7 +543,8 @@ return function(ui, tokens)
     function kit.NoticeRow(p)
         local tile,px=28,tokens.icons.medium*4/3
         local text_w=p.width-tokens.spacing.md*2-tile*2-tokens.spacing.compact*2
-        return ui.Row{id=p.id and "notice-"..p.id or "notice",width=p.width,height=72,shrink=0,radius=tokens.radii.medium,fill=p.fill or "surfaceContainer",
+        local row_id=p.id and "notice-"..p.id or "notice"
+        return ui.Row{id=row_id,width=p.width,height=72,shrink=0,radius=tokens.radii.medium,fill=p.fill or "surfaceContainer",
             padding_left=tokens.spacing.md,padding_right=tokens.spacing.md,gap=tokens.spacing.compact,align="center",
             ui.Box{id="icon-tile",width=tile,height=tile,radius=tokens.radii.small,fill="surfaceContainerHighest",shrink=0,padding=(tile-px)/2,
                 p.icon and p.icon~="" and ui.Image{id="icon",icon=p.icon,width=px,height=px,aria_label=p.caption}
@@ -550,7 +553,8 @@ return function(ui, tokens)
                 ui.Text{id="caption",text=p.caption or "",width=text_w,height=16,font_size=metrics.text.caption,color="onSurfaceVariant"},
                 ui.Text{id="title",text=p.title or "",width=text_w,height=20,font_size=metrics.text.body,font_weight=600,color="onSurface"},
                 ui.Text{id="body",text=p.body or "",width=text_w,height=16,font_size=metrics.text.caption,color="onSurfaceVariant"}},
-            kit.IconButton{id="dismiss",text="close",aria_label=p.dismiss_label or "Dismiss",width=tile,height=tile,padding=0,radius=tokens.radii.full,shrink=0,
+            -- Shown while the row holds the pointer or keyboard focus (spec 0280).
+            kit.IconButton{id="dismiss",text="close",aria_label=p.dismiss_label or "Dismiss",width=tile,height=tile,padding=0,radius=tokens.radii.full,shrink=0,visible_on_hover=row_id,
                 font_size=px,fill="transparent",hover_fill="surfaceContainerHighest",color="onSurfaceVariant",on_activate=p.on_dismiss}}
     end
     function kit.Bar(p)

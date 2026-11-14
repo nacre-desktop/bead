@@ -4,5 +4,5 @@ view = "view/main.luau"
 palette = "palette.json"
 
 [window]
-size = [520, 860]
-min_size = [480, 820]
+size = [900, 860]
+min_size = [880, 820]

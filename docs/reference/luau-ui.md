@@ -98,6 +98,22 @@ ui.Box { id = "badge", width = 16, height = 16, radius = 8,
 
 `ui.animated(key, target, duration, curve[, from])` and `ui.pulse(key, period, lo, hi)` return markers instead of numbers: the view is built once and the paint stage samples the value every frame, so animation frames run no Luau. A marker on `fill`/`color`/`border_color` (through `ui.alpha` or `ui.mix`), `radius`, `join` or `translate_x`/`translate_y` is patched into the cached scene; on any other property (width, height, left, ...) the layout is recomputed without Luau. `ui.animated` retargets from its current value and starts a fresh key at `from` (default: the target); `ui.pulse` loops `lo -> hi -> lo` every `period` until the key leaves the view and holds at `hi` under reduced motion.
 
+## Interaction poses
+
+Spec [0280](../specs/0280-kit-batch3.md). These follow the pointer and focus without running Luau or laying out again: the paint stage samples them on every frame, and a view that uses none costs nothing.
+
+```luau
+ui.Row { id = "row", fill = "surfaceContainer", shadow = true,           -- the panel shadow on any surface
+    ui.Button { id = "close", text = "close", visible_on_hover = "row",   -- fades in while `row` is hovered or keyboard-focused
+        press_scale = .97, pressed_fill = ui.tint("surfaceContainer", "onSurface", .12), on_activate = ui.action("close") } }
+ui.Column { id = "stack", gap = 8, reflow = ui.motion.duration.switch, ui.Repeat { ... } } -- children slide to new places
+```
+
+- `shadow=true` on `Panel`, `Box`, `Row`, `Column`, `Grid` or `Button` draws the panel/peek shadow (30 px margin, blur 10, the box's radius).
+- `visible_on_hover="<ancestor id>"` (the ancestor's local id): the subtree's alpha fades (`fade`, out-cubic) to 1 while the pointer is anywhere in that ancestor or keyboard focus (`bead.focus_visible`) is inside it, else to 0. The ancestor's plain background then sets `bead.hovered` to its id when no control is under the pointer (a non-focusable view's hover id paints nothing). Hidden children stay nodes: the pointer, keyboard and accessibility reach them. Untinted images, shadows and graphs inside do not fade.
+- `press_scale` (0.5..1.5) and `pressed_fill`: while the pointer is down on this view or a descendant (from the press until the release or until it leaves the view), the subtree scales about the view's centre and the view's box fill mixes into `pressed_fill`, over `press` (.06 s) down and `release` (.12 s) up. Input keeps the laid-out boxes. `bead.pressed` stays the global press flag.
+- `reflow=<seconds>` (0..2) on a container: after a relayout, each direct child (a `ui.Repeat` row keeps its key's id) slides from where it was drawn to its new place relative to the container; interruptible, a new child appears in place, reduced motion jumps. Clips inside a sliding child stay at its new place.
+
 ## Panel body and joined edges
 
-A root `Panel` may name a child as its `body`: the reveal (`reveal=true`) grows that child out of the panel's edge, its box and shadow keep their corners while growing, and pointer input stops at it, so a transparent root can stay at the surface's maximum size while the body is resized, moved or reshaped with `ui.animated` markers (a hover peek that grows into a panel as one surface). `shadow=true` is accepted on `Box` for such a body. `join_edge="top"|"bottom"|"left"|"right"` with `join` (0..1, default 1, animatable) makes a box's two corners on that edge square and flush with the surface it hangs from; `join=0` rounds all four corners (a detached panel).
+A root `Panel` may name a child as its `body`: the reveal (`reveal=true`) grows that child out of the panel's edge, its box and shadow keep their corners while growing, and pointer input stops at it, so a transparent root can stay at the surface's maximum size while the body is resized, moved or reshaped with `ui.animated` markers (a hover peek that grows into a panel as one surface). `shadow=true` is accepted on `Box` for such a body (and on any surface, see below). `join_edge="top"|"bottom"|"left"|"right"` with `join` (0..1, default 1, animatable) makes a box's two corners on that edge square and flush with the surface it hangs from; `join=0` rounds all four corners (a detached panel).

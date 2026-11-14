@@ -2,7 +2,7 @@
 
 `bead.kit` is the embedded Luau module of reusable components. It exposes `kit.tokens`, `kit.metrics` (read-only review radii `panel` 24, `tile` 18, `row` 12, `chip` 18 and text sizes `caption` 12, `label` 13, `body` 14, `title` 16, in logical px), `kit.motion` (the `ui.motion.duration` tokens plus the kit's `color`, `state` and `text` durations) and component constructors; property details can evolve with the source. The list below names the current component surface, with its primary role and key inputs. All components use caller-provided IDs and content. Consult [COMPONENTS.md](../COMPONENTS.md) for kit/theme context; this page is the API name index and avoids duplicating that overview.
 
-- `Button`, `IconButton`, `StatusIcon`, `Switch`: controls; `text`, `checked`, `on_activate`, dimensions, colors.
+- `Button`, `IconButton`, `StatusIcon`, `Switch`: controls; `text`, `checked`, `on_activate`, dimensions, colors. Every kit `Button` presses to `press_scale=.97` (pass `press_scale=1` to opt out); chips, segment options, pill buttons and tiles also set a `pressed_fill` (spec 0280). Tiles scale as a whole.
 - `Fill`: gradient fill primitive; `from`, `to`, `width`, `height`.
 - `SliderValue`, `Slider`: numeric range control; `value`, `min`, `max`, `step`, `on_change`.
 - `Tile`, `ToggleTile`, `LinkTile`, `ButtonTile`, `SliderTile`: standard tiles; `label`, `detail`, `icon`, `on`, `value` (`SliderTile`), action props; `SliderTile` also takes an end slot, a 28 px round icon button: `end_icon`, `on_end`, `end_label`, `end_color`.
@@ -11,15 +11,15 @@
 - `SegmentedControl`: exclusive choices; `items` (`{id, label}`), `value`, `on_change`.
 - `Segment`: pill segment control (spec 0274); `options` (`{id, label, selected?, enabled?}`), `value` (marks the selected id when options do not), `enabled`, `aria_label`, `on_change` (action name, receives the option id).
 - `LinkRow`: settings row that navigates; `title` (or `label`), optional `subtitle` (or `description`) and `icon`, `enabled`, `on_activate`; chevron at the end.
-- `Chip`: 36 px pill; `text`, optional `icon`, `on` (primaryContainer fill), `on_activate`. `Tag`: 11 px mono tag with an outline border; `text`.
+- `Chip`: 36 px pill; `text`, optional `icon`, `on` (primaryContainer fill), `on_activate`; presses to .97 with the hover tint one step deeper. `Tag`: 11 px mono tag with an outline border; `text`.
 - `EmptyState`: centred hero outline glyph, `title`, optional `detail` and at most one `chip` pill; `glyph`, `title`, `detail`, `chip`, `chip_glyph`, `on_chip`, `width`, `height` (spec 0276).
-- `NoticeRow`: 72 px notification row; `id`, `icon` (host icon name; a bell glyph when empty), `caption`, `title`, `body`, `on_dismiss` (nil disables the button), `dismiss_label`, `width`, `fill` (spec 0276).
+- `NoticeRow`: 72 px notification row; `id`, `icon` (host icon name; a bell glyph when empty), `caption`, `title`, `body`, `on_dismiss` (nil disables the button), `dismiss_label`, `width`, `fill` (spec 0276); the dismiss button shows only while the row is hovered or keyboard-focused (spec 0280).
 - `VirtualGrid`: virtualized keyed model; `model`, `key`, `render`, `scroll`.
 - `Transcript`: scrolling message list; `cells` (windowed model), `extent`, `width`, `on_action`. The Rust `transcript::Entry` that produces the cells takes `align_end` and `max_width` (a fraction of the row; 0 = full) per message, and an empty `label` drops the caption band (spec 0274).
 - `Composer`: multi-line message input; `text`, `placeholder`, `on_activate` (Enter; Shift+Enter breaks the line).
 - `PasswordField`: masked/revealed text; `text`, `revealed`, `on_toggle`.
 - `ActionButton`, `PillButton`, `ConfirmButton`: action variants; label/text and activation props.
-- `List`, `ListRow`, `Card`, `TextInput`, `Pill`: scrolling, row, container, input, and compact row primitives.
+- `List`, `ListRow`, `Card`, `TextInput`, `Pill`: scrolling, row, container, input, and compact row primitives; `Card { shadow = true }` draws the panel shadow (spec 0280).
 - `Badge`: 15 px count pill anchored to its parent's top-right corner (spec 0264); `text`, `tone` (fill role; ink is its on-colour or `surface`), optional `top`/`right`/`fill`/`color`; hidden for `""` or `"0"`.
 - `Bar`, `Panel`, `Popover`, `Tooltip`: edge-placed containers; `edge`, dimensions and children; `Popover` and `Tooltip` sit `bar_size` plus spacing from that edge. `Peek` is an alias of `Popover`.
 - `CollectionSwitcher`, `CollectionSwitcherMenu`: collection selection; `groups` (`{id, label}`), `current`, `on_toggle` / `on_switch`, `on_rename`, `editing`, `actions`.

@@ -1,0 +1,32 @@
+# 0280 — Kit batch 3: interaction poses and surface shadows
+
+The design review's parked framework asks (0274 "Not built"): hover-only children, shadows on any surface, a host shadow prewarm, animated list reflow and a per-node press with scale. Reference: [luau-ui.md, Interaction poses](../reference/luau-ui.md#interaction-poses).
+
+## Framework
+
+- One paint-stage pass (`materialized::Poses`, bead-ui) poses the laid-out or patched scene on every frame from `bead.hovered`, `bead.focused`, `bead.focus_visible` and `bead.pressed`: no Luau run, no layout. Layout records the views that ask (`visible_on_hover`, `press_scale`/`pressed_fill`, `reflow`); a view with none of them adds nothing. Motions use `bead_core::animation::Animations` (retargets from the drawn value, reduced motion jumps), keep their state across rebuilds, and pace frames through the generation's animation deadline.
+- `visible_on_hover="<ancestor id>"`: the subtree fades (`fade` .16 s) with the group's pointer or keyboard focus. The group's plain background is a hover target (`bead.hovered` = its id) when no control is under the pointer; hover colours apply to focusable views only, so a group id paints nothing. Hidden children stay nodes (pointer, keyboard, accesskit).
+- `press_scale` / `pressed_fill`: the press origin is the node hovered at the press; a view holding it is pressed while the pointer stays inside it, until the release. Scale about the view's centre, box fill mixed into `pressed_fill`, `press` .06 s down, `release` .12 s up. Node boxes keep the laid-out geometry.
+- `reflow=<seconds>`: a container's direct children slide from their drawn position relative to the container (so scrolling is no reflow); new children appear in place.
+- `shadow=true` on `Panel`, `Box`, `Row`, `Column`, `Grid`, `Button` (was Panel and Box): the same `Primitive::Shadow` (margin and blur now `bead_render::SURFACE_SHADOW`), nine-patch raster. A hover box a transparent shadowed button inserts goes behind its label and in front of its shadow (was in front of the shadow's index).
+- `bead_render::prewarm_shadows(&[(Rect, radius)], scale)` pins those shadows; the hard-coded Nacre OSD shape (`prewarm_osd_shadows`, the `osd_shape` branch of `shadow_pixmap`) is deleted.
+
+## Kit
+
+`kit.Button` defaults to `press_scale=.97`; `Chip`, `Segment` options, `PillButton` and tile buttons get `pressed_fill` (the hover tint at .12) instead of reading `bead.pressed` in Luau (each press re-ran the view); tiles scale as a whole (inner buttons `press_scale=1`). `NoticeRow`'s dismiss is `visible_on_hover` its row. `Card{shadow=true}` passes through. `examples/kit-gallery` shows all of them plus a reflowing toast stack.
+
+## Shell changes (next pin bump)
+
+- Replace `prewarm_osd_shadows()` with `bead::render::prewarm_shadows(&[(Rect::new(0., 0., 360., 64.), 32.)], 1.5)` (the review's OSD pill; one call with every shape) and drop the 396 px stand-in shape.
+- Toast cards: `shadow=true` instead of the outline stand-in; expand/close icons `visible_on_hover="<card id>"`; the stack `reflow=ui.motion.duration.switch`; chips get the press for free.
+- Remove any view-side `ui.bind("bead.pressed")` reads used only for press fills (use `pressed_fill`).
+
+## Limits
+
+- Untinted images, shadows and graphs inside a hover-only child do not fade (no primitive opacity).
+- Clips inside a sliding reflow child stay at its new place; press scale keeps clips (the content only shrinks).
+- An immediate-action button (action on press) does not track leave while held (`drag` updates the hover only for deferred gestures), so it stays pressed until the release.
+
+## Evidence
+
+Tests (`bead-ui` materialized_tests): `hover_only_child_fades_in_with_its_group_and_keyboard_focus_without_luau_or_layout`, `pressed_view_scales_and_deepens_its_fill_until_release_without_luau`, `reflow_children_slide_from_their_drawn_position_without_luau_or_layout_per_frame`, `shadow_on_any_surface_and_a_hover_box_inserted_behind_it_paints_like_a_rebuild`; `prewarmed_shadows_are_pinned_and_replaced_per_call` (`bead-render`). `bead check examples/kit-gallery`.

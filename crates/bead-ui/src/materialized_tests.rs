@@ -567,3 +567,275 @@ return ui.Row{id='root',width=300,height=40,fill='surface',
     // Settled: the next unrelated wakeup hits the raw cache and the scene patch.
     assert!(session.update_model(BTreeMap::new()).unwrap().is_none());
 }
+
+/// Spec 0280: a palette with the roles the kit's notification row and card read.
+fn kit_fixture(content: &str, behavior: &str) -> (Fixture, Session) {
+    let fixture = Fixture::new();
+    fs::write(
+        fixture.0.join("palette.json"),
+        r#"{"formatVersion":1,"colours":{"surface":"101010","onSurface":"f0f0f0","primary":"8ab4f8","surfaceContainer":"202020","surfaceContainerHigh":"282828","surfaceContainerHighest":"303030","onSurfaceVariant":"a0a0a0","outlineVariant":"404040","outline":"606060"}}"#,
+    )
+    .unwrap();
+    fs::create_dir_all(fixture.0.join("ui")).unwrap();
+    fs::write(fixture.0.join("ui/behavior.luau"), behavior).unwrap();
+    fs::write(fixture.0.join("ui/main.luau"), content).unwrap();
+    let mut session = fixture.session();
+    session.entry = "ui/main.luau".into();
+    let first = session.reload().unwrap();
+    session.commit(first);
+    session.set_frame_interval(std::time::Duration::from_millis(5));
+    (fixture, session)
+}
+/// Commit frames until no motion is due; returns how many it took.
+fn settle(session: &mut Session) -> usize {
+    let mut frames = 0;
+    while let Some(deadline) = session.preview_deadline() {
+        std::thread::sleep(deadline.saturating_duration_since(std::time::Instant::now()));
+        let Some(scene) = session.update_model(BTreeMap::new()).unwrap() else {
+            break;
+        };
+        session.commit(scene);
+        frames += 1;
+        assert!(frames < 400, "motion settles");
+    }
+    frames
+}
+fn layer_bounds(scene: &Scene, suffix: &str) -> Rect {
+    scene
+        .layers
+        .iter()
+        .find(|l| l.id.ends_with(suffix))
+        .unwrap_or_else(|| panic!("no layer {suffix}"))
+        .bounds
+}
+/// The first text primitive drawing `text`.
+fn text_of<'a>(scene: &'a Scene, text: &str) -> (&'a Rect, f32, [u8; 4]) {
+    scene
+        .primitives
+        .iter()
+        .find_map(|p| match p {
+            Primitive::Text {
+                rect,
+                text: t,
+                size,
+                color,
+                ..
+            } if t == text => Some((rect, *size, *color)),
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("no text {text}"))
+}
+const NOTICE_VIEW: &str = r#"local ui=require('bead.ui')
+local kit=require('bead.kit')
+return ui.Column{id='root',width=420,height=200,fill='surface',gap=8,
+ kit.NoticeRow{id='n',width=380,caption='Mail',title='Hello',body='Body',on_dismiss=ui.action('noop')},
+ ui.Button{id='other',text='Other',width=100,height=30,on_activate=ui.action('noop')}}"#;
+
+#[test]
+fn hover_only_child_fades_in_with_its_group_and_keyboard_focus_without_luau_or_layout() {
+    let (_fixture, mut session) = kit_fixture(
+        NOTICE_VIEW,
+        "return {stores={},actions={noop=function(s) end},computed={}}",
+    );
+    let alpha = |session: &Session| text_of(&session.current, "close").2[3];
+    assert_eq!(alpha(&session), 0, "the dismiss button is hidden at rest");
+    // Still a node: the pointer, keyboard and accessibility reach it.
+    assert!(node(&session, "dismiss").action.is_some());
+    frontend::reset_eval_calls();
+    #[cfg(feature = "test-counters")]
+    let passes = layout::layout_passes();
+    // The row's plain background is a hover target for its group.
+    let row = layer_bounds(&session.current, "notice-n");
+    let scene = session.hover(row.x + 4., row.y + 4.).unwrap().unwrap();
+    session.commit(scene);
+    let Some(Value::Text(hovered)) = session.stores.get("bead.hovered").cloned() else {
+        panic!("hover id")
+    };
+    assert!(hovered.ends_with("notice-n"), "hovered {hovered}");
+    assert!(settle(&mut session) > 1, "the reveal fades over frames");
+    assert_eq!(alpha(&session), 255);
+    // Over the button itself (inside the group) it stays; outside the group it fades out.
+    let (x, y) = center(&session, "dismiss");
+    let scene = session.hover(x, y).unwrap().unwrap();
+    session.commit(scene);
+    settle(&mut session);
+    assert_eq!(alpha(&session), 255);
+    let (x, y) = center(&session, "other");
+    let scene = session.hover(x, y).unwrap().unwrap();
+    session.commit(scene);
+    settle(&mut session);
+    assert_eq!(alpha(&session), 0);
+    // Keyboard focus inside the group reveals it; pointer focus (focus_visible off) does not.
+    let dismiss = scoped(&session, "dismiss");
+    for (visible, expected) in [(true, 255), (false, 0)] {
+        let scene = session
+            .update(BTreeMap::from([
+                ("bead.focused".into(), dismiss.clone()),
+                ("bead.focus_visible".into(), Value::Bool(visible)),
+            ]))
+            .unwrap()
+            .unwrap();
+        session.commit(scene);
+        settle(&mut session);
+        assert_eq!(alpha(&session), expected, "focus_visible={visible}");
+    }
+    assert_eq!(frontend::eval_calls(), 0, "hover reveal runs no Luau");
+    #[cfg(feature = "test-counters")]
+    assert!(
+        layout::layout_passes() <= passes + 2,
+        "only the focus-ring changes relayout"
+    );
+}
+
+#[test]
+fn pressed_view_scales_and_deepens_its_fill_until_release_without_luau() {
+    let view = r#"local ui=require('bead.ui')
+return ui.Column{id='root',width=200,height=100,fill='surface',
+ ui.Button{id='chip',text='Chip',width=100,height=40,fill='surfaceContainer',hover_fill='primary',pressed_fill='onSurface',press_scale=0.9,on_activate=ui.action('noop')}}"#;
+    let (_fixture, mut session) = kit_fixture(
+        view,
+        "return {stores={},actions={noop=function(s) end},computed={}}",
+    );
+    let chip = rect(&node(&session, "chip").draw);
+    let boxed = |session: &Session| {
+        match session.current.primitives.iter().find(
+        |p| matches!(p, Primitive::Rounded { rect, .. } if rect.w > 50. && rect.w < 150. && rect.h > 20.),
+    ) {
+        Some(Primitive::Rounded { rect, fill, .. }) => (*rect, *fill),
+        _ => panic!("no chip box"),
+    }
+    };
+    let size = text_of(&session.current, "Chip").1;
+    let (x, y) = center(&session, "chip");
+    let scene = session.hover(x, y).unwrap().unwrap();
+    session.commit(scene);
+    frontend::reset_eval_calls();
+    let scene = session.click(x, y).unwrap().unwrap();
+    session.commit(scene);
+    assert!(settle(&mut session) > 1, "the press runs over frames");
+    let (pressed, fill) = boxed(&session);
+    assert!((pressed.w - 90.).abs() < 0.01 && (pressed.h - 36.).abs() < 0.01);
+    assert!(
+        (pressed.x - (chip.x + 5.)).abs() < 0.01,
+        "scaled about the centre"
+    );
+    assert_eq!(fill, [240, 240, 240, 255], "pressed_fill");
+    assert!((text_of(&session.current, "Chip").1 - size * 0.9).abs() < 0.01);
+    let scene = session.release().unwrap().unwrap();
+    session.commit(scene);
+    settle(&mut session);
+    let (released, fill) = boxed(&session);
+    assert_eq!(released, chip);
+    assert_eq!(fill, [138, 180, 248, 255], "back to the hover fill");
+    assert_eq!(frontend::eval_calls(), 0, "press feedback runs no Luau");
+    // Node boxes never scale: input keeps the laid-out geometry.
+    assert_eq!(rect(&node(&session, "chip").draw), chip);
+}
+
+#[test]
+fn reflow_children_slide_from_their_drawn_position_without_luau_or_layout_per_frame() {
+    let view = r#"local ui=require('bead.ui')
+return ui.Column{id='root',width=200,height=300,fill='surface',
+ ui.Column{id='stack',width=200,gap=4,reflow=0.08,
+  ui.Repeat{id='items',model=ui.bind('rows'),key='id',render=function(item)
+   return ui.Box{id='card',width=200,height=40,fill='primary'} end}}}"#;
+    let behavior = "return {stores={rows={{id='a'},{id='b'},{id='c'}}},actions={},computed={}}";
+    let (_fixture, mut session) = kit_fixture(view, behavior);
+    // `b` is key 62 (hex); its box is the first primitive of its layer.
+    let drawn_y = |scene: &Scene| {
+        let layer = scene
+            .layers
+            .iter()
+            .find(|l| l.id.contains(".k62.") && l.id.ends_with("card"))
+            .expect("b");
+        (rect(&scene.primitives[layer.own.start]).y, layer.bounds.y)
+    };
+    let (start, _) = drawn_y(&session.current);
+    assert_eq!(start, 44.);
+    let rows = |ids: &[&str]| {
+        Value::list(
+            ids.iter()
+                .map(|id| serde_json::json!({ "id": id }))
+                .collect(),
+        )
+    };
+    let scene = session
+        .update(BTreeMap::from([("rows".into(), rows(&["b", "c"]))]))
+        .unwrap()
+        .unwrap();
+    let (y, rest) = drawn_y(&scene);
+    assert!(
+        rest == 0. && y > 40.,
+        "the first frame draws b where it was: {y}"
+    );
+    session.commit(scene);
+    frontend::reset_eval_calls();
+    #[cfg(feature = "test-counters")]
+    let passes = layout::layout_passes();
+    let mut last = y;
+    let mut frames = 0;
+    while let Some(deadline) = session.preview_deadline() {
+        std::thread::sleep(deadline.saturating_duration_since(std::time::Instant::now()));
+        let Some(scene) = session.update_model(BTreeMap::new()).unwrap() else {
+            break;
+        };
+        let (y, _) = drawn_y(&scene);
+        assert!(y <= last, "b slides up monotonically");
+        last = y;
+        session.commit(scene);
+        frames += 1;
+        assert!(frames < 400);
+    }
+    assert!(frames > 1);
+    assert_eq!(last, 0., "b settles at its new place");
+    assert_eq!(frontend::eval_calls(), 0, "slide frames run no Luau");
+    #[cfg(feature = "test-counters")]
+    assert_eq!(layout::layout_passes(), passes, "slide frames reuse layout");
+    // A new item appears in place; the others slide down from where they are drawn.
+    let scene = session
+        .update(BTreeMap::from([("rows".into(), rows(&["a", "b", "c"]))]))
+        .unwrap()
+        .unwrap();
+    let (y, rest) = drawn_y(&scene);
+    assert!(rest == 44. && y < 4., "b starts its slide down from 0: {y}");
+}
+
+#[test]
+fn shadow_on_any_surface_and_a_hover_box_inserted_behind_it_paints_like_a_rebuild() {
+    let view = r#"local ui=require('bead.ui')
+local kit=require('bead.kit')
+return ui.Column{id='root',width=300,height=300,fill='surface',padding=40,gap=40,
+ kit.Card{id='card',width=120,height=50,shadow=true},
+ ui.Button{id='lift',text='Lift',width=100,height=30,fill='transparent',hover_fill='primary',shadow=true,on_activate=ui.action('noop')}}"#;
+    let behavior = "return {stores={},actions={noop=function(s) end},computed={}}";
+    let (_fixture, mut session) = kit_fixture(view, behavior);
+    let (_reference_fixture, mut reference) = kit_fixture(view, behavior);
+    let card = layer_bounds(&session.current, "card");
+    assert!(session.current.primitives.iter().any(|p| matches!(p,
+        Primitive::Shadow { rect, blur, .. } if *rect == Rect::new(card.x - 30., card.y - 30., card.w + 60., card.h + 60.) && *blur == 10.)));
+    let hits = patch_hits();
+    let (x, y) = center(&session, "lift");
+    let scene = session.hover(x, y).unwrap().unwrap();
+    session.commit(scene.clone());
+    assert_eq!(patch_hits(), hits + 1, "hovering patches");
+    let expected = rebuilt(
+        &mut reference,
+        BTreeMap::from([("bead.hovered".into(), scoped(&session, "lift"))]),
+    );
+    assert_eq!(
+        painted(&scene, session.view_nodes()),
+        painted(&expected, reference.view_nodes())
+    );
+    // Not on leaves: a text has no surface to shadow.
+    let raw = layout::RawNode {
+        kind: layout::Widget::Text,
+        props: serde_json::from_value(serde_json::json!({"text":"t","shadow":true})).unwrap(),
+        children: vec![],
+        source: layout::Source {
+            file: "test.luau".into(),
+            line: 1,
+        },
+        scope: None,
+    };
+    assert!(layout::ViewSpec::from_raw(&raw, &|_| Ok(Value::Bool(false))).is_err());
+}

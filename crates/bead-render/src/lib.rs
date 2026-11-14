@@ -1919,35 +1919,44 @@ fn shadow_svg(w: f32, h: f32, radius: f32, blur: f32) -> String {
         h - 2. * pad
     )
 }
+/// The shadow a surface's `shadow = true` draws: this margin around the box on every side, this blur.
+pub const SURFACE_SHADOW: (f32, f32) = (30., 10.);
+type ShadowKey = (u32, u32, u32, u32, u32);
+/// Shadows a host pinned with [`prewarm_shadows`], served without a raster.
+static PINNED_SHADOWS: Mutex<Vec<(ShadowKey, Arc<Pixmap>)>> = Mutex::new(Vec::new());
+fn shadow_key(rect: Rect, radius: f32, blur: f32, scale: f32) -> ShadowKey {
+    let (w, h) = dimensions(rect, scale);
+    (w, h, radius.to_bits(), blur.to_bits(), scale.to_bits())
+}
 fn shadow_pixmap(rect: Rect, radius: f32, blur: f32, scale: f32) -> Result<Pixmap> {
+    let key = shadow_key(rect, radius, blur, scale);
+    if let Some(pixmap) = PINNED_SHADOWS.lock().ok().and_then(|pinned| {
+        pinned
+            .iter()
+            .find(|(candidate, _)| *candidate == key)
+            .map(|(_, pixmap)| pixmap.clone())
+    }) {
+        return Ok((*pixmap).clone());
+    }
+    shadow_raster(rect, radius, blur, scale)
+}
+/// Raster and pin the shadows of these surface boxes (`(box, radius)` in logical px, the box's
+/// position is ignored) at `scale`, so a surface's first frame needs no Gaussian (a cold raster
+/// can drop it). Each call replaces the previous set; pinned shadows are never evicted.
+pub fn prewarm_shadows(boxes: &[(Rect, f32)], scale: f32) -> Result<()> {
+    let (margin, blur) = SURFACE_SHADOW;
+    let mut pinned = Vec::with_capacity(boxes.len());
+    for (surface, radius) in boxes {
+        let rect = Rect::new(0., 0., surface.w + 2. * margin, surface.h + 2. * margin);
+        let pixmap = shadow_raster(rect, *radius, blur, scale)?;
+        pinned.push((shadow_key(rect, *radius, blur, scale), Arc::new(pixmap)));
+    }
+    *PINNED_SHADOWS.lock().map_err(|_| "shadow cache poisoned")? = pinned;
+    Ok(())
+}
+fn shadow_raster(rect: Rect, radius: f32, blur: f32, scale: f32) -> Result<Pixmap> {
     let _span = bead_core::profile::Span::new("shadow_raster");
     let (w, h) = dimensions(rect, scale);
-    type Shadows = Vec<((u32, u32, u32, u32, u32), std::sync::Arc<Pixmap>)>;
-    static SHADOWS: std::sync::OnceLock<std::sync::Mutex<Shadows>> = std::sync::OnceLock::new();
-    let cache = SHADOWS.get_or_init(|| std::sync::Mutex::new(Vec::new()));
-    let key = (w, h, radius.to_bits(), blur.to_bits(), scale.to_bits());
-    let osd_shape = rect.w == 396.
-        && ((rect.h == 120. && radius == 30.) || (rect.h == 136. && radius == 38.))
-        && blur == 10.
-        && scale == 1.5;
-    if osd_shape
-        && let Ok(shadows) = cache.lock()
-        && let Some((_, pixmap)) = shadows.iter().find(|(candidate, _)| *candidate == key)
-    {
-        return Ok((**pixmap).clone());
-    }
-    let cache_osd = |pixmap: Pixmap| {
-        if osd_shape && let Ok(mut shadows) = cache.lock() {
-            if let Some(index) = shadows.iter().position(|(candidate, _)| *candidate == key) {
-                shadows.remove(index);
-            }
-            if shadows.len() >= 2 {
-                shadows.remove(0);
-            }
-            shadows.push((key, std::sync::Arc::new(pixmap.clone())));
-        }
-        pixmap
-    };
     // Preserve the same Gaussian corners/edges, stretching only straight sections.
     // Bake a small template with enough room for radius + 3 sigma on either side.
     let cut = ((radius + 6. * blur) * scale).ceil() as u32;
@@ -1965,11 +1974,7 @@ fn shadow_pixmap(rect: Rect, radius: f32, blur: f32, scale: f32) -> Result<Pixma
     let (sx, xs, tw) = axis(w);
     let (sy, ys, th) = axis(h);
     if (tw, th) == (w, h) {
-        return Ok(cache_osd(svg_pixmap(
-            shadow_svg(rect.w, rect.h, radius, blur).as_bytes(),
-            w,
-            h,
-        )?));
+        return svg_pixmap(shadow_svg(rect.w, rect.h, radius, blur).as_bytes(), w, h);
     }
     // The Gaussian template depends on radius, blur, scale and the short axis only. A revealing
     // panel re-shapes its shadow every frame, so rendering it full size each time cost tens of
@@ -2020,16 +2025,7 @@ fn shadow_pixmap(rect: Rect, radius: f32, blur: f32, scale: f32) -> Result<Pixma
             result.draw_pixmap(0, 0, tile.as_ref(), &PixmapPaint::default(), tr, None);
         }
     }
-    Ok(cache_osd(result))
-}
-
-/// Warm the brightness and volume CPU shadows recorded by B0149 at 1.5x. These
-/// fixed geometries are independent of text, palette, and OSD kind.
-pub fn prewarm_osd_shadows() -> Result<()> {
-    for (height, radius) in [(60., 30.), (76., 38.)] {
-        let _ = shadow_pixmap(Rect::new(0., 0., 396., height + 60.), radius, 10., 1.5)?;
-    }
-    Ok(())
+    Ok(result)
 }
 
 const SVG_CACHE_CAP: usize = 8 * 1024 * 1024;
@@ -4103,20 +4099,32 @@ mod weight_tests {
     }
 
     #[test]
-    fn osd_shadows_are_ready_from_the_shared_cache() {
+    fn prewarmed_shadows_are_pinned_and_replaced_per_call() {
+        // The review's OSD pill: a 360 x 64 box, radius 32, at 1.5x (a 420 x 124 shadow).
+        let pill = (Rect::new(0., 0., 360., 64.), 32.);
+        let shadow = Rect::new(10., 20., 420., 124.);
+        let cold = shadow_raster(shadow, 32., 10., 1.5).unwrap();
+        prewarm_shadows(&[pill], 1.5).unwrap();
         let started = std::time::Instant::now();
-        let brightness = shadow_pixmap(Rect::new(0., 0., 396., 120.), 30., 10., 1.5).unwrap();
-        let before_ms = started.elapsed().as_secs_f64() * 1000.;
-        prewarm_osd_shadows().unwrap();
-        let started = std::time::Instant::now();
-        let volume = shadow_pixmap(Rect::new(0., 0., 396., 136.), 38., 10., 1.5).unwrap();
-        let after_ms = started.elapsed().as_secs_f64() * 1000.;
-        let cached_mib = (brightness.data().len() + volume.data().len()) as f64 / 1_048_576.;
-        eprintln!(
-            "OSD_SHADOW_RASTER before_ms={before_ms:.3} after_ms={after_ms:.3} cached_mib={cached_mib:.3}"
+        let warm = shadow_pixmap(shadow, 32., 10., 1.5).unwrap();
+        let warm_ms = started.elapsed().as_secs_f64() * 1000.;
+        assert_eq!(
+            warm.data(),
+            cold.data(),
+            "a pinned shadow is the same pixels"
         );
-        assert!(after_ms < 16.7, "warmed OSD shadow took {after_ms:.3} ms");
-        assert_eq!(brightness.width(), volume.width());
+        assert!(warm_ms < 16.7, "pinned shadow took {warm_ms:.3} ms");
+        let key = shadow_key(shadow, 32., 10., 1.5);
+        let pinned = |key| {
+            PINNED_SHADOWS
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|(k, _)| *k == key)
+        };
+        assert!(pinned(key));
+        prewarm_shadows(&[], 1.5).unwrap();
+        assert!(!pinned(key), "each call replaces the pinned set");
     }
 }
 

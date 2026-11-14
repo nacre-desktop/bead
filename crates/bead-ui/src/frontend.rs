@@ -693,6 +693,11 @@ impl LuauFrontEnd {
         let animations = self.animations.borrow();
         animations.next_frame(animations.armed?)
     }
+    /// One display frame after the last build: the pace of motions sampled outside Luau.
+    pub(super) fn next_build_frame(&self) -> Option<Instant> {
+        let animations = self.animations.borrow();
+        Some(animations.armed? + animations.frame_interval())
+    }
     pub(super) fn set_frame_interval(&self, interval: Duration) {
         self.animations.borrow_mut().set_frame_interval(interval);
     }

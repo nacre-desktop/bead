@@ -177,6 +177,10 @@ pub const PROPERTIES: &[&str] = &[
     "bottom",
     "hover_fill",
     "selected_fill",
+    "pressed_fill",
+    "press_scale",
+    "visible_on_hover",
+    "reflow",
     "multiline",
     "masked",
     "graph",
@@ -272,6 +276,14 @@ pub struct ViewSpec {
     pub text_align: Option<bead_render::TextAlign>,
     pub hover_fill: Option<Json>,
     pub selected_fill: Option<Json>,
+    /// Interaction poses (spec 0280), sampled per frame on the laid-out scene: the box fill and
+    /// the subtree scale while this view or a descendant is pressed.
+    pub pressed_fill: Option<Json>,
+    pub press_scale: f32,
+    /// The local id of an ancestor: this subtree fades in while the pointer or keyboard focus is in it.
+    pub visible_on_hover: Option<String>,
+    /// Seconds over which direct children slide to new positions after a relayout (0 = jump).
+    pub reflow: f32,
     pub motion: Option<bead_render::Motion>,
     pub graph: Option<std::sync::Arc<crate::graph::GraphData>>,
     pub children: Vec<ViewSpec>,
@@ -409,12 +421,13 @@ fn dimension<T: FromLength + FromPercent + TaffyAuto>(
     }
 }
 /// Colour properties whose expressions may carry a bound amount (`ui.alpha(role, ui.bind(..))`).
-const COLOR_PROPERTIES: [&str; 5] = [
+const COLOR_PROPERTIES: [&str; 6] = [
     "fill",
     "color",
     "border_color",
     "hover_fill",
     "selected_fill",
+    "pressed_fill",
 ];
 /// A copy of an expression with every nested binding replaced by its value; `None` when it has none.
 fn resolve_nested(
@@ -843,11 +856,28 @@ impl ViewSpec {
             if p.contains_key("focus_on_pointer") && raw.kind != Widget::Button {
                 return Err(source.error("focus_on_pointer is only valid on Button"));
             }
-            if p.contains_key("shadow") && !matches!(raw.kind, Widget::Panel | Widget::Box) {
-                return Err(source.error("shadow is only valid on Panel or Box"));
+            if p.contains_key("shadow")
+                && !matches!(
+                    raw.kind,
+                    Widget::Panel
+                        | Widget::Box
+                        | Widget::Row
+                        | Widget::Column
+                        | Widget::Grid
+                        | Widget::Button
+                )
+            {
+                return Err(source.error(
+                    "shadow is only valid on a surface: Panel, Box, Row, Column, Grid or Button",
+                ));
             }
             if p.contains_key("body") && (raw.kind != Widget::Panel || path != "view") {
                 return Err(source.error("body is only valid on the root Panel"));
+            }
+            let press_scale = number(p, "press_scale", 1., source)?;
+            let reflow = number(p, "reflow", 0., source)?;
+            if !(0.5..=1.5).contains(&press_scale) || !(0. ..=2.).contains(&reflow) {
+                return Err(source.error("press_scale needs 0.5..1.5 and reflow 0..2 seconds"));
             }
             let join = number(p, "join", 1., source)?;
             if !(0. ..=1.).contains(&join) {
@@ -1052,6 +1082,13 @@ impl ViewSpec {
                     .transpose()?,
                 hover_fill: p.get("hover_fill").cloned(),
                 selected_fill: p.get("selected_fill").cloned(),
+                pressed_fill: p.get("pressed_fill").cloned(),
+                press_scale,
+                visible_on_hover: p
+                    .get("visible_on_hover")
+                    .map(|_| text(p, "visible_on_hover", "", source).map(str::to_owned))
+                    .transpose()?,
+                reflow,
                 graph,
                 children,
                 source: raw.source.clone(),
@@ -1151,6 +1188,9 @@ pub(super) fn surface_colors(
     let palette_role = |name: &str, default| palette.get(name).unwrap_or(default);
     let body = palette_role("surface", [24, 24, 24, 255]);
     let ink = palette_role("onSurface", [240, 240, 240, 255]);
+    // Only a focusable view takes the pointer's hover; a `visible_on_hover` group's id paints nothing.
+    let hovered =
+        hovered && (view.action.is_some() || view.input.is_some() || view.graph.is_some());
     let selected = view.selected || hovered;
     let fill = color(
         if hovered {
@@ -1343,13 +1383,19 @@ pub fn layout(
             }
         };
         if view.shadow {
+            let (margin, blur) = bead_render::SURFACE_SHADOW;
             emit(
                 Primitive::Shadow {
-                    rect: Rect::new(r.x - 30., r.y - 30., r.w + 60., r.h + 60.),
+                    rect: Rect::new(
+                        r.x - margin,
+                        r.y - margin,
+                        r.w + 2. * margin,
+                        r.h + 2. * margin,
+                    ),
                     radius: view.radius,
-                    blur: 10.,
+                    blur,
                 },
-                Some(30.),
+                Some(margin),
             );
         }
         let border = (view.border_width > 0. || view.selected)

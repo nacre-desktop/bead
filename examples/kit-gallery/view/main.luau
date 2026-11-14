@@ -1,10 +1,26 @@
 -- SPDX-License-Identifier: MIT
--- One of each kit component added in specs 0274 and 0276, on a dark palette.
+-- One of each kit component added in specs 0274, 0276 and 0280, on a dark palette.
 local ui = require("bead.ui")
 local kit = require("bead.kit")
 local function caption(text) return ui.Text { text = text, height = 18, font_size = 12, color = "onSurfaceVariant" } end
-return ui.Column {
-    id = "gallery", width = "fill", height = "fill", padding = 20, gap = 10, fill = "surface",
+-- Spec 0280: a shadowed card, hover-only dismiss buttons and a toast stack that slides when a toast
+-- comes or goes (`reflow`); every kit button presses to .97 with a deeper fill.
+local batch3 = ui.Column { id = "batch3", width = 400, gap = 10,
+    caption("Card with a shadow"),
+    kit.Card { id = "card", width = 380, height = 56, shadow = true,
+        ui.Text { id = "card-text", text = "Same shadow as panels and peeks", height = 20, font_size = 14, color = "onSurface" } },
+    caption("Toast stack: hover a toast for its dismiss button"),
+    ui.Row { id = "stack-actions", height = 36, gap = 8, align = "center",
+        kit.Chip { id = "add", text = "Add toast", icon = "add", on = false, on_activate = ui.action("add_toast") } },
+    ui.Column { id = "stack", width = 380, gap = 8, reflow = ui.motion.duration.switch,
+        ui.Repeat { id = "toasts", model = ui.bind("toasts"), key = "id", render = function(item)
+            return kit.NoticeRow { id = item.id, width = 380, caption = "Mail · now", title = item.title, body = "Lunch at noon?",
+                on_dismiss = ui.action("drop_toast", item.id) }
+        end } },
+}
+return ui.Row { id = "page", width = "fill", height = "fill", fill = "surface",
+  ui.Column {
+    id = "gallery", width = 420, height = "fill", padding = 20, gap = 10, fill = "surface",
     caption("Segment"),
     kit.Segment { id = "mode", aria_label = "Mode", value = ui.bind("mode"), on_change = "set_mode",
         options = { { id = "light", label = "Light" }, { id = "dark", label = "Dark" }, { id = "auto", label = "Auto" } } },
@@ -33,4 +49,6 @@ return ui.Column {
     caption("ToggleTile"),
     kit.ToggleTile { id = "tile", width = 180, height = 64, label = "Wi-Fi", detail = "Home", icon = "wifi", on = true,
         on_activate = ui.action("noop") },
+  },
+  ui.Column { id = "right", width = 440, height = "fill", padding = 20, batch3 },
 }

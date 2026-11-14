@@ -44,10 +44,10 @@ struct Hover {
     hot: ([u8; 4], [u8; 4]),
     /// Whether the idle and the hovered state draw a box (a transparent one is not drawn).
     boxed: (bool, bool),
-    /// Where a box appears when the other state draws one: in front of the view's own
-    /// primitives. `None` when the view drew nothing, so the patch cannot tell whether
-    /// it was culled, and misses instead.
-    insert_at: Option<usize>,
+    /// Where a box appears when the other state draws one, and the view's layer: in front of
+    /// the view's own primitives (behind its shadow). `None` when the view drew nothing, so the
+    /// patch cannot tell whether it was culled, and misses instead.
+    insert_at: Option<(usize, usize)>,
     radius: f32,
     /// An empty input shows its placeholder in the muted colour: its label colour
     /// cannot be patched from the hover state alone.
@@ -190,6 +190,8 @@ fn insert_primitive(scene: &mut Scene, index: usize, owner: usize, primitive: Pr
     if let Some(clip) = clip {
         scene.clips.insert(index, clip);
     }
+    // Behind the owner's own shadow: every layer whose subtree ends here contains the owner.
+    let inside = scene.layers[owner].own.start < index;
     for (position, layer) in scene.layers.iter_mut().enumerate() {
         // Layers precede their descendants: an empty ancestor range ending here stays
         // before the new primitive, a later layer starting here moves behind it.
@@ -200,7 +202,8 @@ fn insert_primitive(scene: &mut Scene, index: usize, owner: usize, primitive: Pr
         if layer.own.end > index || (layer.own.end == index && (after || position == owner)) {
             layer.own.end += 1;
         }
-        if layer.subtree_end > index || (layer.subtree_end == index && (after || position == owner))
+        if layer.subtree_end > index
+            || (layer.subtree_end == index && (after || position == owner || inside))
         {
             layer.subtree_end += 1;
         }
@@ -299,7 +302,16 @@ impl Cached {
                         insert_at: own
                             .as_ref()
                             .filter(|own| !own.is_empty() && view.kind != Widget::Panel)
-                            .map(|own| own.start),
+                            .map(|own| {
+                                let shadow = matches!(
+                                    cached.scene.primitives[own.start],
+                                    Primitive::Shadow { .. }
+                                );
+                                (
+                                    own.start + usize::from(shadow),
+                                    lookup.layers[view.id.as_str()],
+                                )
+                            }),
                         radius: view.radius,
                         input: view.kind == Widget::TextInput,
                     });
@@ -699,14 +711,6 @@ impl Cached {
                 Ok(None)
             }
         }
-    }
-    /// The layer owning primitive `index` in the cached scene.
-    fn primitive_layer(&self, index: usize) -> usize {
-        self.scene
-            .layers
-            .iter()
-            .position(|layer| layer.own.contains(&index))
-            .expect("own primitive")
     }
     pub fn patch(
         &self,
@@ -1108,9 +1112,8 @@ impl Cached {
                         removed = Some(index);
                     }
                     (true, None) => {
-                        let cached_at = hover.insert_at.expect("checked before patching");
+                        let (cached_at, layer) = hover.insert_at.expect("checked before patching");
                         let at = cached_at - usize::from(removed.is_some_and(|r| r < cached_at));
-                        let layer = self.primitive_layer(cached_at);
                         let primitive = Primitive::Rounded {
                             rect: scene.layers[layer].bounds,
                             radius: hover.radius,
@@ -1124,5 +1127,360 @@ impl Cached {
             }
         }
         Ok(Some((scene, nodes)))
+    }
+}
+/// An interaction pose (spec 0280) a view asked for.
+enum Pose {
+    /// `visible_on_hover`: the subtree's alpha follows whether `group` holds the pointer or keyboard focus.
+    Reveal { group: String, group_layer: usize },
+    /// `press_scale` / `pressed_fill` while this view or a descendant is pressed.
+    Press { scale: f32, fill: Option<[u8; 4]> },
+    /// A direct child of a `reflow` container: slides from where it was drawn, relative to the container.
+    Reflow {
+        parent: usize,
+        duration: f64,
+        y_key: String,
+    },
+}
+struct Hook {
+    layer: usize,
+    id: String,
+    key: String,
+    pose: Pose,
+}
+/// Hover reveal, press and list reflow, sampled on every frame onto the laid-out or patched scene:
+/// no Luau run and no layout, and nothing to do for a view that asks for none of them. The motion
+/// state outlives the cached scene, so a rebuild mid-motion continues from the drawn pose.
+#[derive(Default)]
+pub(super) struct Poses {
+    hooks: Vec<Hook>,
+    motion: bead_core::animation::Animations,
+    /// The clock of the last posed frame: a motion running then needs one more frame.
+    posed: f64,
+    /// The node hovered when the pointer went down: views holding it are pressed while the
+    /// pointer stays inside them, until the release.
+    press: Option<String>,
+}
+/// Whether view `id` is `group` or inside it (scoped ids extend their ancestors' ids).
+fn within(id: &str, group: &str) -> bool {
+    id.strip_prefix(group)
+        .is_some_and(|rest| rest.is_empty() || rest.starts_with('.'))
+}
+fn mix(a: [u8; 4], b: [u8; 4], amount: f32) -> [u8; 4] {
+    std::array::from_fn(|i| {
+        (f32::from(a[i]) + (f32::from(b[i]) - f32::from(a[i])) * amount).round() as u8
+    })
+}
+fn fade(primitive: &mut Primitive, alpha: f32) {
+    let fade = |c: &mut [u8; 4]| c[3] = (f32::from(c[3]) * alpha).round() as u8;
+    match primitive {
+        Primitive::Rounded { fill, border, .. } => {
+            fade(fill);
+            if let Some((c, _)) = border {
+                fade(c);
+            }
+        }
+        Primitive::Text { color, shadow, .. } => {
+            fade(color);
+            if let Some(shadow) = shadow {
+                fade(&mut shadow.color);
+            }
+        }
+        Primitive::Arc { color, .. } => fade(color),
+        Primitive::Polyline { color, fill, .. } => {
+            fade(color);
+            if let Some(c) = fill {
+                fade(c);
+            }
+        }
+        Primitive::Image { tint: Some(c), .. } => fade(c),
+        // shortcut: untinted images, shadows and graphs have no alpha and stay drawn; add a
+        // primitive opacity if a hover-only child ever needs one.
+        Primitive::Image { .. } | Primitive::Shadow { .. } | Primitive::Graph { .. } => {}
+    }
+}
+/// `primitive` scaled by `s` about the centre of `around` (a shadow keeps its margin).
+fn scale_about(primitive: &mut Primitive, around: bead_render::Rect, s: f32) {
+    let (cx, cy) = (around.x + around.w / 2., around.y + around.h / 2.);
+    let scaled = |r: bead_render::Rect| {
+        bead_render::Rect::new(cx + (r.x - cx) * s, cy + (r.y - cy) * s, r.w * s, r.h * s)
+    };
+    match primitive {
+        Primitive::Rounded { rect, radius, .. } | Primitive::Image { rect, radius, .. } => {
+            *rect = scaled(*rect);
+            *radius *= s;
+        }
+        Primitive::Text { rect, size, .. } => {
+            *rect = scaled(*rect);
+            *size *= s;
+        }
+        Primitive::Shadow { rect, radius, .. } => {
+            let m = bead_render::SURFACE_SHADOW.0;
+            let inner = scaled(bead_render::Rect::new(
+                rect.x + m,
+                rect.y + m,
+                rect.w - 2. * m,
+                rect.h - 2. * m,
+            ));
+            *rect = bead_render::Rect::new(
+                inner.x - m,
+                inner.y - m,
+                inner.w + 2. * m,
+                inner.h + 2. * m,
+            );
+            *radius *= s;
+        }
+        Primitive::Arc { rect, .. }
+        | Primitive::Polyline { rect, .. }
+        | Primitive::Graph { rect, .. } => *rect = scaled(*rect),
+    }
+}
+impl Poses {
+    /// Read the poses of a fresh layout; the motions of views that left are dropped.
+    pub(super) fn set_hooks(
+        &mut self,
+        view: &ViewSpec,
+        scene: &Scene,
+        palette: &Palette,
+    ) -> Result<(), Diagnostic> {
+        enum Spec<'a> {
+            Reveal(&'a str),
+            Press(f32, Option<[u8; 4]>),
+            Reflow(&'a str, f32),
+        }
+        fn walk<'a>(
+            view: &'a ViewSpec,
+            ancestors: &mut Vec<&'a str>,
+            palette: &Palette,
+            out: &mut Vec<(&'a str, Spec<'a>)>,
+        ) -> Result<(), Diagnostic> {
+            if let Some(name) = &view.visible_on_hover {
+                let group = ancestors
+                    .iter()
+                    .rev()
+                    .copied()
+                    .find(|id| {
+                        id.strip_suffix(name.as_str())
+                            .is_some_and(|scope| scope.is_empty() || scope.ends_with('.'))
+                    })
+                    .ok_or_else(|| {
+                        view.source
+                            .error(format!("visible_on_hover names no ancestor id {name}"))
+                    })?;
+                out.push((view.id.as_str(), Spec::Reveal(group)));
+            }
+            if view.press_scale != 1. || view.pressed_fill.is_some() {
+                let fill = view
+                    .pressed_fill
+                    .as_ref()
+                    .map(|fill| layout::color(Some(fill), [0; 4], palette, &view.source))
+                    .transpose()?;
+                out.push((view.id.as_str(), Spec::Press(view.press_scale, fill)));
+            }
+            if view.reflow > 0. {
+                for child in &view.children {
+                    out.push((
+                        child.id.as_str(),
+                        Spec::Reflow(view.id.as_str(), view.reflow),
+                    ));
+                }
+            }
+            ancestors.push(view.id.as_str());
+            for child in &view.children {
+                walk(child, ancestors, palette, out)?;
+            }
+            ancestors.pop();
+            Ok(())
+        }
+        let mut found = Vec::new();
+        walk(view, &mut Vec::new(), palette, &mut found)?;
+        self.hooks.clear();
+        if !found.is_empty() {
+            let layers: BTreeMap<&str, usize> = scene
+                .layers
+                .iter()
+                .enumerate()
+                .map(|(i, l)| (l.id.as_str(), i))
+                .collect();
+            for (id, spec) in found {
+                // A culled or hidden view has no layer and nothing to pose.
+                let Some(&layer) = layers.get(id) else {
+                    continue;
+                };
+                let (kind, pose) = match spec {
+                    Spec::Reveal(group) => match layers.get(group) {
+                        Some(&group_layer) => (
+                            "r",
+                            Pose::Reveal {
+                                group: group.to_owned(),
+                                group_layer,
+                            },
+                        ),
+                        None => continue,
+                    },
+                    Spec::Press(scale, fill) => ("p", Pose::Press { scale, fill }),
+                    Spec::Reflow(parent, duration) => match layers.get(parent) {
+                        Some(&parent) => (
+                            "x",
+                            Pose::Reflow {
+                                parent,
+                                duration: f64::from(duration),
+                                y_key: format!("y:{id}"),
+                            },
+                        ),
+                        None => continue,
+                    },
+                };
+                self.hooks.push(Hook {
+                    layer,
+                    id: id.to_owned(),
+                    key: format!("{kind}:{id}"),
+                    pose,
+                });
+            }
+        }
+        let keys: BTreeSet<&str> = self
+            .hooks
+            .iter()
+            .flat_map(|hook| {
+                let y = match &hook.pose {
+                    Pose::Reflow { y_key, .. } => Some(y_key.as_str()),
+                    _ => None,
+                };
+                [Some(hook.key.as_str()), y]
+            })
+            .flatten()
+            .collect();
+        self.motion.retain(|key| keys.contains(key));
+        Ok(())
+    }
+    /// Pose `scene` for the interaction state in `stores` at `now` (animation clock, seconds).
+    pub(super) fn pose(&mut self, scene: &mut Scene, stores: &bead_core::Stores, now: f64) {
+        if self.hooks.is_empty() {
+            return;
+        }
+        self.posed = now;
+        fn text<'a>(stores: &'a bead_core::Stores, name: &str) -> &'a str {
+            match stores.get(name) {
+                Some(Value::Text(id)) => id,
+                _ => "",
+            }
+        }
+        let (hovered, focused) = (text(stores, "bead.hovered"), text(stores, "bead.focused"));
+        let keyboard = stores.get("bead.focus_visible") != Some(&Value::Bool(false));
+        let pressed = stores.get("bead.pressed") == Some(&Value::Bool(true));
+        if !pressed {
+            self.press = None;
+        } else if self.press.is_none() {
+            self.press = Some(hovered.to_owned());
+        }
+        let origin = self.press.clone().unwrap_or_default();
+        let token = |name: &str| bead_core::animation::duration(name).unwrap_or(0.1);
+        let curve = bead_core::animation::Curve::EaseOut;
+        // Innermost first: an outer scale then carries the already-posed inner views with it.
+        for hook in self.hooks.iter().rev() {
+            let Some(layer) = scene.layers.get(hook.layer) else {
+                continue;
+            };
+            let (own, range, bounds) = (
+                layer.own.clone(),
+                layer.own.start..layer.subtree_end,
+                layer.bounds,
+            );
+            match &hook.pose {
+                Pose::Reveal { group, .. } => {
+                    let shown = within(hovered, group) || (keyboard && within(focused, group));
+                    let target = f32::from(u8::from(shown));
+                    self.motion
+                        .target(&hook.key, target, now, token("fade"), curve);
+                    let alpha = self.motion.value(&hook.key, now).map_or(target, |v| v.0);
+                    if alpha < 1. {
+                        for primitive in &mut scene.primitives[range] {
+                            fade(primitive, alpha);
+                        }
+                    }
+                }
+                Pose::Press { scale, fill } => {
+                    let down = !origin.is_empty()
+                        && within(&origin, &hook.id)
+                        && within(hovered, &hook.id);
+                    let duration = token(if down { "press" } else { "release" });
+                    // A view never pressed keeps no motion state; its first press starts from rest.
+                    if self.motion.value(&hook.key, now).is_none() {
+                        if !down {
+                            continue;
+                        }
+                        self.motion.target(&hook.key, 0., now, duration, curve);
+                    }
+                    self.motion
+                        .target(&hook.key, f32::from(u8::from(down)), now, duration, curve);
+                    let amount = self.motion.value(&hook.key, now).map_or(0., |v| v.0);
+                    if amount <= 0. {
+                        continue;
+                    }
+                    if let Some(to) = fill
+                        && let Some(Primitive::Rounded { fill, .. }) = scene.primitives[own]
+                            .iter_mut()
+                            .find(|p| matches!(p, Primitive::Rounded { .. }))
+                    {
+                        *fill = mix(*fill, *to, amount);
+                    }
+                    let s = 1. + (scale - 1.) * amount;
+                    if s != 1. {
+                        for primitive in &mut scene.primitives[range] {
+                            scale_about(primitive, bounds, s);
+                        }
+                    }
+                }
+                Pose::Reflow {
+                    parent,
+                    duration,
+                    y_key,
+                } => {
+                    let Some(origin) = scene.layers.get(*parent).map(|l| l.bounds) else {
+                        continue;
+                    };
+                    // Relative to the container, so scrolling or moving the whole list is no reflow.
+                    let (x, y) = (bounds.x - origin.x, bounds.y - origin.y);
+                    self.motion.target(&hook.key, x, now, *duration, curve);
+                    self.motion.target(y_key, y, now, *duration, curve);
+                    let dx = self.motion.value(&hook.key, now).map_or(x, |v| v.0) - x;
+                    let dy = self.motion.value(y_key, now).map_or(y, |v| v.0) - y;
+                    if dx != 0. || dy != 0. {
+                        // shortcut: clips stay at rest, so content clipped inside a sliding item
+                        // is cut at its new place; move clips too if a host needs that.
+                        for primitive in &mut scene.primitives[range] {
+                            let (Primitive::Arc { rect, .. }
+                            | Primitive::Polyline { rect, .. }
+                            | Primitive::Rounded { rect, .. }
+                            | Primitive::Text { rect, .. }
+                            | Primitive::Image { rect, .. }
+                            | Primitive::Shadow { rect, .. }
+                            | Primitive::Graph { rect, .. }) = primitive;
+                            *rect = rect.translated(dx, dy);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    /// Whether the last posed frame was mid-motion, so another frame is due.
+    pub(super) fn active(&self) -> bool {
+        !self.hooks.is_empty() && self.motion.active(self.posed)
+    }
+    /// The deepest `visible_on_hover` group whose box in `scene` holds the point.
+    pub(super) fn group_at(&self, scene: &Scene, x: f32, y: f32) -> Option<String> {
+        self.hooks
+            .iter()
+            .filter_map(|hook| match &hook.pose {
+                Pose::Reveal { group, group_layer } => scene
+                    .layers
+                    .get(*group_layer)
+                    .filter(|l| &l.id == group && l.bounds.hit_test(x, y, None, None))
+                    .map(|_| group),
+                _ => None,
+            })
+            .max_by_key(|group| group.len())
+            .cloned()
     }
 }

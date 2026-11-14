@@ -287,6 +287,10 @@ impl Animations {
             .values()
             .any(|m| (m.held || now < m.started + m.duration) && m.from != m.to)
     }
+    /// Drop every motion whose id `keep` rejects.
+    pub fn retain(&mut self, mut keep: impl FnMut(&str) -> bool) {
+        self.states.retain(|id, _| keep(id));
+    }
 }
 #[cfg(test)]
 mod tests {
