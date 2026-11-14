@@ -2032,10 +2032,6 @@ impl App {
                         duration
                     },
                 ));
-                // A callback can arrive after the motion expires. Keep it armed
-                // until we have drawn the terminal pose, rather than making the
-                // next input finish the motion and invalidate the whole surface.
-                s.redraw |= active;
                 scene.opacity = motion.opacity(progress);
                 let (reveal, edge) = (motion.reveal, motion.edge);
                 let (dx, dy) = scene.panel_offset(progress, open);
@@ -2167,7 +2163,10 @@ impl App {
                 s.redraw = true;
                 return Ok(());
             }
-            s.redraw = false;
+            // A callback can arrive after the motion expires. Keep it armed
+            // until we have drawn the terminal pose, rather than making the
+            // next input finish the motion and invalidate the whole surface.
+            s.redraw = layer_motion_active;
             if self.options.debug_progress
                 && let Some(bead_render::Primitive::Rounded { rect, .. }) =
                     scene.primitives.last_mut()

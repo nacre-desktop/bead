@@ -87,51 +87,63 @@ mod closed_panel_unmap_tests {
         ));
     }
 
+    /// One reveal as `frame()` and `draw_current` run it, with callbacks every `period` off the
+    /// motion's grid: a callback draws when the surface is armed (its last pose was mid-motion)
+    /// or frame-active, and a callback that draws nothing ends the stream. `restart` replaces the
+    /// reveal as `panel_content_ready` does on a cold open, leaving `frame_until` stale.
+    fn slide(armed: bool, period: f64, restart: Option<f64>) -> Option<(f64, f64, u32)> {
+        use bead_core::animation::{Animations, Curve};
+        let duration = 0.360;
+        let mut animations = Animations::default();
+        animations.open_to("dashboard", true, 0., duration, Curve::EaseInOut);
+        let (mut frame_until, mut redraw, mut last, mut max_gap) = (None, false, None, 0_f64);
+        for frame in 0..1000 {
+            let now = 0.0003 + frame as f64 * period;
+            if restart.is_some_and(|at| now >= at && at > now - period) {
+                animations = Animations::default();
+                animations.open_to("dashboard", true, now, duration, Curve::EaseInOut);
+            }
+            if frame > 0
+                && !redraw
+                && !companion_frame_active(animations.active(now), frame_until, now)
+            {
+                return None;
+            }
+            let (_, active) = animations.value("dashboard", now).unwrap();
+            redraw = armed && active;
+            let slide = animations.committed("dashboard", now, now);
+            if let Some(previous) = last.replace(now) {
+                max_gap = max_gap.max(now - previous);
+            }
+            if frame_until.is_none() && animations.value("dashboard", now).is_some_and(|v| v.1) {
+                frame_until = Some(now + duration);
+            }
+            if let Some(slide) = slide {
+                return Some((slide.duration_ms, max_gap, slide.frames));
+            }
+        }
+        None
+    }
+
     #[test]
-    fn companion_slide_callbacks_at_120_hz_keep_committing_without_staging() {
-        let duration = 0.300_f64;
-        let frame_period = 1. / 120.;
-        let frame_until = Some(duration);
-        let mut committed = Vec::new();
-        let (stage, materialize, build) = (0, 0, 0);
-        let mut frame = 0;
-        let mut animations = bead_core::animation::Animations::default();
-        animations.open_to(
-            "dashboard",
-            true,
-            0.,
-            duration,
-            bead_core::animation::Curve::EaseOut,
-        );
-        let marker = loop {
-            let now = frame as f64 * frame_period;
-            if frame > 0 && !companion_frame_active(false, frame_until, now) {
-                break None;
+    fn companion_slide_commits_its_terminal_pose_on_the_next_callback() {
+        for period in [1. / 120., 1. / 60.] {
+            for restart in [None, Some(0.06)] {
+                // B0283: with the arm cleared (B0221's order) a callback after the end draws nothing.
+                assert_eq!(slide(false, period, restart), None, "{period} {restart:?}");
+                let (duration_ms, max_gap, frames) =
+                    slide(true, period, restart).expect("terminal pose committed");
+                assert!(
+                    (360. ..=360. + period * 1000.).contains(&duration_ms),
+                    "{period} {restart:?}: {duration_ms} ms"
+                );
+                assert!(
+                    max_gap <= period + 1e-9,
+                    "{period} {restart:?}: gap {max_gap}"
+                );
+                assert!(frames >= (0.360 / period) as u32, "{frames} frames");
             }
-            let _pose = animations.value("dashboard", now);
-            committed.push(now);
-            let terminal = animations.committed("dashboard", now, now);
-            frame += 1;
-            if let Some(marker) = terminal {
-                break Some(marker);
-            }
-        };
-        let max_gap = committed
-            .windows(2)
-            .map(|pair| pair[1] - pair[0])
-            .fold(0_f64, f64::max);
-        assert!(
-            committed.len() >= 34,
-            "committed {} frames",
-            committed.len()
-        );
-        assert!(max_gap <= 0.012, "maximum frame gap {max_gap:.6}s");
-        assert_eq!((stage, materialize, build), (0, 0, 0));
-        // B0170's marker is emitted by the same committed-motion path after a frame.
-        let marker = marker.expect("terminal pose emits B0170 slide marker");
-        assert_eq!(marker.frames as usize, committed.len());
-        let marker = format!("PANEL_SLIDE name=dashboard {marker}");
-        assert!(marker.contains("frames=37"), "{marker}");
+        }
     }
 }
 
