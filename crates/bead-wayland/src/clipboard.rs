@@ -57,13 +57,7 @@ impl Clipboard {
             device: None,
             selected: None,
             sources: vec![],
-            ext: if std::env::var("BEAD_PRIVATE_CLIPBOARD_CORE").as_deref() == Ok("1")
-                && std::env::var("BEAD_PRIVATE_INPUT_PROOF").as_deref() == Ok("1")
-            {
-                None
-            } else {
-                globals.bind(qh, 1..=1, ()).ok()
-            },
+            ext: globals.bind(qh, 1..=1, ()).ok(),
             ext_device: None,
             ext_selected: None,
             ext_sources: vec![],

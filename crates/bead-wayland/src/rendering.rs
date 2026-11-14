@@ -3312,17 +3312,6 @@ impl App {
                     *damage,
                 )?;
             }
-            if std::env::var_os("BEAD_PROFILE_DAMAGE").is_some() {
-                println!(
-                    "INPUT_REPAIR rects={} pixels={} bounding_pixels={}",
-                    repairs.len(),
-                    repairs
-                        .iter()
-                        .map(|d| u64::from(d.w) * u64::from(d.h))
-                        .sum::<u64>(),
-                    u64::from(bounding.w) * u64::from(bounding.h)
-                );
-            }
             drop(compose_profile);
             bead_core::profile::split("paint");
             if self.started.elapsed().as_secs_f64() > 2. {

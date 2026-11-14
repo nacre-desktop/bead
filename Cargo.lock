@@ -356,7 +356,6 @@ version = "0.1.0"
 name = "bead-minimal-shell"
 version = "0.1.0"
 dependencies = [
- "accesskit",
  "bead",
 ]
 

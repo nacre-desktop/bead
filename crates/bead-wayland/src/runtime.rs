@@ -684,23 +684,6 @@ pub fn run_runtime(
             )?;
         }
     }
-    if std::env::var("BEAD_PRIVATE_INPUT_PROOF").as_deref() == Ok("1")
-        && let Ok(value) = std::env::var("BEAD_PRIVATE_MAIN_LOOP_STALL_MS")
-        && let Ok(ms) = value.parse::<u64>()
-        && (6000..=10000).contains(&ms)
-    {
-        loop_.handle().insert_source(
-            Timer::from_duration(Duration::from_secs(2)),
-            move |_, _, _| {
-                eprintln!(
-                    "WATCHDOG_PROBE main_stall_begin monotonic_ns={}",
-                    monotonic_ns()
-                );
-                std::thread::sleep(Duration::from_millis(ms));
-                TimeoutAction::Drop
-            },
-        )?;
-    }
     let watchdog = bead_core::recovery::Watchdog::start(Duration::from_secs(6))?;
     // Five seconds stalled plus one dispatch interval of grace: sleeping is not
     // charged as a stall. No high-frequency heartbeat while idle.
