@@ -185,6 +185,15 @@ impl Publisher {
         object(&data)?;
         self.change(Some(data), true, None)
     }
+    /// Publish a mirror's current data without validating it again: a `Mirror`
+    /// only holds data that passed validation when it was accepted or patched.
+    pub fn publish_mirror(&self, mirror: &Mirror) -> Result<()> {
+        let snapshot = mirror
+            .snapshot
+            .as_ref()
+            .ok_or_else(|| Error::new("unavailable", "source has no snapshot", true))?;
+        self.change(Some(snapshot.data.clone()), true, None)
+    }
     pub fn disconnect(&self) -> Result<()> {
         self.change(None, false, None)
     }
@@ -198,23 +207,20 @@ impl Publisher {
                 .state
                 .lock()
                 .map_err(|_| Error::new("internal", "source state poisoned", false))?;
-            if let Some(revision) = origin {
-                if revision < state.snapshot.revision {
-                    return Ok(());
-                }
-                if revision == state.snapshot.revision
-                    && data.as_ref().is_some_and(|d| **d != *state.snapshot.data)
-                {
-                    return Err(Error::new("validation", "origin revision reused", false));
-                }
+            if origin.is_some_and(|revision| revision < state.snapshot.revision) {
+                return Ok(());
             }
-            if data.as_ref().is_none_or(|d| **d == *state.snapshot.data)
+            // Compare once: on a large topic each comparison walks the whole value.
+            let changed = data.as_ref().is_some_and(|d| **d != *state.snapshot.data);
+            if changed && origin == Some(state.snapshot.revision) {
+                return Err(Error::new("validation", "origin revision reused", false));
+            }
+            if !changed
                 && connected == state.snapshot.connected
                 && origin.is_none_or(|r| r == state.snapshot.revision)
             {
                 return Ok(());
             }
-            let changed = data.as_ref().is_some_and(|d| **d != *state.snapshot.data);
             let revision = if let Some(revision) = origin {
                 revision
             } else if changed {
@@ -252,7 +258,13 @@ fn validate_epoch(epoch: &str) -> Result<()> {
         Ok(())
     }
 }
+#[cfg(test)]
+thread_local! {
+    static OBJECT_CHECKS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
 fn object(value: &Json) -> Result<()> {
+    #[cfg(test)]
+    OBJECT_CHECKS.with(|n| n.set(n.get() + 1));
     if !value.is_object() {
         return Err(Error::new(
             "validation",
@@ -403,6 +415,10 @@ impl Mirror {
             return Ok(Applied::Disconnected);
         }
         object(&snapshot.data)?;
+        self.admit(snapshot)
+    }
+    /// Store a connected snapshot of the expected epoch whose data passed `object`.
+    fn admit(&mut self, snapshot: Arc<Snapshot>) -> Result<Applied> {
         if let Some(old) = &self.snapshot
             && old.epoch == snapshot.epoch
         {
@@ -457,15 +473,12 @@ impl Mirror {
         let mut data = (*old.data).clone();
         apply_patch(&mut data, patch);
         object(&data)?;
-        self.accept(
-            Arc::new(Snapshot {
-                epoch: epoch.into(),
-                revision,
-                data: Arc::new(data),
-                connected: true,
-            }),
-            now,
-        )
+        self.admit(Arc::new(Snapshot {
+            epoch: epoch.into(),
+            revision,
+            data: Arc::new(data),
+            connected: true,
+        }))
     }
     pub fn values(
         &self,
@@ -592,5 +605,87 @@ mod restart_tests {
         assert_eq!(seen.lock().unwrap().len(), 3);
         assert!(p.restart(String::new()).is_err());
         assert_eq!(p.snapshot().epoch, "boot-b");
+    }
+}
+
+#[cfg(test)]
+mod mirror_tests {
+    use super::*;
+    use serde_json::json;
+    fn checks() -> usize {
+        OBJECT_CHECKS.with(std::cell::Cell::get)
+    }
+    fn mirror(data: Json, now: Instant) -> Mirror {
+        let mut mirror = Mirror::new(now);
+        let snapshot = Arc::new(Snapshot {
+            epoch: "boot".into(),
+            revision: 1,
+            data: Arc::new(data),
+            connected: true,
+        });
+        assert_eq!(mirror.accept(snapshot, now).unwrap(), Applied::Updated);
+        mirror
+    }
+    #[test]
+    fn patch_and_mirror_publication_validate_the_snapshot_once() {
+        let now = Instant::now();
+        let publisher = Publisher::new("boot".into(), json!({})).unwrap();
+        let mut mirror = mirror(json!({"rows":{"a":1}}), now);
+        let start = checks();
+        let applied = mirror.patch("boot", 1, 2, &json!({"rows":{"b":2}}), now);
+        assert_eq!(applied.unwrap(), Applied::Updated);
+        publisher.publish_mirror(&mirror).unwrap();
+        assert_eq!(checks() - start, 1);
+        let data = &mirror.snapshot().unwrap().data;
+        assert!(Arc::ptr_eq(&publisher.snapshot().data, data));
+        assert!(publisher.publish_mirror(&Mirror::new(now)).is_err());
+    }
+    #[test]
+    fn invalid_remote_input_is_still_rejected() {
+        let now = Instant::now();
+        let half = "x".repeat(5 * 1024 * 1024);
+        let mut mirror = mirror(json!({"a": half}), now);
+        // Each part fits the 8 MiB budget; the merged snapshot does not.
+        assert!(
+            mirror
+                .patch("boot", 1, 2, &json!({"b": half}), now)
+                .is_err()
+        );
+        assert_eq!(mirror.snapshot().unwrap().revision, 1);
+        let mut deep = json!(1);
+        for _ in 0..70 {
+            deep = json!({ "d": deep });
+        }
+        assert!(mirror.patch("boot", 1, 2, &deep, now).is_err());
+        let array = Arc::new(Snapshot {
+            epoch: "boot".into(),
+            revision: 3,
+            data: Arc::new(json!([])),
+            connected: true,
+        });
+        assert!(mirror.accept(array, now).is_err());
+        assert_eq!(mirror.snapshot().unwrap().revision, 1);
+    }
+    #[test]
+    fn publication_compares_once_with_unchanged_semantics() {
+        let publisher = Publisher::new("boot".into(), json!({"v":0})).unwrap();
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let sink = seen.clone();
+        let _subscription = publisher
+            .subscribe(Arc::new(move |s| sink.lock().unwrap().push(s.revision)))
+            .unwrap();
+        publisher.publish(json!({"v":0})).unwrap();
+        assert_eq!(*seen.lock().unwrap(), [0]);
+        publisher.publish(json!({"v":1})).unwrap();
+        assert_eq!(*seen.lock().unwrap(), [0, 1]);
+        publisher.disconnect().unwrap();
+        publisher.publish(json!({"v":1})).unwrap();
+        assert_eq!(*seen.lock().unwrap(), [0, 1, 1, 1]);
+        assert!(publisher.snapshot().connected);
+        publisher.publish_revision(1, json!({"v":1})).unwrap();
+        assert_eq!(seen.lock().unwrap().len(), 4);
+        assert!(publisher.publish_revision(1, json!({"v":2})).is_err());
+        publisher.publish_revision(0, json!({"v":9})).unwrap();
+        assert_eq!(publisher.snapshot().data["v"], 1);
     }
 }
