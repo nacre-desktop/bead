@@ -1736,6 +1736,7 @@ mod tests {
                     blur: 0.,
                     fit: crate::ImageFit::Fill,
                     clip_polygon: None,
+                    radius: 0.,
                     tint: None,
                     rect: Rect::new(24.6, 4., 7.4, 12.),
                     path: "unused.png".into(),

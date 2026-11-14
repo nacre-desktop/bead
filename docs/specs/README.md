@@ -29,6 +29,7 @@ This index contains current framework contracts and repository-boundary decision
 | [0254 — Render and worker hot paths](0254-hotpath-render.md) | Scene handoff, action isolation, and render preparation costs |
 | [0264 — Tinted icons and badge](0264-tinted-icons-and-badge.md) | Palette-tinted monochrome images and the kit count badge |
 | [0274 — Kit batch](0274-kit-batch.md) | `kit.Segment`, `LinkRow`, `Chip`, `Tag`, the `SliderTile` end slot, `kit.metrics`, honoured close durations, transcript alignment |
+| [0276 — Kit batch 2](0276-kit-batch2.md) | `kit.EmptyState`, `kit.NoticeRow`, `radius` on `ui.Image`, chip/button label centring |
 | [0262 — Non-exhaustive host types](0262-non-exhaustive.md) | `#[non_exhaustive]` service config/snapshots, `Options` and `WindowSpec::new`; host construction and migration |
 | [0263 — Motion tokens and panel retarget](0263-motion-tokens-and-retarget.md) | Named curves and durations, sampled `ui.animated` markers, and a panel body that regrows mid-animation |
 | [0270 — Panel first frame](0270-panel-first-frame.md) | Cold and reopened panel-open latency: per-axis shadow templates (the GL context lifetime is pending a desktop gate) |

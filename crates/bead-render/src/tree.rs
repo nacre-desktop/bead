@@ -191,6 +191,7 @@ impl ImagePayload {
             path,
             fit,
             clip_polygon,
+            radius,
             tint,
             ..
         } = &self.primitive
@@ -238,6 +239,7 @@ impl ImagePayload {
         if let Some(points) = clip_polygon {
             crate::apply_polygon_clip(&mut pixels, points)?;
         }
+        crate::apply_radius_clip(&mut pixels, *radius * self.scale)?;
         let compact = if path.extension().is_some_and(|e| e == "svg") {
             crate::compact::CompactRaster::from_pixmap(&pixels)
         } else {
@@ -874,12 +876,13 @@ pub(crate) fn hash_primitive(primitive: &Primitive, at_origin: bool, hash: &mut 
             blur,
             fit,
             clip_polygon,
+            radius,
             tint,
             rect: r,
             path,
         } => {
             rect(r, hash);
-            (blur.to_bits(), fit, path, tint).hash(hash);
+            (blur.to_bits(), radius.to_bits(), fit, path, tint).hash(hash);
             clip_polygon.is_some().hash(hash);
             for coordinate in clip_polygon.iter().flatten().flatten() {
                 coordinate.to_bits().hash(hash);
@@ -2087,6 +2090,7 @@ impl TreeCache {
                     blur,
                     fit,
                     clip_polygon,
+                    radius,
                     tint,
                     ..
                 } = primitive
@@ -2104,6 +2108,7 @@ impl TreeCache {
                         // The native decode skips `load_image`, so a tinted image never takes it.
                         let native_cover = *fit == crate::ImageFit::Cover
                             && clip_polygon.is_none()
+                            && *radius == 0.
                             && tint.is_none()
                             && !path.extension().is_some_and(|e| e == "svg");
                         let (width, height) = if native_cover {
@@ -5480,6 +5485,7 @@ mod tests {
                 fit: crate::ImageFit::Cover,
                 blur: 0.,
                 clip_polygon: Some(vec![[0., 0.], [1., 0.], [1., 1.], [0., 1.]]),
+                radius: 0.,
                 tint: None,
             });
         }
@@ -6197,6 +6203,7 @@ mod tests {
             blur: 0.,
             fit: crate::ImageFit::Fill,
             clip_polygon: None,
+            radius: 0.,
             tint: None,
         };
         let mut dense = TreeCache::default();
@@ -6288,6 +6295,7 @@ mod tests {
             blur: 0.,
             fit: crate::ImageFit::Fill,
             clip_polygon: None,
+            radius: 0.,
             tint: None,
         };
         scene.asset_data.insert("proof.svg".into(), Arc::from(&br##"<svg xmlns="http://www.w3.org/2000/svg" width="2300" height="2200"><rect width="2300" height="2200" fill="#123456"/></svg>"##[..]));
@@ -6442,6 +6450,50 @@ mod tests {
         drop(payload);
         drop(frame);
         assert_eq!(budget.used(), 0);
+    }
+    /// B0276: `radius` clips the baked image on the dense (CPU) and the upload (GPU) paths alike.
+    #[test]
+    fn image_radius_clips_corners_on_dense_and_upload_paths() {
+        let plain = scene();
+        let mut round = scene();
+        if let Primitive::Image { radius, .. } = &mut round.primitives[0] {
+            *radius = 3.;
+        }
+        let corner_and_centre = |pix: &Pixmap| {
+            let (w, h) = (pix.width(), pix.height());
+            let at = |x: u32, y: u32| pix.pixel(x, y).unwrap();
+            (at(0, 0), at(w / 2, h / 2), at(w / 2, 0))
+        };
+        let mut dense = TreeCache::default();
+        dense.prepare(&plain, 1.).unwrap();
+        let flat = corner_and_centre(
+            &dense.frame.as_ref().unwrap().items[0]
+                .raster
+                .as_ref()
+                .unwrap()
+                .pixels,
+        );
+        dense.prepare(&round, 1.).unwrap();
+        let cpu = corner_and_centre(
+            &dense.frame.as_ref().unwrap().items[0]
+                .raster
+                .as_ref()
+                .unwrap()
+                .pixels,
+        );
+        let mut worker = TreeCache::default().with_image_policy(ImagePolicy::UploadOnly);
+        worker.prepare(&round, 1.).unwrap();
+        let payload = worker.frame.as_ref().unwrap().items[0]
+            .image
+            .as_ref()
+            .unwrap();
+        payload.prepare().unwrap();
+        let gpu = corner_and_centre(&payload.take_upload().unwrap().pixels);
+        assert!(cpu.0.alpha() < 96, "corner pixel is outside the radius");
+        assert_ne!(flat.0.alpha(), 0, "unclipped image keeps its corner");
+        assert_eq!(cpu.1, flat.1, "interior unchanged");
+        assert_eq!(cpu.2, flat.2, "straight edge midpoint unchanged");
+        assert_eq!(gpu, cpu, "upload and dense paths clip identically");
     }
     #[test]
     fn upload_frames_materialize_for_cpu_and_invalid_assets_keep_previous_frame() {
@@ -6675,6 +6727,7 @@ mod tests {
             blur: 0.,
             fit: crate::ImageFit::Fill,
             clip_polygon: None,
+            radius: 0.,
             tint: None,
         };
         replacement.primitives = (0..1025)
@@ -7087,6 +7140,7 @@ mod tests {
                     blur: 0.,
                     fit: crate::ImageFit::Fill,
                     clip_polygon: None,
+                    radius: 0.,
                     tint: None,
                     rect: Rect::new(2., 2., 8., 8.),
                     path: "proof.png".into(),
@@ -7128,6 +7182,7 @@ mod tests {
                 fit: crate::ImageFit::Cover,
                 blur: 0.,
                 clip_polygon: None,
+                radius: 0.,
                 tint: None,
             });
         }
@@ -7192,6 +7247,7 @@ mod tests {
                 blur: 0.,
                 fit: crate::ImageFit::Fill,
                 clip_polygon: None,
+                radius: 0.,
                 tint: None,
                 rect: Rect::new(x, 2., 512., 512.),
                 path: "proof.png".into(),
@@ -7341,6 +7397,7 @@ mod tests {
                 blur: 0.,
                 fit: crate::ImageFit::Fill,
                 clip_polygon: None,
+                radius: 0.,
                 tint: None,
                 rect: Rect::new(2., y, 12., 6.),
                 path: "proof.png".into(),
@@ -8121,6 +8178,7 @@ mod tests {
             fit: crate::ImageFit::Fill,
             blur: 0.,
             clip_polygon: None,
+            radius: 0.,
             tint: None,
         }];
 

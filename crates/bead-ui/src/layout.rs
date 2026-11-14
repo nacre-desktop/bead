@@ -1435,6 +1435,7 @@ pub fn layout(
                     blur: view.blur,
                     fit: view.image_fit,
                     clip_polygon: view.clip_polygon.clone(),
+                    radius: view.radius,
                     tint: view
                         .tint
                         .as_ref()

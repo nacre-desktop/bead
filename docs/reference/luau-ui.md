@@ -50,6 +50,7 @@ ui.Image { id="image", path="logo.png", width=120, height=80 }
 -- NAME up in the hicolor icon directories).
 -- tint="secondary" (a palette role, `ui.alpha(...)` or `ui.tint(...)`) draws the image's alpha as a
 -- mask filled with that colour, so themed icons and symbol glyphs follow the palette.
+-- radius=16 clips the image to an antialiased rounded rectangle (album art inside a rounded card).
 ```
 ```luau
 ui.Arc { id="arc", width=40, height=40 }

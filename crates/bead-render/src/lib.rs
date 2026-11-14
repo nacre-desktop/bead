@@ -191,6 +191,9 @@ pub enum Primitive {
         fit: ImageFit,
         #[serde(default)]
         clip_polygon: Option<Vec<[f32; 2]>>,
+        /// Antialiased rounded-rect clip of the baked pixels, in logical px (0 = none).
+        #[serde(default)]
+        radius: f32,
         /// Draw the image's alpha as a mask filled with this colour (palette-tinted monochrome icons).
         #[serde(default)]
         tint: Option<[u8; 4]>,
@@ -1175,11 +1178,12 @@ fn key(p: &Primitive, scale: f32) -> String {
             path,
             blur,
             clip_polygon,
+            radius,
             fit,
             tint,
         } => {
             format!(
-                "i:{blur}:{clip_polygon:?}:{fit:?}:{tint:?}:{scale}:{}:{}:{}",
+                "i:{blur}:{clip_polygon:?}:{radius}:{fit:?}:{tint:?}:{scale}:{}:{}:{}",
                 rect.w,
                 rect.h,
                 path.display()
@@ -1367,6 +1371,23 @@ fn apply_polygon_clip(pix: &mut Pixmap, points: &[[f32; 2]]) -> Result<()> {
     pix.apply_mask(&mask);
     Ok(())
 }
+fn apply_radius_clip(pix: &mut Pixmap, radius: f32) -> Result<()> {
+    if radius <= 0. {
+        return Ok(());
+    }
+    let rect = Rect::new(0., 0., pix.width() as f32, pix.height() as f32);
+    let path = rounded(rect, radius).ok_or("invalid image clip radius")?;
+    let mut mask =
+        tiny_skia::Mask::new(pix.width(), pix.height()).ok_or("image clip allocation")?;
+    mask.fill_path(
+        &path,
+        tiny_skia::FillRule::Winding,
+        true,
+        tiny_skia::Transform::identity(),
+    );
+    pix.apply_mask(&mask);
+    Ok(())
+}
 fn rounded(rect: Rect, r: f32) -> Option<tiny_skia::Path> {
     // SVG path parsing is supplied by tiny-skia; no custom rasterizer or shaper.
     let r = r.min(rect.w / 2.).min(rect.h / 2.);
@@ -1530,6 +1551,7 @@ impl Renderer for CpuRenderer {
                     path,
                     blur,
                     clip_polygon,
+                    radius,
                     fit,
                     tint,
                 } => {
@@ -1559,6 +1581,7 @@ impl Renderer for CpuRenderer {
                     if let Some(points) = clip_polygon {
                         apply_polygon_clip(&mut pix, points)?;
                     }
+                    apply_radius_clip(&mut pix, *radius * scale)?;
                     pix
                 }
                 Primitive::Shadow { rect, radius, blur } => {
@@ -3694,6 +3717,7 @@ mod tests {
                             blur: 0.,
                             fit: crate::ImageFit::Fill,
                             clip_polygon: None,
+                            radius: 0.,
                             tint: None,
                             rect: Rect::new(14., 8., 15., 15.),
                             path: image_path.0.clone(),

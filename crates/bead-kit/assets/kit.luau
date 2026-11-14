@@ -10,6 +10,9 @@ return function(ui, tokens)
     -- Hover fill one step deeper while the pointer is down (`bead.pressed` is global, the hover fill is per node).
     local function hover_amount() return ui.resolve_for_check(ui.bind("bead.pressed")) and .12 or .08 end
     local function press_fill(base) return ui.tint(base,"onSurface",hover_amount()) end
+    -- Label box beside an icon: the glyph baseline sits `ascent` (about 1.03 em) below the box top, so the cap
+    -- height centres in a box of about 1.35 em; a taller box leaves the label above the icon's centre.
+    local function label_h(size) return math.ceil(size*1.35) end
     local function value(v, fallback)
         if v == nil then return fallback end
         return ui.resolve_for_check(v)
@@ -428,7 +431,7 @@ return function(ui, tokens)
             table.insert(children,ui.Text{id="icon",text=p.glyph,family=tokens.fonts.icon,font_size=icon,width=icon,height=24,color=ink})
         end
         if p.label and p.label~="" then
-            table.insert(children,ui.Text{id="label",text=p.label,font_size=size,width=label_width,height=24,color=ink})
+            table.insert(children,ui.Text{id="label",text=p.label,font_size=size,width=label_width,height=label_h(size),color=ink})
         end
         local padding=compact and tokens.spacing.xl or tokens.spacing.huge
         local text_width=label_width
@@ -458,7 +461,7 @@ return function(ui, tokens)
         out.on_activate=confirming and p.on_confirm or p.on_activate
         out[1]=ui.Row{id=(p.id or "confirm").."-row",height=24,gap=tokens.spacing.md,align="center",
             p.glyph and ui.Text{id="glyph",text=p.glyph,width=24,height=24,shrink=0,family=tokens.fonts.icon,font_size=tokens.icons.large*4/3,color=ink} or nil,
-            ui.Text{id="label",text=label,height=24,grow=1,font_size=tokens.text.body*4/3,color=ink}}
+            ui.Text{id="label",text=label,height=label_h(tokens.text.body*4/3),grow=1,font_size=tokens.text.body*4/3,color=ink}}
         return kit.Button(out)
     end
     function kit.List(p) return ui.Scroll(props(p,{grow=1})) end
@@ -503,7 +506,7 @@ return function(ui, tokens)
             kids[#kids+1]=ui.Text{id="icon",text=p.icon,family=tokens.fonts.icon,font_size=glyph_px,width=glyph_px+2,height=24,shrink=0,
                 color=on and "onPrimaryContainer" or "onSurfaceVariant"}
         end
-        kids[#kids+1]=ui.Text{id="label",text=text,width=label_w,height=20,shrink=0,font_size=metrics.text.label,font_weight=500,color=ink}
+        kids[#kids+1]=ui.Text{id="label",text=text,width=label_w,height=label_h(metrics.text.label),shrink=0,font_size=metrics.text.label,font_weight=500,color=ink}
         local width=2*pad+label_w+(p.icon and glyph_px+2+tokens.spacing.sm or 0)
         return kit.Button(props(p,{width=width,height=36,padding=0,radius=metrics.radius.chip,shrink=0,fill=base,hover_fill=press_fill(base),
             aria_label=text,
@@ -518,6 +521,37 @@ return function(ui, tokens)
         return ui.Row(props(p,{width=width,height=20,shrink=0,align="center",justify="center",radius=6,border_width=1,border_color="outline",
             ui.Text{id="label",text=text,family=mono,font_size=11,width=width-2,height=16,text_align="center",color="onSurfaceVariant"}},
             {text=true}))
+    end
+    -- Empty state (spec 0276): centred in `width` x `height` (absolute at `left`/`top` when given): hero outline
+    -- glyph, `title`, optional `detail` caption and at most one `chip` pill (`chip_glyph`, `on_chip`).
+    function kit.EmptyState(p)
+        local glyph_px=tokens.icons.hero*4/3
+        local col={id=p.id or "empty",width=p.width,height=p.height,gap=tokens.spacing.sm,align="center",justify="center",
+            ui.Text{id="glyph",text=p.glyph,family=tokens.fonts.icon,font_size=glyph_px,width=glyph_px,height=glyph_px,text_align="center",color="outline"},
+            ui.Text{id="title",text=p.title,width=p.width,height=22,font_size=metrics.text.body,font_weight=500,text_align="center",color="onSurface"}}
+        if p.left~=nil or p.top~=nil then col.position,col.left,col.top="absolute",p.left or 0,p.top or 0 end
+        if p.detail and p.detail~="" then
+            col[#col+1]=ui.Text{id="detail",text=p.detail,width=p.width,height=18,font_size=metrics.text.caption,text_align="center",color="onSurfaceVariant"}
+        end
+        if p.chip then col[#col+1]=kit.Chip{id="chip",text=p.chip,icon=p.chip_glyph,on=false,on_activate=p.on_chip} end
+        return ui.Column(col)
+    end
+    -- Notification row (spec 0276): 72 px, icon tile (`icon` is a host icon name; a bell glyph when empty),
+    -- `caption` line, 600-weight `title`, one `body` line and a dismiss button (`on_dismiss`; nil disables it).
+    function kit.NoticeRow(p)
+        local tile,px=28,tokens.icons.medium*4/3
+        local text_w=p.width-tokens.spacing.md*2-tile*2-tokens.spacing.compact*2
+        return ui.Row{id=p.id and "notice-"..p.id or "notice",width=p.width,height=72,shrink=0,radius=tokens.radii.medium,fill=p.fill or "surfaceContainer",
+            padding_left=tokens.spacing.md,padding_right=tokens.spacing.md,gap=tokens.spacing.compact,align="center",
+            ui.Box{id="icon-tile",width=tile,height=tile,radius=tokens.radii.small,fill="surfaceContainerHighest",shrink=0,padding=(tile-px)/2,
+                p.icon and p.icon~="" and ui.Image{id="icon",icon=p.icon,width=px,height=px,aria_label=p.caption}
+                    or ui.Text{id="icon",text="notifications",family=tokens.fonts.icon,font_size=px,width=px,height=px,text_align="center",color="onSurfaceVariant"}},
+            ui.Column{id="text",width=text_w,gap=0,
+                ui.Text{id="caption",text=p.caption or "",width=text_w,height=16,font_size=metrics.text.caption,color="onSurfaceVariant"},
+                ui.Text{id="title",text=p.title or "",width=text_w,height=20,font_size=metrics.text.body,font_weight=600,color="onSurface"},
+                ui.Text{id="body",text=p.body or "",width=text_w,height=16,font_size=metrics.text.caption,color="onSurfaceVariant"}},
+            kit.IconButton{id="dismiss",text="close",aria_label=p.dismiss_label or "Dismiss",width=tile,height=tile,padding=0,radius=tokens.radii.full,shrink=0,
+                font_size=px,fill="transparent",hover_fill="surfaceContainerHighest",color="onSurfaceVariant",on_activate=p.on_dismiss}}
     end
     function kit.Bar(p)
         local e=edge(p);local vertical=e=="left" or e=="right"

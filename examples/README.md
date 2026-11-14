@@ -10,7 +10,7 @@ Build the `bead` CLI first (see [Get started](../README.md#get-started)), then r
 | [tutorial-bar](tutorial-bar/) | The [bar tutorial](../docs/tutorial/bar.md)'s bar: centered clock, battery, volume and mute action. | `bead check examples/tutorial-bar`; `bead run examples/tutorial-bar` |
 | [bar-with-panels](bar-with-panels/) | Bar whose clock, volume and Status buttons open Luau popup panels declared in `[panels]`; Status is a peek that grows into a larger panel. | `bead check examples/bar-with-panels`; `bead run examples/bar-with-panels` |
 | [graph-demo](graph-demo/) | `kit.GraphCanvas` with a seeded 2k/10k graph: worker layout, hover, select, pan and zoom. | `bead check examples/graph-demo`; `bead run examples/graph-demo` |
-| [kit-gallery](kit-gallery/) | One of each review component from spec 0274: `Segment`, `Chip`, `Tag`, `LinkRow`, `SliderTile` end slot, `ToggleTile`. | `bead check examples/kit-gallery`; `bead run examples/kit-gallery` |
+| [kit-gallery](kit-gallery/) | One of each review component from specs 0274 and 0276: `Segment`, `Chip`, `Tag`, `LinkRow`, `SliderTile` end slot, `ToggleTile`, `EmptyState`, `NoticeRow`, a rounded `Image`. | `bead check examples/kit-gallery`; `bead run examples/kit-gallery` |
 | [minimal-shell](minimal-shell/) | Standalone Rust host, stateful Luau window, bundled plugin, reload and CPU check. | `cargo run -p bead-minimal-shell --locked -- --check`; `cargo run -p bead-minimal-shell --locked` |
 | [plugins](plugins/) | A third-party widget plugin with settings, in a richer package shape for hosts that define one. | Mounted by a host, not run alone; the [widget tutorial](../docs/tutorial/widget.md) shows the minimal plugin shape. |
 

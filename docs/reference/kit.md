@@ -12,6 +12,8 @@
 - `Segment`: pill segment control (spec 0274); `options` (`{id, label, selected?, enabled?}`), `value` (marks the selected id when options do not), `enabled`, `aria_label`, `on_change` (action name, receives the option id).
 - `LinkRow`: settings row that navigates; `title` (or `label`), optional `subtitle` (or `description`) and `icon`, `enabled`, `on_activate`; chevron at the end.
 - `Chip`: 36 px pill; `text`, optional `icon`, `on` (primaryContainer fill), `on_activate`. `Tag`: 11 px mono tag with an outline border; `text`.
+- `EmptyState`: centred hero outline glyph, `title`, optional `detail` and at most one `chip` pill; `glyph`, `title`, `detail`, `chip`, `chip_glyph`, `on_chip`, `width`, `height` (spec 0276).
+- `NoticeRow`: 72 px notification row; `id`, `icon` (host icon name; a bell glyph when empty), `caption`, `title`, `body`, `on_dismiss` (nil disables the button), `dismiss_label`, `width`, `fill` (spec 0276).
 - `VirtualGrid`: virtualized keyed model; `model`, `key`, `render`, `scroll`.
 - `Transcript`: scrolling message list; `cells` (windowed model), `extent`, `width`, `on_action`. The Rust `transcript::Entry` that produces the cells takes `align_end` and `max_width` (a fraction of the row; 0 = full) per message, and an empty `label` drops the caption band (spec 0274).
 - `Composer`: multi-line message input; `text`, `placeholder`, `on_activate` (Enter; Shift+Enter breaks the line).

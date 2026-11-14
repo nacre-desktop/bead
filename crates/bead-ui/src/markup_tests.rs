@@ -4333,6 +4333,52 @@ fn reloading_a_bundle_reuses_cached_bytecode() {
     assert_eq!(load(), 0, "a second generation reuses the bytecode");
 }
 
+/// B0276: `EmptyState` centres its stack in `width` x `height`; `NoticeRow` is the 72 px row.
+#[test]
+fn empty_state_and_notice_row_have_the_review_geometry() {
+    let f = fixture();
+    fs::write(
+        f.0.join("palette.json"),
+        r#"{"formatVersion":1,"mode":"dark","colours":{"surface":"202020","onSurface":"eeeeee","onSurfaceVariant":"aaaaaa","primary":"90c0f0","onPrimary":"102030","primaryContainer":"304050","onPrimaryContainer":"d0e0f0","surfaceContainer":"282828","surfaceContainerHigh":"303030","surfaceContainerHighest":"383838","secondary":"a0d0b0","outline":"778899"}}"#,
+    )
+    .unwrap();
+    fs::write(f.0.join("ui/main.luau"),r#"local ui=require("bead.ui");local kit=require("bead.kit")
+return ui.Column{id="page",width=400,height=420,gap=6,
+ kit.EmptyState{id="empty",width=300,height=200,glyph="inbox",title="All clear",detail="Nothing here",chip="Open",chip_glyph="folder",on_chip=ui.action("select","a")},
+ kit.NoticeRow{id="n1",width=380,caption="Mail",title="Hello",body="Body",on_dismiss=ui.action("select","a")}}"#).unwrap();
+    let session = session(&f);
+    let node = |id: &str| {
+        rect(
+            &session
+                .view_nodes()
+                .iter()
+                .find(|n| n.id.ends_with(id))
+                .unwrap_or_else(|| panic!("node {id}"))
+                .draw,
+        )
+    };
+    let chip = node(".chip");
+    let glyph = session
+        .current
+        .primitives
+        .iter()
+        .find_map(|p| match p {
+            Primitive::Text { rect, text, .. } if text == "inbox" => Some(*rect),
+            _ => None,
+        })
+        .expect("hero glyph");
+    assert_eq!(chip.h, 36.);
+    // The empty state is the first child of the page column, so it spans y 0..200.
+    let (top, bottom) = (glyph.y, 200. - (chip.y + chip.h));
+    assert!((top - bottom).abs() <= 1., "stack is vertically centred");
+    assert!(
+        session.current.primitives.iter().any(
+            |p| matches!(p, Primitive::Rounded { rect, radius, .. } if (rect.w, rect.h, *radius) == (380., 72., 16.))
+        ),
+        "72 px notice row"
+    );
+    assert_eq!(node(".dismiss").w, 28.);
+}
 /// B0264: `tint` carries the resolved palette colour into the Image primitive, and `kit.Badge`
 /// is a 15 px pill anchored at the parent's top-right corner (top -5, right -7), at least 15 wide,
 /// hidden for an empty or "0" count, with the surface colour as ink for a host role without an on-colour.

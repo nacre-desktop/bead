@@ -1269,6 +1269,7 @@ mod tests {
                 blur: 0.,
                 fit: bead_render::ImageFit::Fill,
                 clip_polygon: None,
+                radius: 0.,
                 tint: None,
             };
             fixture.asset_data.insert("proof.svg".into(), Arc::from(&br##"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><rect width="16" height="16" fill="#123456"/></svg>"##[..]));
@@ -1835,6 +1836,7 @@ mod tests {
             blur: 0.,
             fit: bead_render::ImageFit::Fill,
             clip_polygon: None,
+            radius: 0.,
             tint: None,
         };
         fixture.asset_data.insert("proof.svg".into(), Arc::from(&br##"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><rect width="16" height="16" fill="#123456"/></svg>"##[..]));
@@ -1895,6 +1897,7 @@ mod tests {
             blur: 0.,
             fit: bead_render::ImageFit::Fill,
             clip_polygon: None,
+            radius: 0.,
             tint: None,
         };
         fixture.asset_data.insert("proof.svg".into(), Arc::from(&br##"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><rect width="16" height="16" fill="#123456"/></svg>"##[..]));

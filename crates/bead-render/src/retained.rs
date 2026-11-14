@@ -213,11 +213,12 @@ fn content_key(scene: &Scene, scale: f32) -> u64 {
             Primitive::Image {
                 path,
                 clip_polygon,
+                radius,
                 fit,
                 tint,
                 ..
             } => {
-                (path, fit, tint).hash(&mut h);
+                (path, fit, tint, radius.to_bits()).hash(&mut h);
                 clip_polygon.is_some().hash(&mut h);
                 for coordinate in clip_polygon.iter().flatten().flatten() {
                     coordinate.to_bits().hash(&mut h);
@@ -347,6 +348,7 @@ mod tests {
             blur: 0.,
             fit: crate::ImageFit::Fill,
             clip_polygon: None,
+            radius: 0.,
             tint: None,
             path: path.clone(),
             rect: crate::Rect::new(0., 0., 10., 10.),
