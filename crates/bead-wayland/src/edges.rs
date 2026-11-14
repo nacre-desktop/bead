@@ -615,7 +615,11 @@ impl App {
             && self.panel_output.as_ref() == Some(output)
     }
     fn lip_progress(&self, key: &str) -> f32 {
-        drawn_progress(self.edge.opening.as_deref(), key, self.raw_lip_progress(key))
+        drawn_progress(
+            self.edge.opening.as_deref(),
+            key,
+            self.raw_lip_progress(key),
+        )
     }
     fn raw_lip_progress(&self, key: &str) -> f32 {
         if let Some((external_key, progress)) = &self.edge.external.progress
