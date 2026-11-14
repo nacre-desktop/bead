@@ -199,6 +199,8 @@ pub(super) struct EdgeState {
     external: ExternalCueTracker,
     /// A fired external open is in flight for this lip: it keeps the dwell-complete look
     /// until the panel reports open, so the lip never drops to the rest bar in between.
+    // shortcut: a requested open that never reports active keeps the lip swollen until the
+    // next Approach cue; add an expiry if hosts can refuse opens.
     opening: Option<String>,
 }
 /// Progress a lip is drawn with: a pending open holds the completed dwell.
@@ -775,6 +777,7 @@ impl App {
         if let Err(error) = self.request_panel_at(Some(&lip.opens), Some(output), true, None) {
             eprintln!("EDGE_OPEN_ERROR {error}");
             self.edge.hover_opened = None;
+            self.edge.opening = None;
         }
     }
     fn draw_edge(&mut self, index: usize) {
