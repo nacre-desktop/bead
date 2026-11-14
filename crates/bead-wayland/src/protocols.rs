@@ -1456,6 +1456,7 @@ impl App {
                     self.view_event(true, UiEvent::PointerRegion(false));
                     self.view_event(false, UiEvent::PointerRegion(false))
                 }
+                PointerEventKind::Press { .. } => self.edge_panel_pin(),
                 _ => {}
             }
         }
@@ -1762,6 +1763,9 @@ impl KeyboardHandler for App {
                     .iter()
                     .any(|s| s.companion && s.wl_surface() == surface)
             });
+            if panel {
+                self.edge_panel_pin();
+            }
             let command = window::key_command(event.keysym, self.modifiers.ctrl);
             if let Some(command) = command {
                 if panel

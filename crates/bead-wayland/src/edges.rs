@@ -237,8 +237,21 @@ fn key(output: &str, lip: &str) -> String {
     format!("{output}/{lip}")
 }
 const SIDES: [Edge; 4] = [Edge::Top, Edge::Right, Edge::Bottom, Edge::Left];
-/// Delay between pointer leave and closing a hover-opened panel.
+/// Delay between pointer leave and closing a hover-opened panel: a bar popup closes fast; a
+/// panel docked on a screen edge (opened from a strip lip) tolerates the usual 100-300 ms
+/// overshoot past its inner edge.
 const EXIT_MS: u64 = 130;
+const DOCK_EXIT_MS: u64 = 450;
+fn exit_grace(bar_hosted: bool) -> Duration {
+    Duration::from_millis(if bar_hosted { EXIT_MS } else { DOCK_EXIT_MS })
+}
+/// A press or key on the hover-opened panel pins it: it then closes only on Escape, a lip
+/// click or a click outside.
+fn pin(edge: &mut EdgeState) {
+    edge.hover_opened = None;
+    edge.exit = Default::default();
+    edge.exit_epoch = edge.exit_epoch.wrapping_add(1);
+}
 const FRAME: Duration = Duration::from_millis(16);
 /// The cue box fades in and out linearly over this long.
 const CUE_FADE_S: f32 = 0.12;
@@ -1163,7 +1176,12 @@ impl App {
                 self.edge.panel_hovered
             );
         }
-        let delay = Duration::from_millis(EXIT_MS);
+        let delay = exit_grace(
+            opened
+                .split_once('/')
+                .and_then(|(_, id)| self.lip_named(id))
+                .is_some_and(|lip| self.bar_hosts(&lip)),
+        );
         if self.edge.exit.update(
             enabled,
             (held, self.edge.panel_hovered),
@@ -1207,6 +1225,12 @@ impl App {
                 TimeoutAction::Drop
             },
         );
+    }
+    /// A pointer press or key on the panel surface: a hover-opened panel stays until dismissed.
+    pub(super) fn edge_panel_pin(&mut self) {
+        if self.edge.hover_opened.is_some() {
+            pin(&mut self.edge);
+        }
     }
     /// The pointer entered or left a companion (panel) surface.
     pub(super) fn edge_panel_hover(&mut self, inside: bool) {
@@ -1707,6 +1731,50 @@ mod tests {
         assert_eq!(opening_expired(2, 3, true, false), None, "stale epoch");
         assert_eq!(opening_expired(3, 3, false, false), None, "already cleared");
         assert_eq!(opening_expired(3, 3, true, true), Some(false), "active");
+    }
+
+    #[test]
+    fn docked_panels_get_a_longer_exit_grace_and_reentry_cancels_the_close() {
+        assert_eq!(exit_grace(true), Duration::from_millis(130), "bar popup");
+        let grace = exit_grace(false);
+        assert_eq!(grace, Duration::from_millis(450), "edge dock");
+        let mut hover = bead_core::edge_hover::EdgeHover::default();
+        let left = Instant::now();
+        assert!(!hover.update(true, (false, false), false, left, grace));
+        // Overshooting the inner edge for 300 ms and coming back cancels the pending close.
+        assert!(!hover.update(
+            true,
+            (false, true),
+            false,
+            left + Duration::from_millis(300),
+            grace
+        ));
+        assert!(hover.deadline().is_none());
+        let again = left + Duration::from_secs(2);
+        assert!(!hover.update(true, (false, false), false, again, grace));
+        assert!(!hover.update(true, (false, false), false, again + grace / 2, grace));
+        assert!(hover.update(true, (false, false), false, again + grace, grace));
+    }
+
+    #[test]
+    fn pinning_clears_hover_ownership_and_its_pending_exit() {
+        let mut edge = EdgeState {
+            hover_opened: Some("DP-1/l".into()),
+            exit_epoch: 4,
+            ..Default::default()
+        };
+        edge.exit.update(
+            true,
+            (false, false),
+            false,
+            Instant::now(),
+            exit_grace(false),
+        );
+        assert!(edge.exit.deadline().is_some());
+        pin(&mut edge);
+        assert_eq!(edge.hover_opened, None, "closes only on Escape, lip or outside");
+        assert!(edge.exit.deadline().is_none());
+        assert_eq!(edge.exit_epoch, 5, "a pending exit timer is stale");
     }
 
     #[test]
