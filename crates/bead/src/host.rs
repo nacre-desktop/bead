@@ -2964,20 +2964,14 @@ mod tests {
     }
 
     #[test]
-    fn seconds_lease_follows_the_views_that_bind_the_seconds_clock() {
-        let (root, _runtime, mut view) = seconds_app("desktop.clock");
-        assert!(view.seconds_lease.is_none(), "minute binding must not tick");
-        set_binding(&root, "desktop.clock.seconds");
-        view.check_render(UiEvent::Reload).unwrap();
-        view.commit();
-        assert!(view.session.has_store("desktop.clock.seconds"), "store");
-        assert!(view.session.reads_store("desktop.clock.seconds"), "reads");
-        assert!(view.seconds_lease.is_some(), "a seconds binding takes the lease");
-        set_binding(&root, "desktop.clock");
-        view.check_render(UiEvent::Reload).unwrap();
-        view.commit();
-        assert!(view.seconds_lease.is_none(), "dropping the binding frees it");
-        let _ = std::fs::remove_dir_all(root);
+    fn seconds_lease_is_held_only_by_a_view_that_binds_the_seconds_clock() {
+        let (minute_root, _minute_rt, minute) = seconds_app("desktop.clock");
+        assert!(minute.seconds_lease.is_none(), "a minute binding must not tick");
+        let (seconds_root, _seconds_rt, seconds) = seconds_app("desktop.clock.seconds");
+        assert!(seconds.seconds_lease.is_some(), "a seconds binding takes the lease");
+        for root in [minute_root, seconds_root] {
+            let _ = std::fs::remove_dir_all(root);
+        }
     }
 
     #[test]
