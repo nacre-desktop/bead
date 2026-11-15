@@ -16,6 +16,8 @@ body, so the tab follows with no host code; both directions sample the same pose
 
 Inset bodies (B0287): a body inset from the screen edge (a framed dock) would step at hand-over, so `tab_rect` offsets the flush pose outward by the settled body's inset times `1 - attach`: attach 0 is exactly the free lip, attach 1 flush on the body, the close mirrors it. `examples/bar-with-panels` side-left is inset 10 px to show it.
 
+Slide motions (B0289): the general rule is `tab = flush_live + (rest - flush_at_start) x (1 - attach)`; the scene's slide is linear in `1 - attach`, so it reduces to `settled flush + (rest - settled flush) x (1 - attach)`. `tab_rect` uses that when the scene is slid: the tab is exactly the free lip's rest rect at attach 0 (not off-screen with a body that starts there), flush on the settled body at attach 1, travels linearly between, and a reversal mid-motion is continuous (a pure function of attach and the posed body). Reveal keeps the inset easing above. `side-right` is a 10 px inset slide dock (`slide_distance` = width + inset) to show it.
+
 Hand-over: the panel's first posed frame carries the tab at `attach` 0 (over the lip, which holds its
 completed-dwell look, spec 0278); the edge lip surface clears only after that frame committed
 (`lip_tab_handover`), and on close it redraws before the panel unmaps or its surface goes
