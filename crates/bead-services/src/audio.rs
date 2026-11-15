@@ -66,23 +66,26 @@ fn publish(graph: &Rc<RefCell<Graph>>, shared: &Shared) {
     shared.change(|s| s.audio = audio);
 }
 pub(crate) fn spawn(shared: Arc<Shared>) -> std::thread::JoinHandle<()> {
-    std::thread::Builder::new().name("bead-audio".into()).spawn(move || {
-        super::runtime::block_worker_signals();
-        pw::init();
-        let mut retry = crate::runtime::Retry::new();
-        while !shared.stop.load(Ordering::SeqCst) {
-            let (delay, log) = retry.next(connect(&shared).err().map(|e| e.to_string()));
-            if let Some(error) = log {
-                eprintln!("SERVICE_AUDIO disconnected: {error} (retrying with backoff)");
+    std::thread::Builder::new()
+        .name("bead-audio".into())
+        .spawn(move || {
+            super::runtime::block_worker_signals();
+            pw::init();
+            let mut retry = crate::runtime::Retry::new();
+            while !shared.stop.load(Ordering::SeqCst) {
+                let (delay, log) = retry.next(connect(&shared).err().map(|e| e.to_string()));
+                if let Some(error) = log {
+                    eprintln!("SERVICE_AUDIO disconnected: {error} (retrying with backoff)");
+                }
+                *shared
+                    .audio_sender
+                    .lock()
+                    .unwrap_or_else(crate::runtime::poisoned) = None;
+                shared.change(|s| s.audio = Audio::default());
+                shared.wait_retry(delay);
             }
-            *shared
-                .audio_sender
-                .lock()
-                .unwrap_or_else(crate::runtime::poisoned) = None;
-            shared.change(|s| s.audio = Audio::default());
-            shared.wait_retry(delay);
-        }
-    }).expect("spawn bead-audio")
+        })
+        .expect("spawn bead-audio")
 }
 fn connect(shared: &Arc<Shared>) -> Result<(), Box<dyn std::error::Error>> {
     let mainloop = pw::main_loop::MainLoopRc::new(None)?;

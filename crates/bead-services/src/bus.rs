@@ -111,24 +111,27 @@ where
     S: Send + Sync + 'static,
     F: Future<Output = zbus::Result<()>>,
 {
-    std::thread::Builder::new().name("bead-svc-bus".into()).spawn(move || {
-        let Some(rt) = runtime.or_else(|| self::runtime().ok()) else {
-            return;
-        };
-        rt.block_on(async {
-            loop {
-                tokio::select! {
-                    _ = stopped(&shared).notified() => break,
-                    result = run(shared.clone()) => if result.is_ok() { break },
+    std::thread::Builder::new()
+        .name("bead-svc-bus".into())
+        .spawn(move || {
+            let Some(rt) = runtime.or_else(|| self::runtime().ok()) else {
+                return;
+            };
+            rt.block_on(async {
+                loop {
+                    tokio::select! {
+                        _ = stopped(&shared).notified() => break,
+                        result = run(shared.clone()) => if result.is_ok() { break },
+                    }
+                    reset(&shared);
+                    tokio::select! {
+                        _ = stopped(&shared).notified() => break,
+                        _ = tokio::time::sleep(Duration::from_millis(200)) => {},
+                    }
                 }
-                reset(&shared);
-                tokio::select! {
-                    _ = stopped(&shared).notified() => break,
-                    _ = tokio::time::sleep(Duration::from_millis(200)) => {},
-                }
-            }
-        });
-    }).expect("spawn bead-svc-bus")
+            });
+        })
+        .expect("spawn bead-svc-bus")
 }
 type Callback<T> = Arc<dyn Fn(Arc<T>) + Send + Sync>;
 /// A service snapshot whose `revision` [`Snapshots::change`] bumps.

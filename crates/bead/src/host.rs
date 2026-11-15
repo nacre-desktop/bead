@@ -219,28 +219,32 @@ impl FolderServicesRuntime {
             let media = media.clone();
             let signals = signals.clone();
             let stop_signal = stop.clone();
-            std::thread::Builder::new().name("bead-media-tick".into()).spawn(move || {
-                let mut last_tick = monotonic_millis();
-                loop {
-                    let stopped = stop_signal.0.lock().unwrap();
-                    if *stopped {
-                        break;
+            std::thread::Builder::new()
+                .name("bead-media-tick".into())
+                .spawn(move || {
+                    let mut last_tick = monotonic_millis();
+                    loop {
+                        let stopped = stop_signal.0.lock().unwrap();
+                        if *stopped {
+                            break;
+                        }
+                        let (stopped, timeout) = stop_signal
+                            .1
+                            .wait_timeout(stopped, Duration::from_secs(1))
+                            .unwrap();
+                        if *stopped {
+                            break;
+                        }
+                        drop(stopped);
+                        let now = monotonic_millis();
+                        if timeout.timed_out() && media_tick_due(&media.snapshot(), last_tick, now)
+                        {
+                            signals.notify();
+                            last_tick = now;
+                        }
                     }
-                    let (stopped, timeout) = stop_signal
-                        .1
-                        .wait_timeout(stopped, Duration::from_secs(1))
-                        .unwrap();
-                    if *stopped {
-                        break;
-                    }
-                    drop(stopped);
-                    let now = monotonic_millis();
-                    if timeout.timed_out() && media_tick_due(&media.snapshot(), last_tick, now) {
-                        signals.notify();
-                        last_tick = now;
-                    }
-                }
-            }).expect("spawn bead-media-tick")
+                })
+                .expect("spawn bead-media-tick")
         });
         let scheduler = if intervals.is_empty() {
             None
@@ -249,34 +253,41 @@ impl FolderServicesRuntime {
             let commands = commands.clone();
             let wake = wake.clone();
             let stop_signal = stop.clone();
-            Some(std::thread::Builder::new().name("bead-scheduler".into()).spawn(move || {
-                let mut next = intervals
-                    .into_iter()
-                    .map(|(name, interval)| (name, interval, std::time::Instant::now()))
-                    .collect::<Vec<_>>();
-                loop {
-                    let wait = next
-                        .iter()
-                        .map(|(_, interval, started)| interval.saturating_sub(started.elapsed()))
-                        .min()
-                        .unwrap_or(Duration::from_secs(60));
-                    let stopped = stop_signal.0.lock().unwrap();
-                    if *stopped {
-                        break;
-                    }
-                    let (stopped, _) = stop_signal.1.wait_timeout(stopped, wait).unwrap();
-                    if *stopped {
-                        break;
-                    }
-                    drop(stopped);
-                    for (name, interval, started) in &mut next {
-                        if started.elapsed() >= *interval {
-                            launch_command(name, &specs, &commands, &wake);
-                            *started = std::time::Instant::now();
+            Some(
+                std::thread::Builder::new()
+                    .name("bead-scheduler".into())
+                    .spawn(move || {
+                        let mut next = intervals
+                            .into_iter()
+                            .map(|(name, interval)| (name, interval, std::time::Instant::now()))
+                            .collect::<Vec<_>>();
+                        loop {
+                            let wait = next
+                                .iter()
+                                .map(|(_, interval, started)| {
+                                    interval.saturating_sub(started.elapsed())
+                                })
+                                .min()
+                                .unwrap_or(Duration::from_secs(60));
+                            let stopped = stop_signal.0.lock().unwrap();
+                            if *stopped {
+                                break;
+                            }
+                            let (stopped, _) = stop_signal.1.wait_timeout(stopped, wait).unwrap();
+                            if *stopped {
+                                break;
+                            }
+                            drop(stopped);
+                            for (name, interval, started) in &mut next {
+                                if started.elapsed() >= *interval {
+                                    launch_command(name, &specs, &commands, &wake);
+                                    *started = std::time::Instant::now();
+                                }
+                            }
                         }
-                    }
-                }
-            }).expect("spawn bead-scheduler"))
+                    })
+                    .expect("spawn bead-scheduler"),
+            )
         };
         Some(Arc::new(Self {
             services,
@@ -923,14 +934,17 @@ fn launch_command(
     let name = name.to_owned();
     let state = state.clone();
     let wake = wake.clone();
-    std::thread::Builder::new().name("bead-command".into()).spawn(move || {
-        let (stdout, ok, error) = execute_command(&spec);
-        if let Ok(mut shared) = state.lock() {
-            shared.active.remove(&name);
-            shared.results.insert(name, (stdout, ok, error));
-        }
-        wake(UiEvent::Model(BTreeMap::new()));
-    }).expect("spawn bead-command");
+    std::thread::Builder::new()
+        .name("bead-command".into())
+        .spawn(move || {
+            let (stdout, ok, error) = execute_command(&spec);
+            if let Ok(mut shared) = state.lock() {
+                shared.active.remove(&name);
+                shared.results.insert(name, (stdout, ok, error));
+            }
+            wake(UiEvent::Model(BTreeMap::new()));
+        })
+        .expect("spawn bead-command");
 }
 fn execute_command(spec: &CommandSpec) -> (String, bool, String) {
     let mut command = bead_services::process::command(&spec.argv[0]);
@@ -2966,9 +2980,15 @@ mod tests {
     #[test]
     fn seconds_lease_is_held_only_by_a_view_that_binds_the_seconds_clock() {
         let (minute_root, _minute_rt, minute) = seconds_app("desktop.clock");
-        assert!(minute.seconds_lease.is_none(), "a minute binding must not tick");
+        assert!(
+            minute.seconds_lease.is_none(),
+            "a minute binding must not tick"
+        );
         let (seconds_root, _seconds_rt, seconds) = seconds_app("desktop.clock.seconds");
-        assert!(seconds.seconds_lease.is_some(), "a seconds binding takes the lease");
+        assert!(
+            seconds.seconds_lease.is_some(),
+            "a seconds binding takes the lease"
+        );
         for root in [minute_root, seconds_root] {
             let _ = std::fs::remove_dir_all(root);
         }
@@ -2986,9 +3006,17 @@ mod tests {
             assert!(std::time::Instant::now() < deadline, "no seconds tick");
             std::thread::sleep(Duration::from_millis(10));
         }
-        assert!(view.stage(UiEvent::Model(BTreeMap::new())).unwrap().is_some());
+        assert!(
+            view.stage(UiEvent::Model(BTreeMap::new()))
+                .unwrap()
+                .is_some()
+        );
         view.commit();
-        assert!(view.stage(UiEvent::Model(BTreeMap::new())).unwrap().is_none());
+        assert!(
+            view.stage(UiEvent::Model(BTreeMap::new()))
+                .unwrap()
+                .is_none()
+        );
         let _ = std::fs::remove_dir_all(root);
     }
 
