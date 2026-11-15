@@ -1968,6 +1968,22 @@ impl App {
                     wl_surface.commit();
                     if s.companion {
                         s.panel_unmapped = false;
+                        // The held first pose (a reveal's zero-area frame) is not drawn by niri, so its
+                        // callback only comes on the ~1 s fallback timer and the motion would not start
+                        // until then. Draw the next pose a frame later unless a commit got there first (B0294).
+                        let (epoch, frames, kick) = (self.panel_epoch, s.frames + 1, qh.clone());
+                        let _ = self.loop_handle.insert_source(
+                            Timer::from_duration(Duration::from_millis(16)),
+                            move |_, _, app| {
+                                if app.panel_epoch == epoch
+                                    && app.surfaces.get(index).is_some_and(|s| s.frames == frames)
+                                {
+                                    app.surfaces[index].callbacks.invalidate();
+                                    app.draw(index, &kick);
+                                }
+                                TimeoutAction::Drop
+                            },
+                        );
                     }
                 }
                 s.last_submitted_ui_serial = s.ui_serial;
