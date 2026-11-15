@@ -40,7 +40,7 @@
 
 Item callbacks (`on_change`, `on_pick`, `on_touch`, `on_action`, `ListEditor`'s `on_remove`, and the `CollectionSwitcher` callbacks) take an action name, and the component supplies the argument, such as the chosen item's `id`. Other `on_*` props take a `ui.action(...)` descriptor.
 
-The components added since the design review (specs 0264, 0274, 0276), one each; the stores and actions they name are declared in `behavior.luau`, as in [`examples/kit-gallery`](../../examples/kit-gallery/):
+The components added since the design review (specs 0264, 0274, 0276), one each; the stores and actions they name are declared in `behavior.luau`, as in [`examples/kit-gallery`](../../examples/kit-gallery/), whose `palette.json` also defines the roles these components paint with (`surfaceContainer`, ...; the minimal `hello-bar` palette does not):
 
 ```luau
 local ui = require("bead.ui")

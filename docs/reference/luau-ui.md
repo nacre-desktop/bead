@@ -88,6 +88,8 @@ Render a list store with `ui.Repeat { id = "rows", model = ui.bind("NAME"), key 
 
 `ui.motion` is a frozen table of tokens: `ui.motion.duration.<name>` (seconds: `hover` .09, `press` .06, `release` .12, `trace` .12, `badge` .14, `close` .16, `fade` .16, `osd_in` .16, `switch` .18, `peek` .2, `osd_out` .2, `open` .22, `toast` .22, `dock` .22, `slide` .24, `drop` .26, `pulse` 1.6) and `ui.motion.curve.<name>` (keyed with `_` for `-`, so `m.curve.out_cubic` is `"out-cubic"`; the curve strings `linear`, `out-cubic`, `in-cubic`, `out-quint`, `in-out-cubic`, `out-back`, `in-quart`, `spring`; `ease`, `ease-out`, `ease-in` and `ease-in-out` remain accepted). `ui.animate` and `ui.animated` take these names. `Panel.transition` currently honours only `spring` and `ease-in-out` (any other value eases out) and `return_transition` takes `ease`, `ease-in-out` or `spring`; see [spec 0263](../specs/0263-motion-tokens-and-retarget.md).
 
+The snippet below uses the `surfaceContainer` role, which the minimal `hello-bar` palette lacks; use a palette that defines it, like [`examples/kit-gallery/palette.json`](../../examples/kit-gallery/palette.json).
+
 ```luau
 local m = ui.motion
 local width = ui.animate("pill.w", target, m.duration.switch, m.curve.out_cubic)       -- a number, re-evaluated per frame
@@ -100,7 +102,7 @@ ui.Box { id = "badge", width = 16, height = 16, radius = 8,
 
 ## Interaction poses
 
-Spec [0280](../specs/0280-kit-batch3.md). These follow the pointer and focus without running Luau or laying out again: the paint stage samples them on every frame, and a view that uses none costs nothing.
+Spec [0280](../specs/0280-kit-batch3.md). The snippet paints with `surfaceContainer` and `onSurface`, so use a palette that defines them, like [`examples/kit-gallery/palette.json`](../../examples/kit-gallery/palette.json). These follow the pointer and focus without running Luau or laying out again: the paint stage samples them on every frame, and a view that uses none costs nothing.
 
 ```luau
 ui.Row { id = "row", fill = "surfaceContainer", shadow = true,           -- the panel shadow on any surface

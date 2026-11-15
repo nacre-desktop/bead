@@ -56,7 +56,21 @@ The factory runs once per output; `Source` moves the view's Luau and CPU image p
 
 `FolderView::load_with_services` takes a `FolderServices` (desktop service names from `bead::host::DESKTOP_SERVICES`, plus named `CommandSpec`s) and declares their stores and actions; `FolderServicesRuntime::start` starts them once and `FolderView::load_with_runtime` attaches each view to that runtime. `with_panel_actions` enables the `panel.*` actions in `PANEL_ACTIONS`. `FolderView` implements `bead::wayland::SceneSource`; `bead::wayland::run` puts it on screen, as `crates/bead-cli/src/main.rs` shows. Windows and panels run their source on a worker thread for you; wrap a bar's source in `bead::wayland::worker::Source::new(factory, fallback)` from `Options::primary_factory` the same way, because the CPU renderer prepares a scene with images on that worker. A custom `SceneSource` may return `Some(revision)` from `state_revision`, changed whenever its accessibility tree, state summary or saved state can differ, so the worker reuses its last copies; the default `None` reads them for every worker packet. A panel closed but kept alive for a fast reopen receives `UiEvent::PanelVisibility(false)` in `stage`, and `PanelVisibility(true)` when it opens again: `FolderView` stops its service wakeups on `false` and resubscribes with a fresh snapshot on `true`, and a custom source holding its own subscriptions or leases should do the same.
 
-`bead::ui::UiPackage::load(root, entry, palette)` reads a Luau UI root once; `FolderView::from_package` / `from_package_with_runtime` build views from that copy without touching the filesystem, so a screen lock can add views after the installed files change ([spec 0285](../specs/0285-ui-package.md); plugins are not captured, `watch` is a no-op).
+`bead::ui::UiPackage::load(root, entry, palette)` reads a Luau UI root once (`root`, the `entry` view and the `palette` path, relative to `root`); `FolderView::from_package` / `from_package_with_runtime` build views from that copy without touching the filesystem, so a screen lock can add views after the installed files change ([spec 0285](../specs/0285-ui-package.md); `watch` is a no-op). A root whose `bundle.json` says `"plugins": true`, like `examples/hello-bar`'s, is refused with `plugins are not part of a UI package`, so the example below uses `examples/graph-demo`.
+
+```rust
+use bead::{host::FolderView, ui::UiPackage, wayland::UiEvent};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let root = std::fs::canonicalize("examples/graph-demo")?;
+    let package = UiPackage::load(&root, "view/main.luau".as_ref(), "palette.json".as_ref())?;
+    // Later views (one per output, say) come from memory: the files may change or vanish.
+    let mut view = FolderView::from_package(package.clone(), "Graph demo", (960, 640))?;
+    let scene = view.check_render(UiEvent::Reload)?;
+    println!("rendered {}x{} from the package", scene.bounds.w, scene.bounds.h);
+    Ok(())
+}
+```
 
 Start with [`examples/minimal-shell`](../../examples/minimal-shell/README.md) for a standalone Rust host using Bead alone. See [spec 0234](../specs/0234-general-host.md) for the folder host contract and [spec 0235](../specs/0235-folder-app-services.md) for services.
 
