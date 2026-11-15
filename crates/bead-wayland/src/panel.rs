@@ -808,6 +808,7 @@ impl App {
                 )
             {
                 drop(self.dismiss.take());
+                self.lip_tab_detach();
                 self.surfaces.retain(|s| !s.companion);
                 self.panel_output = Some(output.clone());
                 if spec.keyboard_focus && self.pearl.is_none() {
@@ -1387,6 +1388,7 @@ impl App {
                     .map(report::surface),
             );
         }
+        self.lip_tab_detach();
         self.surfaces.retain(|s| !s.companion);
         // The last companion update must not remain the active accessibility
         // tree after its worker and surface retire. Restore this output's

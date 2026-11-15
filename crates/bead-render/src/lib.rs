@@ -856,6 +856,17 @@ impl Scene {
     pub fn bounds(&self) -> Rect {
         self.bounds.translated(self.offset.0, self.offset.1)
     }
+    /// The panel body as drawn this frame, in surface coordinates: cut to its revealed part while a
+    /// reveal reshapes it, else moved with the scene (a slide). An attached edge tab rides its inner
+    /// edge (B0279). `None` without a body.
+    pub fn posed_body(&self) -> Option<Rect> {
+        let body = self.reveal_body()?;
+        let body = match self.motion.as_ref().filter(|m| m.reshapes_body()) {
+            Some(m) => Self::revealed(body, m.edge, m.progress),
+            None => body,
+        };
+        Some(body.translated(self.offset.0, self.offset.1))
+    }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PixelFormat {
@@ -3260,6 +3271,66 @@ mod tests {
         }
         assert_eq!(serde_json::to_vec(&scene.primitives)?, original);
         Ok(())
+    }
+
+    /// B0279: the posed body (what an attached edge tab rides) keeps its anchor side and grows its inner
+    /// edge with the progress under a reveal, and moves whole with a slide, opening and closing alike.
+    #[test]
+    fn posed_body_tracks_the_revealed_inner_edge_and_the_slid_scene() {
+        use bead_core::Edge;
+        let body = Rect::new(32., 32., 300., 200.);
+        let mut scene = Scene::empty(364., 264.);
+        scene.offset = (10., 20.);
+        scene.primitives = vec![Primitive::Rounded {
+            rect: body,
+            radius: 18.,
+            fill: [1, 2, 3, 255],
+            border: None,
+        }];
+        let motion = |edge, reveal, slide_distance| Motion {
+            id: "m".into(),
+            open: true,
+            duration: 0.3,
+            return_duration: None,
+            return_curve: None,
+            spring: false,
+            curve: None,
+            edge,
+            slide_distance,
+            fade: false,
+            reveal,
+            progress: 1.,
+            parts: Vec::new(),
+            art: None,
+            body: Some(body),
+        };
+        for edge in [Edge::Top, Edge::Bottom, Edge::Left, Edge::Right] {
+            scene.motion = Some(motion(edge, true, None));
+            scene.offset = (10., 20.);
+            for opening in [true, false] {
+                for p in [0., 0.25, 0.5, 1.] {
+                    scene.panel_offset(p, opening);
+                    let posed = scene.posed_body().unwrap();
+                    let expected = match edge {
+                        Edge::Top => Rect::new(42., 52., 300., 200. * p),
+                        Edge::Bottom => Rect::new(42., 52. + 200. * (1. - p), 300., 200. * p),
+                        Edge::Left => Rect::new(42., 52., 300. * p, 200.),
+                        Edge::Right => Rect::new(42. + 300. * (1. - p), 52., 300. * p, 200.),
+                    };
+                    assert_eq!(posed, expected, "{edge:?} open={opening} p={p}");
+                }
+            }
+            // A slide close moves the whole body with the scene offset the presenter sets.
+            scene.motion = Some(motion(edge, true, Some(300.)));
+            let (dx, dy) = scene.panel_offset(0.5, false);
+            scene.offset = (10. + dx, 20. + dy);
+            assert_eq!(
+                scene.posed_body().unwrap(),
+                Rect::new(42. + dx, 52. + dy, 300., 200.),
+                "{edge:?} slide"
+            );
+            assert!(dx != 0. || dy != 0.);
+        }
     }
 
     /// B0277: a reveal close with no slide distance mirrors the open (the body shrinks back into its anchor

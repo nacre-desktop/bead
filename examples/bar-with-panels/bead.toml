@@ -19,3 +19,25 @@ size = [260, 140]
 [panels.status]
 view = "view/status.luau"
 size = [488, 332]
+
+[panels.side-right]
+view = "view/side-right.luau"
+size = [300, 500]
+
+[panels.side-left]
+view = "view/side-left.luau"
+size = [300, 500]
+
+# Edge lips (spec 0279): rest the pointer on one (or click it) to open its panel; the lip then rides
+# the panel's inner edge as its tab. The top lip sits inside the bar and opens the status peek.
+[lips.right]
+edge = "right"
+opens = "side-right"
+
+[lips.left]
+edge = "left"
+opens = "side-left"
+
+[lips.top]
+edge = "top"
+opens = "status"

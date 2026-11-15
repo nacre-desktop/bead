@@ -319,6 +319,9 @@ impl CompositorHandler for App {
                 s.panel_unmapped,
             ) {
                 let output = s.output_name.clone();
+                // The edge lip redraws before the tab goes with its parent.
+                self.lip_tab_detach();
+                let s = &mut self.surfaces[i];
                 s.unmap_layer();
                 s.panel_unmapped = true;
                 eprintln!(

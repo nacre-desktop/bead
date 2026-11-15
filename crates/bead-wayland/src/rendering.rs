@@ -1859,6 +1859,10 @@ impl App {
             }
             return;
         }
+        if self.surfaces[index].companion {
+            let parent = self.surfaces[index].wl_surface().clone();
+            self.lip_tab_prepare(&parent);
+        }
         let previous_frames = self.surfaces[index].frames;
         let mut busy = false;
         // The motion this frame shows and the clock of its pose; a committed frame starts a held clock.
@@ -1889,6 +1893,7 @@ impl App {
                 && !command_promotion_pending
                 && s.native.is_none()
                 && s.layer_motion.is_some()
+                && self.edge.tab.is_none()
                 && !bead_core::animation::reduced_motion()
                 && !self.options.background_blur
                 && self.companion.as_ref().is_some_and(|(scene, _, kind)| {
@@ -2057,6 +2062,32 @@ impl App {
                     (dx, dy),
                     (-scene.bounds.x, -scene.bounds.y),
                 );
+                // The lip rides as the panel's tab: posed with this frame's body, applied by this commit.
+                if panel
+                    && self.edge.tab.is_some()
+                    && let Some(body) = scene.posed_body()
+                {
+                    let state = s.layer.state();
+                    let output = self
+                        .output
+                        .info(&s.output)
+                        .and_then(|info| info.logical_size)
+                        .unwrap_or((0, 0));
+                    let origin = crate::edges::surface_origin(
+                        state.anchor,
+                        state.margin,
+                        (s.width, s.height),
+                        output,
+                    );
+                    self.edge.pose_tab(
+                        body,
+                        progress,
+                        origin,
+                        self.panel_target,
+                        s.scale120,
+                        self.options.edge_art.as_ref(),
+                    );
+                }
             }
 
             if !panel {
@@ -3470,6 +3501,12 @@ impl App {
             bead_core::profile::split("commit");
             Ok(())
         })();
+        if result.is_ok()
+            && self.surfaces[index].companion
+            && self.surfaces[index].frames > previous_frames
+        {
+            self.lip_tab_handover();
+        }
         if result.is_ok()
             && self.surfaces[index].companion
             && self.panel_target

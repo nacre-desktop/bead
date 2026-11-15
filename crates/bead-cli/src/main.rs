@@ -2,7 +2,10 @@
 use bead::{
     host::{FolderServicesRuntime, FolderView},
     render::{RendererKind, Scene},
-    wayland::{Options, PanelSpec, Panels, PrimaryFactory, UiEvent, WindowSpec},
+    wayland::{
+        EdgeChrome, LipState, Options, PanelSpec, Panels, PrimaryFactory, ShellControl, UiEvent,
+        WindowSpec, intent::Lip,
+    },
 };
 use serde::Deserialize;
 use std::{
@@ -27,6 +30,70 @@ struct Manifest {
     commands: Option<BTreeMap<String, DeclaredCommand>>,
     /// B0250: popup panels a `[layer]` bar opens with `panel.open|toggle|close`.
     panels: Option<BTreeMap<String, Panel>>,
+    /// B0279: screen-edge lips that open a panel on hover dwell or click and ride it as its tab.
+    lips: Option<BTreeMap<String, LipDecl>>,
+}
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LipDecl {
+    edge: Edge,
+    opens: String,
+    #[serde(default = "lip_length")]
+    length: f32,
+    #[serde(default = "lip_thickness")]
+    thickness: f32,
+}
+fn lip_length() -> f32 {
+    144.
+}
+fn lip_thickness() -> f32 {
+    10.
+}
+/// The declared lips, as the shell loop reads them; hover opens after a 350 ms rest.
+struct Lips(EdgeChrome);
+impl ShellControl for Lips {
+    fn watch(&self, _: Box<dyn Fn() + Send + Sync>) {}
+    fn edge_chrome(&self) -> EdgeChrome {
+        self.0.clone()
+    }
+}
+/// Stock lip art: a rounded bar centred on the lip that swells while the dwell charges, while the
+/// pointer is on it and as the lip docks onto its panel as the tab (`attach`).
+fn lip_art(lip: &Lip, (w, h): (f32, f32), state: LipState) -> Option<Arc<[u8]>> {
+    let swell = state
+        .progress
+        .max(state.attach)
+        .max(if state.active || state.hovered {
+            1.
+        } else {
+            0.
+        })
+        .clamp(0., 1.);
+    let across = matches!(lip.edge, bead::core::Edge::Left | bead::core::Edge::Right);
+    let (thick, long) = ((4. + 2. * swell).min(w.min(h)), 48. + 24. * swell);
+    let (bw, bh) = if across { (thick, long) } else { (long, thick) };
+    let (x, y) = ((w - bw) / 2., (h - bh) / 2.);
+    let opacity = 0.6 + 0.4 * swell;
+    Some(
+        format!(
+            r##"<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" viewBox="0 0 {w} {h}"><rect x="{x}" y="{y}" width="{bw}" height="{bh}" rx="{}" fill="#e8e8f0" opacity="{opacity}"/></svg>"##,
+            thick / 2.
+        )
+        .into_bytes()
+        .into(),
+    )
+}
+/// A panel docked on an edge other than the bar's (opened from a lip) sits flush with that edge,
+/// centred along it, so its body meets the lip's place.
+fn dock_position(edge: bead::core::Edge, size: (f32, f32), output: (i32, i32)) -> (i32, i32) {
+    use bead::core::Edge as E;
+    let (w, h) = (size.0.ceil() as i32, size.1.ceil() as i32);
+    match edge {
+        E::Top => ((output.0 - w) / 2, 0),
+        E::Bottom => ((output.0 - w) / 2, output.1 - h),
+        E::Left => (0, (output.1 - h) / 2),
+        E::Right => (output.0 - w, (output.1 - h) / 2),
+    }
 }
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -74,7 +141,7 @@ struct Layer {
 fn yes() -> bool {
     true
 }
-#[derive(Clone, Copy, Debug, Deserialize)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 enum Edge {
     Top,
@@ -90,6 +157,25 @@ impl From<Edge> for bead::core::Edge {
             Edge::Left => Self::Left,
             Edge::Right => Self::Right,
         }
+    }
+}
+impl App {
+    fn edge_chrome(&self) -> Option<EdgeChrome> {
+        let lips = self.manifest.lips.as_ref()?;
+        Some(EdgeChrome {
+            lips: lips
+                .iter()
+                .map(|(id, lip)| Lip {
+                    id: id.clone(),
+                    edge: lip.edge.into(),
+                    length: lip.length,
+                    thickness: lip.thickness,
+                    opens: lip.opens.clone(),
+                })
+                .collect(),
+            hover_delay_ms: 350,
+            ..Default::default()
+        })
     }
 }
 #[derive(Debug)]
@@ -190,6 +276,27 @@ impl App {
                 validate_path(&root, &panel.view)?;
             }
         }
+        for (id, lip) in manifest.lips.iter().flatten() {
+            if !manifest
+                .panels
+                .as_ref()
+                .is_some_and(|panels| panels.contains_key(&lip.opens))
+            {
+                return Err(format!(
+                    "{}: lip '{id}' opens undeclared panel '{}'",
+                    path.display(),
+                    lip.opens
+                )
+                .into());
+            }
+            if lip.length <= 0. || lip.thickness <= 0. || lip.thickness > 32. {
+                return Err(format!(
+                    "{}: lip '{id}' needs a positive length and a thickness of 1..32",
+                    path.display()
+                )
+                .into());
+            }
+        }
         if let Some(services) = &manifest.services {
             for name in &services.desktop {
                 if !bead::host::DESKTOP_SERVICES.contains(&name.as_str()) {
@@ -256,10 +363,18 @@ impl App {
             return Ok(None);
         };
         let (edge, thickness) = (layer.edge, layer.size as i32);
+        let bar_edge: bead::core::Edge = edge.into();
         let views: BTreeMap<String, PanelSpec> = panels
             .iter()
             .map(|(name, panel)| {
                 let size = (panel.size[0], panel.size[1]);
+                // A lip sits at the centre of its edge: a panel it opens centres there too.
+                let lip_opened = self
+                    .manifest
+                    .lips
+                    .iter()
+                    .flatten()
+                    .any(|(_, lip)| lip.opens == *name);
                 let root = self.root.clone();
                 let view = panel.view.clone();
                 let palette = self.manifest.palette.clone();
@@ -289,13 +404,22 @@ impl App {
                     renderer,
                     position: Some(Arc::new(
                         move |scene: &Scene, center: Option<f32>, output: (i32, i32)| {
-                            panel_position(
-                                edge,
-                                thickness,
-                                (scene.bounds.w, scene.bounds.h),
-                                center,
-                                output,
-                            )
+                            let size = (scene.bounds.w, scene.bounds.h);
+                            match scene.motion.as_ref().map(|m| m.edge) {
+                                Some(dock) if dock != bar_edge => dock_position(dock, size, output),
+                                _ => panel_position(
+                                    edge,
+                                    thickness,
+                                    size,
+                                    center.or_else(|| {
+                                        let across = matches!(edge, Edge::Top | Edge::Bottom);
+                                        lip_opened.then(|| {
+                                            (if across { output.0 } else { output.1 }) as f32 / 2.
+                                        })
+                                    }),
+                                    output,
+                                ),
+                            }
                         },
                     )),
                 };
@@ -437,6 +561,10 @@ impl App {
             {
                 options.panels = Some(panels);
                 options.panel_spec = Some(default);
+            }
+            if let Some(chrome) = self.edge_chrome() {
+                options.control = Some(Arc::new(Lips(chrome)));
+                options.edge_art = Some(Arc::new(lip_art));
             }
             options.primary_factory = Some(self.primary_factory(runtime.clone()));
             options.bar = true;
@@ -818,6 +946,43 @@ mod tests {
         let error = App::load(&p).unwrap().check().unwrap_err().to_string();
         assert!(error.contains("calendar.luau"), "{error}");
         let _ = std::fs::remove_dir_all(p);
+    }
+    #[test]
+    fn lips_need_a_declared_panel_and_draw_a_bar_that_swells_as_they_dock() {
+        let p = folder(&format!(
+            "{}\n[layer]\nedge='top'\nsize=36\n[panels.side]\nview='view/side.luau'\nsize=[300,500]\n[lips.right]\nedge='right'\nopens='side'\n",
+            base()
+        ));
+        std::fs::write(p.join("view/side.luau"), "return {}\n").unwrap();
+        let app = App::load(&p).unwrap();
+        let chrome = app.edge_chrome().unwrap();
+        assert_eq!(chrome.lips.len(), 1);
+        assert_eq!(
+            (
+                chrome.lips[0].length,
+                chrome.lips[0].thickness,
+                chrome.hover_delay_ms
+            ),
+            (144., 10., 350)
+        );
+        std::fs::write(
+            p.join("bead.toml"),
+            format!(
+                "{}\n[layer]\nedge='top'\nsize=36\n[lips.right]\nedge='right'\nopens='side'\n",
+                base()
+            ),
+        )
+        .unwrap();
+        let error = App::load(&p).unwrap_err().to_string();
+        assert!(error.contains("undeclared panel 'side'"), "{error}");
+        let _ = std::fs::remove_dir_all(p);
+        let lip = &chrome.lips[0];
+        let rest = lip_art(lip, (10., 144.), LipState::default()).unwrap();
+        let docked = lip_art(lip, (10., 144.), LipState { attach: 1., ..Default::default() }).unwrap();
+        assert!(std::str::from_utf8(&rest).unwrap().contains(r#"width="4""#));
+        assert!(std::str::from_utf8(&docked).unwrap().contains(r#"width="6""#));
+        assert_eq!(dock_position(bead::core::Edge::Right, (300., 500.), (1920, 1200)), (1620, 350));
+        assert_eq!(dock_position(bead::core::Edge::Top, (300., 500.), (1920, 1200)), (810, 0));
     }
     #[test]
     fn popups_sit_against_the_bar_centred_and_clamped() {

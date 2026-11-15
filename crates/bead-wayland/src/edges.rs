@@ -10,6 +10,7 @@ use super::*;
 use crate::intent::{Dwell, Gate, Lip, Start, may_dwell};
 use std::sync::Arc;
 use std::sync::Mutex;
+use wl_subsurface::WlSubsurface;
 
 /// One pre-dwell update from a host-owned edge trigger source.
 #[derive(Clone, Debug, PartialEq)]
@@ -130,13 +131,18 @@ impl EdgeChrome {
         })
     }
 }
-/// The artwork inputs for one lip.
-#[derive(Clone, Copy, Debug, PartialEq)]
+/// The artwork inputs for one lip. Construct with `..Default::default()` for the free rest state.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct LipState {
     /// Dwell fill, 0..1.
     pub progress: f32,
     /// Its panel is open on this output.
     pub active: bool,
+    /// 0 = the free lip at the screen edge; 1 = docked on its panel's inner edge as the panel's tab;
+    /// between = the panel's eased open progress in this very frame (B0279). The art may morph.
+    pub attach: f32,
+    /// The pointer is on the lip or its tab.
+    pub hovered: bool,
 }
 /// Static SVG for a lip of the given logical size and state; `None` draws nothing. The
 /// SVG's own size must be that logical size.
@@ -178,6 +184,144 @@ impl Drop for EdgeSurface {
         self.viewport.destroy();
     }
 }
+/// The lip riding its open panel as that panel's tab (B0279): a subsurface of the panel surface.
+/// Its position is applied with the parent's commit, so it moves in the same frame as the panel's
+/// pose; its content (hover, attach morph) commits desynchronised. The edge lip surface draws
+/// nothing while this exists.
+pub(super) struct LipTab {
+    key: String,
+    lip: Lip,
+    output: wl_output::WlOutput,
+    /// The lip's rest rectangle on the output: the tab keeps its size and its place along the edge.
+    rest: Rect,
+    surface: wl_surface::WlSurface,
+    role: WlSubsurface,
+    viewport: WpViewport,
+    pool: SlotPool,
+    buffer: Option<Buffer>,
+    drawn: Option<(u32, u32)>,
+    attach: f32,
+    active: bool,
+    scale120: u32,
+    /// The edge lip clears right after the panel's first tab frame commits (never before).
+    handover: bool,
+}
+impl Drop for LipTab {
+    fn drop(&mut self) {
+        self.viewport.destroy();
+        self.role.destroy();
+        self.surface.destroy();
+    }
+}
+/// Where the tab sits in panel-surface coordinates: flush against the posed body's inner edge, where
+/// the lip rests along the edge (`rest` on the output, `origin` = the surface's output position).
+fn tab_rect(edge: Edge, body: Rect, rest: Rect, origin: (i32, i32)) -> Rect {
+    let (ox, oy) = (origin.0 as f32, origin.1 as f32);
+    match edge {
+        Edge::Right => Rect::new(body.x - rest.w, rest.y - oy, rest.w, rest.h),
+        Edge::Left => Rect::new(body.x + body.w, rest.y - oy, rest.w, rest.h),
+        Edge::Top => Rect::new(rest.x - ox, body.y + body.h, rest.w, rest.h),
+        Edge::Bottom => Rect::new(rest.x - ox, body.y - rest.h, rest.w, rest.h),
+    }
+}
+/// A layer surface's output position from its anchor, margins and size (unanchored axes centre).
+pub(super) fn surface_origin(
+    anchor: Anchor,
+    margin: [i32; 4],
+    size: (u32, u32),
+    output: (i32, i32),
+) -> (i32, i32) {
+    let axis = |near: bool, far: bool, near_margin: i32, far_margin: i32, size: i32, span: i32| {
+        if near {
+            near_margin
+        } else if far {
+            span - size - far_margin
+        } else {
+            (span - size) / 2
+        }
+    };
+    (
+        axis(
+            anchor.contains(Anchor::LEFT),
+            anchor.contains(Anchor::RIGHT),
+            margin[3],
+            margin[1],
+            size.0 as i32,
+            output.0,
+        ),
+        axis(
+            anchor.contains(Anchor::TOP),
+            anchor.contains(Anchor::BOTTOM),
+            margin[0],
+            margin[2],
+            size.1 as i32,
+            output.1,
+        ),
+    )
+}
+/// Rasterise lip art (or clear) into a surface and commit it. Returns the attached buffer.
+fn present_art(
+    surface: &wl_surface::WlSurface,
+    viewport: &WpViewport,
+    pool: &mut SlotPool,
+    svg: Option<&[u8]>,
+    size: (u32, u32),
+    scale120: u32,
+) -> Option<Buffer> {
+    let scale = scale120 as f32 / 120.;
+    let (w, h) = if svg.is_some() {
+        (
+            (size.0 as f32 * scale).ceil() as u32,
+            (size.1 as f32 * scale).ceil() as u32,
+        )
+    } else {
+        (1, 1)
+    };
+    let (buffer, bytes) = match pool.create_buffer(
+        w as i32,
+        h as i32,
+        (w * 4) as i32,
+        wl_shm::Format::Argb8888,
+    ) {
+        Ok(created) => created,
+        Err(error) => {
+            eprintln!("EDGE_SURFACE_ERROR {error}");
+            return None;
+        }
+    };
+    match svg {
+        Some(svg) => {
+            if let Err(error) = bead_render::svg_into(
+                svg,
+                ShmTarget {
+                    bytes,
+                    width: w,
+                    height: h,
+                    scale,
+                    format: PixelFormat::Bgra,
+                },
+            ) {
+                eprintln!("EDGE_ART_ERROR {error}");
+                return None;
+            }
+        }
+        None => bytes.fill(0),
+    }
+    viewport.set_destination(size.0 as i32, size.1 as i32);
+    buffer.attach_to(surface).ok()?;
+    surface.damage_buffer(0, 0, w as i32, h as i32);
+    surface.commit();
+    Some(buffer)
+}
+/// Skip identical frames: the art is a pure function of the state.
+fn art_stamp(svg: Option<&Arc<[u8]>>) -> u32 {
+    use std::hash::{Hash, Hasher};
+    svg.map_or(0, |s| {
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        s.hash(&mut h);
+        h.finish() as u32
+    })
+}
 #[derive(Default)]
 pub(super) struct EdgeState {
     chrome: EdgeChrome,
@@ -202,6 +346,78 @@ pub(super) struct EdgeState {
     opening: Option<String>,
     /// Per-fire id, so a stale expiry timer cannot clear a newer fire.
     opening_epoch: u64,
+    /// The lip attached to the open panel as its tab.
+    pub(super) tab: Option<LipTab>,
+}
+impl EdgeState {
+    /// The lip's live dwell/external progress (a pending open holds the completed dwell).
+    fn progress(&self, key: &str) -> f32 {
+        let raw = if let Some((external_key, progress)) = &self.external.progress
+            && external_key == key
+        {
+            *progress
+        } else if self.dwelling.as_deref() == Some(key) {
+            self.dwell.progress()
+        } else {
+            0.
+        };
+        drawn_progress(self.opening.as_deref(), key, raw)
+    }
+    fn attached(&self, key: &str) -> bool {
+        self.tab.as_ref().is_some_and(|tab| tab.key == key)
+    }
+    /// Pose the tab for this panel frame, before the parent commits: `body` is the panel body as
+    /// drawn (surface coordinates), `origin` the panel surface's output position.
+    pub(super) fn pose_tab(
+        &mut self,
+        body: Rect,
+        progress: f32,
+        origin: (i32, i32),
+        active: bool,
+        scale120: u32,
+        art: Option<&EdgeArt>,
+    ) {
+        let Some(tab) = self.tab.as_mut() else {
+            return;
+        };
+        let rect = tab_rect(tab.lip.edge, body, tab.rest, origin);
+        tab.role
+            .set_position(rect.x.round() as i32, rect.y.round() as i32);
+        tab.attach = progress.clamp(0., 1.);
+        tab.active = active;
+        tab.scale120 = scale120;
+        self.draw_tab(art);
+    }
+    fn draw_tab(&mut self, art: Option<&EdgeArt>) {
+        let Some(tab) = self.tab.as_ref() else {
+            return;
+        };
+        let state = LipState {
+            progress: self.progress(&tab.key),
+            active: tab.active,
+            attach: tab.attach,
+            hovered: self.hovered.as_deref() == Some(tab.key.as_str()),
+        };
+        let size = (
+            tab.rest.w.round().max(1.) as u32,
+            tab.rest.h.round().max(1.) as u32,
+        );
+        let svg = art.and_then(|art| art(&tab.lip, (size.0 as f32, size.1 as f32), state));
+        let stamp = (art_stamp(svg.as_ref()), tab.scale120);
+        let tab = self.tab.as_mut().unwrap();
+        if tab.drawn == Some(stamp) {
+            return;
+        }
+        tab.buffer = present_art(
+            &tab.surface,
+            &tab.viewport,
+            &mut tab.pool,
+            svg.as_deref(),
+            size,
+            tab.scale120,
+        );
+        tab.drawn = Some(stamp);
+    }
 }
 /// Progress a lip is drawn with: a pending open holds the completed dwell.
 fn drawn_progress(opening: Option<&str>, key: &str, raw: f32) -> f32 {
@@ -638,21 +854,105 @@ impl App {
             && self.panel_output.as_ref() == Some(output)
     }
     fn lip_progress(&self, key: &str) -> f32 {
-        drawn_progress(
-            self.edge.opening.as_deref(),
-            key,
-            self.raw_lip_progress(key),
-        )
+        self.edge.progress(key)
     }
-    fn raw_lip_progress(&self, key: &str) -> f32 {
-        if let Some((external_key, progress)) = &self.edge.external.progress
-            && external_key == key
+    /// The lip that attaches to the resident panel as its tab: it opens that view, sits on the
+    /// edge the panel docks at, and the panel is local (not host-owned) and not a pearl.
+    fn panel_lip(&self) -> Option<(wl_output::WlOutput, Lip)> {
+        let name = self.panel_name.as_deref()?;
+        let output = self.panel_output.clone()?;
+        let edge = self.companion.as_ref()?.0.motion.as_ref()?.edge;
+        if self.pearl.is_some()
+            || self
+                .options
+                .control
+                .as_ref()?
+                .external_panel_open(name, &self.output_id(&output))
+                .is_some()
         {
-            *progress
-        } else if self.edge.dwelling.as_deref() == Some(key) {
-            self.edge.dwell.progress()
-        } else {
-            0.
+            return None;
+        }
+        let lip = self
+            .edge
+            .chrome
+            .lips
+            .iter()
+            .find(|lip| lip.opens == name && lip.edge == edge)?
+            .clone();
+        Some((output, lip))
+    }
+    /// Before a panel frame: attach the panel's lip as its tab (or drop a tab of another lip).
+    /// While a tab exists the panel's motion stays on the client frame path: a subsurface is not
+    /// part of a compositor-driven atlas, so the compositor could not move the tab with the body.
+    pub(super) fn lip_tab_prepare(&mut self, parent: &wl_surface::WlSurface) {
+        let Some((output, lip)) = self.panel_lip() else {
+            self.lip_tab_detach();
+            return;
+        };
+        let key = key(&self.output_id(&output), &lip.id);
+        if self.edge.tab.as_ref().is_some_and(|tab| tab.key != key) {
+            self.lip_tab_detach();
+        }
+        if self.edge.tab.is_some() {
+            return;
+        }
+        let (Some(subcompositor), Some(viewporter)) =
+            (self.subcompositor.as_ref(), self.viewporter.as_ref())
+        else {
+            return;
+        };
+        let Some(size) = self.output.info(&output).and_then(|info| info.logical_size) else {
+            return;
+        };
+        let Ok(pool) = SlotPool::new(4096, &self.shm) else {
+            return;
+        };
+        let surface = self.compositor.create_surface(&self.qh);
+        if !self.edge.chrome.lip_surface_geometry(&lip, size).input
+            && let Ok(empty) = Region::new(&self.compositor)
+        {
+            surface.set_input_region(Some(empty.wl_region()));
+        }
+        let role = subcompositor.get_subsurface(&surface, parent, &self.qh, ());
+        role.set_desync();
+        let viewport = viewporter.get_viewport(&surface, &self.qh, ());
+        self.edge.tab = Some(LipTab {
+            key,
+            rest: lip.rect((size.0 as f32, size.1 as f32)),
+            lip,
+            output,
+            surface,
+            role,
+            viewport,
+            pool,
+            buffer: None,
+            drawn: None,
+            attach: 0.,
+            active: true,
+            scale120: 120,
+            handover: true,
+        });
+    }
+    /// After the panel frame committed: the edge lip clears, so a refresh that catches only one of
+    /// the two commits shows the lip twice at the same place, never nowhere.
+    pub(super) fn lip_tab_handover(&mut self) {
+        if let Some(tab) = self
+            .edge
+            .tab
+            .as_mut()
+            .filter(|tab| tab.handover && tab.drawn.is_some())
+        {
+            tab.handover = false;
+            let key = tab.key.clone();
+            self.redraw_lip(&key);
+        }
+    }
+    /// The panel surface unmaps or goes: the edge lip takes over first, then the tab goes.
+    pub(super) fn lip_tab_detach(&mut self) {
+        if let Some(tab) = self.edge.tab.take() {
+            let key = tab.key.clone();
+            drop(tab);
+            self.redraw_lip(&key);
         }
     }
 
@@ -835,12 +1135,19 @@ impl App {
         let svg = match &s.kind {
             Kind::Reserved(_) => None,
             Kind::Lip(id) => self.lip_named(id).and_then(|lip| {
+                let k = key(&s.output_name, id);
                 let state = LipState {
-                    progress: self.lip_progress(&key(&s.output_name, id)),
+                    progress: self.lip_progress(&k),
                     active: self.lip_active(&s.output, &lip),
+                    attach: 0.,
+                    hovered: self.edge.hovered.as_deref() == Some(k.as_str()),
                 };
-                if state.active && self.edge.opening == Some(key(&s.output_name, id)) {
+                if state.active && self.edge.opening.as_deref() == Some(k.as_str()) {
                     opened = true;
+                }
+                // The lip rides its panel as the tab: the edge surface shows nothing.
+                if self.edge.attached(&k) {
+                    return None;
                 }
                 let art = self.options.edge_art.as_ref()?;
                 art(&lip, (size.0 as f32, size.1 as f32), state)
@@ -849,60 +1156,21 @@ impl App {
         if opened {
             self.edge.opening = None;
         }
-        // Skip identical frames: the art is a pure function of the state.
-        let stamp = svg.as_ref().map_or(0, |s| {
-            use std::hash::{Hash, Hasher};
-            let mut h = std::collections::hash_map::DefaultHasher::new();
-            s.hash(&mut h);
-            h.finish() as u32
-        });
-        if self.edge_surfaces[index].drawn == Some((stamp, size, scale120)) {
-            return;
-        }
-        let scale = scale120 as f32 / 120.;
-        let (w, h) = if svg.is_some() {
-            (
-                (size.0 as f32 * scale).ceil() as u32,
-                (size.1 as f32 * scale).ceil() as u32,
-            )
-        } else {
-            (1, 1)
-        };
+        let stamp = art_stamp(svg.as_ref());
         let s = &mut self.edge_surfaces[index];
-        let created =
-            s.pool
-                .create_buffer(w as i32, h as i32, (w * 4) as i32, wl_shm::Format::Argb8888);
-        let (buffer, bytes) = match created {
-            Ok(created) => created,
-            Err(error) => {
-                eprintln!("EDGE_SURFACE_ERROR {error}");
-                return;
-            }
-        };
-        match svg {
-            Some(svg) => {
-                if let Err(error) = bead_render::svg_into(
-                    &svg,
-                    ShmTarget {
-                        bytes,
-                        width: w,
-                        height: h,
-                        scale,
-                        format: PixelFormat::Bgra,
-                    },
-                ) {
-                    eprintln!("EDGE_ART_ERROR {error}");
-                    return;
-                }
-            }
-            None => bytes.fill(0),
-        }
-        s.viewport.set_destination(size.0 as i32, size.1 as i32);
-        if buffer.attach_to(s.layer.wl_surface()).is_err() {
+        if s.drawn == Some((stamp, size, scale120)) {
             return;
         }
-        s.layer.wl_surface().damage_buffer(0, 0, w as i32, h as i32);
-        s.layer.commit();
+        let Some(buffer) = present_art(
+            s.layer.wl_surface(),
+            &s.viewport,
+            &mut s.pool,
+            svg.as_deref(),
+            size,
+            scale120,
+        ) else {
+            return;
+        };
         s.buffer = Some(buffer);
         s.drawn = Some((stamp, size, scale120));
     }
@@ -933,8 +1201,11 @@ impl App {
         let entered = self.edge.hovered.as_deref() != Some(k.as_str());
         self.edge.hovered = Some(k.clone());
         self.settle_edge_exit();
-        if entered && let Some(control) = &self.options.control {
-            control.external_panel_hover(&lip.opens, output, true);
+        if entered {
+            if let Some(control) = &self.options.control {
+                control.external_panel_hover(&lip.opens, output, true);
+            }
+            self.redraw_lip(&k);
         }
         let active = wl_output.is_some_and(|o| self.lip_active(o, lip));
         let chrome = &self.edge.chrome;
@@ -1100,6 +1371,9 @@ impl App {
     }
     fn redraw_lip(&mut self, k: &str) {
         self.publish_cue(k);
+        if self.edge.attached(k) {
+            self.edge.draw_tab(self.options.edge_art.as_ref());
+        }
         let Some((output, id)) = k.split_once('/') else {
             return;
         };
@@ -1260,22 +1534,34 @@ impl App {
         }
         self.redraw_lips();
     }
-    /// Pointer events on a lip strip surface. Returns false for any other surface.
+    /// Pointer events on a lip strip surface or on the panel's tab. Returns false for any other
+    /// surface. The tab is the lip: hovering it holds the panel open, clicking it closes it.
     pub(super) fn edge_pointer(&mut self, event: &PointerEvent) -> bool {
-        let Some(i) = self
-            .edge_surfaces
-            .iter()
-            .position(|s| s.layer.wl_surface() == &event.surface)
-        else {
-            return false;
-        };
-        let s = &self.edge_surfaces[i];
-        let Kind::Lip(id) = s.kind.clone() else {
-            return true;
-        };
-        let (output, wl_output) = (s.output_name.clone(), s.output.clone());
-        let Some(lip) = self.lip_named(&id) else {
-            return true;
+        let (lip, output, wl_output) = if let Some(tab) = self
+            .edge
+            .tab
+            .as_ref()
+            .filter(|tab| tab.surface == event.surface)
+        {
+            let (lip, wl_output) = (tab.lip.clone(), tab.output.clone());
+            (lip, self.output_id(&wl_output), wl_output)
+        } else {
+            let Some(i) = self
+                .edge_surfaces
+                .iter()
+                .position(|s| s.layer.wl_surface() == &event.surface)
+            else {
+                return false;
+            };
+            let s = &self.edge_surfaces[i];
+            let Kind::Lip(id) = s.kind.clone() else {
+                return true;
+            };
+            let (output, wl_output) = (s.output_name.clone(), s.output.clone());
+            let Some(lip) = self.lip_named(&id) else {
+                return true;
+            };
+            (lip, output, wl_output)
         };
         match event.kind {
             PointerEventKind::Enter { serial } => {
@@ -1731,6 +2017,66 @@ mod tests {
         assert_eq!(opening_expired(2, 3, true, false), None, "stale epoch");
         assert_eq!(opening_expired(3, 3, false, false), None, "already cleared");
         assert_eq!(opening_expired(3, 3, true, true), Some(false), "active");
+    }
+
+    /// B0279: the tab sits flush against the posed body's inner edge, at the lip's place along the
+    /// edge, for every anchor edge; at progress 0 (body at its anchor) it is exactly the lip's rest.
+    #[test]
+    fn tab_rides_the_posed_body_inner_edge_on_every_anchor() {
+        let output = (1920., 1200.);
+        let lip = |edge| Lip {
+            id: "l".into(),
+            edge,
+            length: 144.,
+            thickness: 10.,
+            opens: "p".into(),
+        };
+        // A 400 x 1200 right dock, body flush with the screen edge, 32 px shadow margin inside.
+        let right = lip(Edge::Right);
+        let rest = right.rect(output);
+        let origin = surface_origin(Anchor::RIGHT | Anchor::TOP, [0; 4], (432, 1264), (1920, 1200));
+        assert_eq!(origin, (1488, 0));
+        for p in [0., 0.3, 1.] {
+            let body = Rect::new(32. + 400. * (1. - p), 32., 400. * p, 1200.);
+            let tab = tab_rect(Edge::Right, body, rest, origin);
+            assert_eq!(tab, Rect::new(body.x - 10., 528., 10., 144.), "right p={p}");
+            if p == 0. {
+                // In surface coordinates the tab is where the lip rests on the output.
+                assert_eq!(tab.x + origin.0 as f32, rest.x);
+            }
+        }
+        let left = lip(Edge::Left);
+        let body = Rect::new(32., 32., 400. * 0.5, 1200.);
+        assert_eq!(
+            tab_rect(Edge::Left, body, left.rect(output), (-32, 0)),
+            Rect::new(232., 528., 10., 144.)
+        );
+        let top = lip(Edge::Top);
+        let body = Rect::new(32., 32., 600., 300. * 0.25);
+        // A top panel centred by the compositor (anchor TOP only).
+        let origin = surface_origin(Anchor::TOP, [0; 4], (664, 364), (1920, 1200));
+        assert_eq!(origin, (628, 0));
+        assert_eq!(
+            tab_rect(Edge::Top, body, top.rect(output), origin),
+            Rect::new(1920. / 2. - 72. - 628., 107., 144., 10.)
+        );
+        let bottom = lip(Edge::Bottom);
+        let body = Rect::new(32., 32. + 300. * 0.5, 600., 150.);
+        let origin = surface_origin(Anchor::BOTTOM | Anchor::LEFT, [0, 0, 0, 100], (664, 364), (1920, 1200));
+        assert_eq!(origin, (100, 836));
+        assert_eq!(
+            tab_rect(Edge::Bottom, body, bottom.rect(output), origin),
+            Rect::new(888. - 100., 172., 144., 10.)
+        );
+    }
+
+    #[test]
+    fn lip_state_default_is_the_free_rest_lip() {
+        let state = LipState {
+            progress: 0.5,
+            ..Default::default()
+        };
+        assert_eq!((state.active, state.attach, state.hovered), (false, 0., false));
     }
 
     #[test]
