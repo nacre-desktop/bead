@@ -106,3 +106,28 @@ static-body open/close; making it the default needs the compositor side and is n
   p95 10.6, max 10.6 ms (before: 8.0, 10.1, 10.1). The compositor path is covered by the plan and wire
   tests only: the desktop capture is parked (swap gate closed, see the unit handoff).
 
+
+## Slide pacing and terminal pose (B0283)
+
+- Terminal pose (cold and warm opens, closes; confirmed in code and on sway): B0221 (58c53b15) moved
+  the CPU path's `redraw = false` below the motion sample, so the bit that keeps a surface armed until
+  its terminal pose was always cleared. A callback after the motion end found neither `redraw` nor an
+  active motion (`Animations::active` and `panel_frame_until` both end at `started + duration`) and
+  drew nothing: the final pose waited for an unrelated redraw (a gauge tick, input, the close). A cold
+  open's restarted reveal hits the same window; its stale `panel_frame_until` is ORed with `active`
+  and never cut frames, so it stays. Fix: the clear sets `redraw` to the sampled motion's `active`.
+- Start pacing (unchanged): a CPU draw outside the callback (configure, source update) commits at
+  once, 4-6 poses before an open's first callback. Pacing them on the callback was tried and dropped:
+  on sway the 12-14 ms gap after the first paced frame stayed (it follows the compositor's frame-done
+  time, sent after its own render), and warm opens lost a frame (the first callback after a remap
+  arrives ~13 ms after the first commit): open max gaps 11.5-17.7 ms against 9.4-14.3 before.
+- Warm-open first-frame gap on niri: Bead requests a callback on every held-pose commit (UI_CALLBACK
+  pairs in the Shell's trace); the late one answers a 3-5 px commit one refresh later. Compositor-side.
+- Test: `companion_slide_commits_its_terminal_pose_on_the_next_callback` (120 and 60 Hz callbacks off
+  the motion grid, plain and restarted reveal: terminal pose within one frame of nominal, no gap over
+  a frame; the unarmed loop never commits it), replacing the grid-aligned B0170 loop test.
+- Evidence (dev-2, headless sway 2880x1800@120 scale 1.5, CPU, `bead run examples/bar-with-panels`, status
+  peek right after the calendar (cold) and reopened (warm), 2 runs x 3 cycles, `.lead/job/capture.sh`
+  untracked): PANEL_SLIDE logged 2 of 24 slides before (one close at 454 ms, max gap 446 ms), 24 of 24
+  after: opens 200-208 ms (nominal 200), closes 142-146 ms (nominal 140); max gaps opens 8.5-13.9 ms,
+  closes 11.2-12.7 ms, the over-12 ones being the start gap above.
