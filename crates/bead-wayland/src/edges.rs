@@ -298,14 +298,12 @@ fn present_art(
     scale120: u32,
 ) -> Option<Buffer> {
     let scale = scale120 as f32 / 120.;
-    let (w, h) = if svg.is_some() {
-        (
-            (size.0 as f32 * scale).ceil() as u32,
-            (size.1 as f32 * scale).ceil() as u32,
-        )
-    } else {
-        (1, 1)
-    };
+    // A clear keeps the surface's buffer size: a 1x1 shrink after an art commit the compositor has
+    // not rendered yet leaves its accumulated damage outside the new buffer.
+    let (w, h) = (
+        (size.0 as f32 * scale).ceil() as u32,
+        (size.1 as f32 * scale).ceil() as u32,
+    );
     let (buffer, bytes) =
         match pool.create_buffer(w as i32, h as i32, (w * 4) as i32, wl_shm::Format::Argb8888) {
             Ok(created) => created,
@@ -337,6 +335,19 @@ fn present_art(
     surface.damage_buffer(0, 0, w as i32, h as i32);
     surface.commit();
     Some(buffer)
+}
+/// The free lip's art: nothing while it rides its panel as the tab, hovered or not.
+fn free_lip_art(
+    attached: bool,
+    art: Option<&EdgeArt>,
+    lip: &Lip,
+    size: (u32, u32),
+    state: LipState,
+) -> Option<Arc<[u8]>> {
+    if attached {
+        return None;
+    }
+    art?(lip, (size.0 as f32, size.1 as f32), state)
 }
 /// Skip identical frames: the art is a pure function of the state.
 fn art_stamp(svg: Option<&Arc<[u8]>>) -> u32 {
@@ -823,7 +834,7 @@ impl App {
         let s = &mut self.edge_surfaces[i];
         s.size = size;
         s.configured = true;
-        s.drawn = None;
+        // The stamp carries size and scale: a repeated configure of the same size draws nothing.
         self.draw_edge(i);
         true
     }
@@ -1172,12 +1183,13 @@ impl App {
                 if state.active && self.edge.opening.as_deref() == Some(k.as_str()) {
                     opened = true;
                 }
-                // The lip rides its panel as the tab: the edge surface shows nothing.
-                if self.edge.attached(&k) {
-                    return None;
-                }
-                let art = self.options.edge_art.as_ref()?;
-                art(&lip, (size.0 as f32, size.1 as f32), state)
+                free_lip_art(
+                    self.edge.attached(&k),
+                    self.options.edge_art.as_ref(),
+                    &lip,
+                    size,
+                    state,
+                )
             }),
         };
         if opened {
@@ -2208,6 +2220,24 @@ mod tests {
         );
     }
 
+    #[test]
+    fn hovered_free_lip_draws_no_art_while_its_tab_is_attached() {
+        let lip = Lip {
+            id: "right".into(),
+            edge: Edge::Right,
+            length: 144.,
+            thickness: 10.,
+            opens: "side".into(),
+        };
+        let state = LipState {
+            hovered: true,
+            progress: 1.,
+            ..LipState::default()
+        };
+        let art: EdgeArt = Arc::new(|_, _, _| Some(Arc::from(&b"<svg/>"[..])));
+        assert!(free_lip_art(true, Some(&art), &lip, (10, 144), state).is_none());
+        assert!(free_lip_art(false, Some(&art), &lip, (10, 144), state).is_some());
+    }
     #[test]
     fn lip_state_default_is_the_free_rest_lip() {
         let state = LipState {
