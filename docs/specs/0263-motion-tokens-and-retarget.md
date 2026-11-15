@@ -176,3 +176,7 @@ static-body open/close; making it the default needs the compositor side and is n
   vs 16 resident; first frame after configure 49 vs 22 ms) and has more >12 ms close gaps (21 vs 9); grow and
   interrupt are the same path. Follow-ups: (1) cache the reveal's static body so an open costs no 24 ms raster;
   (2) the 16 ms start gap on nested niri is compositor frame-done timing; (3) docked free lip; (4) calendar stall.
+
+## First open on niri (B0294)
+
+niri sends a layer surface its frame callback only after drawing the surface itself; while it draws a substitute (the `bead_layer_motion` atlas) the callback waits for its ~1 s fallback timer. Bead used to hold every GPU-surface draw while a callback was pending, so the first pose (B0170 hold) or a close retarget queued behind that ~1 s wait (READY ~980 ms after the first commit, frames=4-5 closes). A draw whose compositor motion candidate is active no longer waits for the callback (`draw_waits_for_callback`); the client path keeps its pacing. Unconfirmed without niri: that the stalled first open took the atlas path (live READY and PANEL_OPEN_LATENCY lines decide).

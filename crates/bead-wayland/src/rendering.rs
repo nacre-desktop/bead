@@ -108,6 +108,10 @@ mod layer_motion_renderer_tests {
     }
 }
 
+fn draw_waits_for_callback(pending: bool, gpu: bool, compositor_owns_motion: bool) -> bool {
+    pending && gpu && !compositor_owns_motion
+}
+
 fn layer_motion_handoff_eligible(
     opening: bool,
     sampled_progress: Option<f32>,
@@ -279,7 +283,15 @@ mod layer_motion_buffer_tests {
 
 #[cfg(test)]
 mod layer_motion_handoff_tests {
-    use super::layer_motion_handoff_eligible;
+    use super::{draw_waits_for_callback, layer_motion_handoff_eligible};
+
+    #[test]
+    fn a_compositor_owned_motion_never_waits_for_a_surface_frame_callback() {
+        assert!(draw_waits_for_callback(true, true, false));
+        assert!(!draw_waits_for_callback(true, true, true));
+        assert!(!draw_waits_for_callback(true, false, false));
+        assert!(!draw_waits_for_callback(false, true, false));
+    }
     use bead_core::animation::{Animations, Curve};
 
     #[test]
@@ -2202,7 +2214,14 @@ impl App {
                 && s.buffers
                     .iter()
                     .any(|b| !b.buffer.slot().has_active_buffers());
-            if s.callbacks.pending && _kind != RendererKind::Cpu {
+            // A compositor-owned motion (atlas) is drawn instead of this surface, so niri may not
+            // send its frame callback for ~1 s: that callback must not gate the first pose or a
+            // retarget (B0294).
+            if draw_waits_for_callback(
+                s.callbacks.pending,
+                _kind != RendererKind::Cpu,
+                compositor_motion_candidate && layer_motion_active,
+            ) {
                 s.redraw = true;
                 return Ok(());
             }
