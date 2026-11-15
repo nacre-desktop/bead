@@ -51,7 +51,15 @@ Top lip: identical mechanics, horizontal; a lip on the bar's edge is bar-hosted 
 - Tab input follows `lip_surface_geometry(..).input`: the lip's own rect, exactly where the lip takes the pointer on the edge, empty for host-driven hover. The art must fill that rect; a pill smaller than a 50 px top lip should be a thinner lip, not a taller transparent tab.
 - Tab rect at thickness 10 and 50 (bar 40 + frame 10) under reveal and slide motions: attach 0 is the lip's rest rect, attach 1 flush, linear and continuous (test `tab_starts_on_the_free_lip_...`).
 - Every unmap of the resident panel detaches the tab first (client close, compositor-motion close). Close order: dismiss layer dropped at close request, then tab (viewport, subsurface, surface) and edge-lip redraw when the panel is ready to unmap, then the root unmaps. Tab panels stay on the client path (`edge.tab.is_none()` gates compositor motion).
-- Part B (nested niri and labwc, pills per frame): see below.
+- Desktop pass (nested niri r3109 and labwc, headless 120 Hz, 4 px ink grid; stopped by the swap gate after 4 of 16 captures: swap used 66188 KiB >= 64 MiB before the 5th, no reset):
+
+| arm | right slide dock | top lip -> status peek |
+|---|---|---|
+| niri, Bead 6907e640 | tab never leaves the lip's rest rect: a pill at the screen edge (x 1912-1920, y 516-564) in 96% of frames, none at the body's inner edge | pill stays at the bar edge (y 0-8) for the whole open, none under the body |
+| niri, this branch | same (single run, slow): pill at the screen edge through open and close | same (single run): pill at y 2-7, body bottom y 155 |
+| labwc, this branch | not run | one tab, merged under the body (bottom y 163 = 155 + 8), no second pill |
+
+  Under nested niri no tab showed in either build, so the live "pill on the wrong side" is not the 1x1 clear alone. Not attributed yet: in the right-dock run the client drew only ~7 panel frames for the whole slide (the compositor-motion path, which requires no tab), so the tab was likely never attached there; the top peek drew every frame and still showed none. Follow-up B0292: log why `lip_tab_prepare` attaches or skips, and a WAYLAND_DEBUG=client run on niri.
 
 ## Verification
 
