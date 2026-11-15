@@ -978,11 +978,29 @@ mod tests {
         let _ = std::fs::remove_dir_all(p);
         let lip = &chrome.lips[0];
         let rest = lip_art(lip, (10., 144.), LipState::default()).unwrap();
-        let docked = lip_art(lip, (10., 144.), LipState { attach: 1., ..Default::default() }).unwrap();
+        let docked = lip_art(
+            lip,
+            (10., 144.),
+            LipState {
+                attach: 1.,
+                ..Default::default()
+            },
+        )
+        .unwrap();
         assert!(std::str::from_utf8(&rest).unwrap().contains(r#"width="4""#));
-        assert!(std::str::from_utf8(&docked).unwrap().contains(r#"width="6""#));
-        assert_eq!(dock_position(bead::core::Edge::Right, (300., 500.), (1920, 1200)), (1620, 350));
-        assert_eq!(dock_position(bead::core::Edge::Top, (300., 500.), (1920, 1200)), (810, 0));
+        assert!(
+            std::str::from_utf8(&docked)
+                .unwrap()
+                .contains(r#"width="6""#)
+        );
+        assert_eq!(
+            dock_position(bead::core::Edge::Right, (300., 500.), (1920, 1200)),
+            (1620, 350)
+        );
+        assert_eq!(
+            dock_position(bead::core::Edge::Top, (300., 500.), (1920, 1200)),
+            (810, 0)
+        );
     }
     #[test]
     fn popups_sit_against_the_bar_centred_and_clamped() {

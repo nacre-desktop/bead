@@ -277,18 +277,14 @@ fn present_art(
     } else {
         (1, 1)
     };
-    let (buffer, bytes) = match pool.create_buffer(
-        w as i32,
-        h as i32,
-        (w * 4) as i32,
-        wl_shm::Format::Argb8888,
-    ) {
-        Ok(created) => created,
-        Err(error) => {
-            eprintln!("EDGE_SURFACE_ERROR {error}");
-            return None;
-        }
-    };
+    let (buffer, bytes) =
+        match pool.create_buffer(w as i32, h as i32, (w * 4) as i32, wl_shm::Format::Argb8888) {
+            Ok(created) => created,
+            Err(error) => {
+                eprintln!("EDGE_SURFACE_ERROR {error}");
+                return None;
+            }
+        };
     match svg {
         Some(svg) => {
             if let Err(error) = bead_render::svg_into(
@@ -2034,7 +2030,12 @@ mod tests {
         // A 400 x 1200 right dock, body flush with the screen edge, 32 px shadow margin inside.
         let right = lip(Edge::Right);
         let rest = right.rect(output);
-        let origin = surface_origin(Anchor::RIGHT | Anchor::TOP, [0; 4], (432, 1264), (1920, 1200));
+        let origin = surface_origin(
+            Anchor::RIGHT | Anchor::TOP,
+            [0; 4],
+            (432, 1264),
+            (1920, 1200),
+        );
         assert_eq!(origin, (1488, 0));
         for p in [0., 0.3, 1.] {
             let body = Rect::new(32. + 400. * (1. - p), 32., 400. * p, 1200.);
@@ -2062,7 +2063,12 @@ mod tests {
         );
         let bottom = lip(Edge::Bottom);
         let body = Rect::new(32., 32. + 300. * 0.5, 600., 150.);
-        let origin = surface_origin(Anchor::BOTTOM | Anchor::LEFT, [0, 0, 0, 100], (664, 364), (1920, 1200));
+        let origin = surface_origin(
+            Anchor::BOTTOM | Anchor::LEFT,
+            [0, 0, 0, 100],
+            (664, 364),
+            (1920, 1200),
+        );
         assert_eq!(origin, (100, 836));
         assert_eq!(
             tab_rect(Edge::Bottom, body, bottom.rect(output), origin),
@@ -2076,7 +2082,10 @@ mod tests {
             progress: 0.5,
             ..Default::default()
         };
-        assert_eq!((state.active, state.attach, state.hovered), (false, 0., false));
+        assert_eq!(
+            (state.active, state.attach, state.hovered),
+            (false, 0., false)
+        );
     }
 
     #[test]
