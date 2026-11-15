@@ -795,6 +795,9 @@ impl Generation {
             ("bead.focused", Value::Text(String::new())),
             ("bead.hovered", Value::Text(String::new())),
             ("bead.focus_visible", Value::Bool(true)),
+            // A bar-hosted lip's hover dwell fill and cue visibility, published by the compositor host.
+            ("bead.edge.dwell", Value::Number(0.)),
+            ("bead.edge.fade", Value::Number(0.)),
             ("bead.preview.key", Value::Text(String::new())),
             ("bead.preview.value", Value::Number(0.)),
             // True from a pointer press until its release, as seen by the press's own action.
