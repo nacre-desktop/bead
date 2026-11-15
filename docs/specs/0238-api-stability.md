@@ -43,13 +43,9 @@ Counts below are source-declared public items (`pub` declarations in each crate'
 
 | Location / observed consumer | Hazard | Smallest fix before publication | Estimated churn |
 |---|---|---|---|
-| `crates/bead-services/src/runtime.rs:119` `Config` (3 public bools); Nacre has 5 `Config {}` literals | Adding a field breaks external literals | Add `#[non_exhaustive]`; retain `Default`; consumers write `let mut c = Config::default(); c.audio = true;` (non-exhaustive structs cannot be built with struct expressions outside the crate, even with `..Default::default()`) | About 5 Nacre callsites; small |
-| `crates/bead-services/src/lib.rs:102` service `Snapshot`; Nacre literal at `status_views_tests.rs:15` | New store fields break exhaustive literals | `#[non_exhaustive]` + `Default`; consumers construct defaults then mutate fields | One observed literal; small |
-| `crates/bead-wayland/src/lib.rs:745` `Options` (53 public fields; includes debug/test and product-shaped flags such as `app`/`app_as_pearl`); Nacre uses default update syntax | Every added field can break exhaustive literals; flags mix generic host options with app policy | Keep `Default`, add `#[non_exhaustive]`; later move app-launch policy to a narrow host API | Every consumer `Options { .., ..Default::default() }` literal must become `Default` + field assignment; moderate one-time churn, none afterwards |
-| `crates/bead-wayland/src/window.rs:29` `WindowSpec`; 4 Nacre constructors | Field growth breaks literals and bundles policy/callbacks | `#[non_exhaustive]` + constructor/builder with required identity/size/factory and defaults for optional policy | 4 constructors; moderate migration |
 | `crates/bead-render/src/lib.rs:445` `Scene`; Nacre has multiple direct literals including `colors_tests.rs:492` | Internal renderer cache/resource fields leak into externally constructed scene | Make implementation fields private and expose `Scene::new`/mutators; interim `Default` + `..Default::default()` only if all fields can safely default | Several Nacre literals; moderate; audit external users first |
 
-For `#[non_exhaustive]`, migrate known consumers in a preparatory revision before the first release. It forbids downstream struct expressions entirely (functional update syntax included) while preserving read access and field assignment on a value obtained from `Default`/a constructor.
+The `Config`, service `Snapshot`, `Options` and `WindowSpec` literal hazards are fixed in [0262](0262-non-exhaustive.md).
 
 ## 3. Versioning policy
 
@@ -86,13 +82,14 @@ Already removed in the 2026-11 bloat cleanup (B0253 audit):
 - B0256: `vendor/fontconfig` and the `gpu`/`vello` feature aliases (the `wgpu` feature stays).
 - B0257: `bead::source::{Desktop, HostedNotifications}`, `Notifications::private`, the extra `notification_bus::Server::start*` wrappers, `Mirror::needs_snapshot`, two duplicate monotonic clocks.
 - B0258: `bead::host::empty_scene` (use `Scene::empty`), `Session::asset_snapshot`, `Session::local_range_feedback` (use `local_range_feedback_with_label`).
+- B0281: see [0281](0281-cleanup-pass.md).
 
 Do not retain temporary duplicate implementations during cleanup. If a compatibility copy is required, record its owner and delete it when the replacement is trusted; no such copy is proposed here.
 
 ## 6. Recommended next units
 
 1. Inventory and classify every reachable facade item; hide accidental `pub` exports and record the reviewed API snapshot.
-2. Done in [0262](0262-non-exhaustive.md): `#[non_exhaustive]` on `Config`, the service snapshots, `Options` and `WindowSpec` (with `WindowSpec::new`); Bead's own literals are migrated, and 0262 lists the Nacre sites for its pin bump.
+2. Done in [0262](0262-non-exhaustive.md): `#[non_exhaustive]` on `Config`, the service snapshots, `Options` and `WindowSpec` (with `WindowSpec::new`); Bead's own literals and the host's are migrated.
 3. Encapsulate `Scene` implementation fields behind constructors/mutators; migrate consumer scene literals.
 4. Decide the CLI/package consolidation and complete a dry-run package/dependency/license audit (no publication).
 5. Approve the stability table, changelog/deprecation rules, manifest compatibility decision, and only then schedule an owner-controlled first release.

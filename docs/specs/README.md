@@ -30,10 +30,9 @@ This index contains current framework contracts and repository-boundary decision
 | [0264 — Tinted icons and badge](0264-tinted-icons-and-badge.md) | Palette-tinted monochrome images and the kit count badge |
 | [0274 — Kit batch](0274-kit-batch.md) | `kit.Segment`, `LinkRow`, `Chip`, `Tag`, the `SliderTile` end slot, `kit.metrics`, honoured close durations, transcript alignment |
 | [0276 — Kit batch 2](0276-kit-batch2.md) | `kit.EmptyState`, `kit.NoticeRow`, `radius` on `ui.Image`, chip/button label centring |
-| [0262 — Non-exhaustive host types](0262-non-exhaustive.md) | `#[non_exhaustive]` service config/snapshots, `Options` and `WindowSpec::new`; host construction and migration |
+| [0262 — Non-exhaustive host types](0262-non-exhaustive.md) | `#[non_exhaustive]` service config/snapshots, `Options` and `WindowSpec::new`; host construction |
 | [0263 — Motion tokens and panel retarget](0263-motion-tokens-and-retarget.md) | Named curves and durations, sampled `ui.animated` markers, and a panel body that regrows mid-animation |
 | [0270 — Panel first frame](0270-panel-first-frame.md) | Cold and reopened panel-open latency: per-axis shadow templates (the GL context lifetime is pending a desktop gate) |
-| [0271 — Idle memory ownership](0271-idle-memory.md) | Idle PSS and heap ownership of a Bead process (Luau VMs, keep-alive panels, a11y threads, arenas); proposed fixes |
 | [0271 — Idle memory ownership](0271-idle-memory.md) | Idle PSS and heap ownership of a Bead process (Luau VMs, keep-alive panels, a11y threads, arenas); fixes landed |
 | [0263 — Reveal close (B0277)](0263-motion-tokens-and-retarget.md#reveal-close-b0277) | A stationary reveal closes as the open reversed (shrinks into its anchor edge) on the CPU and compositor paths |
 | [0275 — Clock resync](0275-clock-resync.md) | The clock republishes at once after resume, wall-clock steps and timezone switches without the system bus (Linux timerfd + `/etc/localtime` watch) |
@@ -41,5 +40,6 @@ This index contains current framework contracts and repository-boundary decision
 | [0278 — Lip open continuity](0278-lip-open-continuity.md) | An edge lip holds its completed-dwell look from fire until its panel is active instead of flashing to the rest bar |
 | [0280 — Kit batch 3](0280-kit-batch3.md) | Paint-only interaction poses (`visible_on_hover`, `press_scale`/`pressed_fill`, `reflow`), `shadow` on any surface, `prewarm_shadows` |
 | [0284 — Mirror validates once](0284-mirror-validate-once.md) | A mirrored snapshot is validated once per patch; `Publisher::publish_mirror` republishes it; one compare per publication |
+| [0281 — Cleanup and bloat pass](0281-cleanup-pass.md) | One snapshot hub for the event services, unused probes and dependency, stale spec text; deferred cleanup by owner |
 
 This index covers Bead framework contracts. See the [documentation index](../README.md) for the current framework overview and the [framework ownership decision](0214-framework-split.md).
