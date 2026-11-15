@@ -96,10 +96,11 @@ impl EdgeChrome {
             .get(&lip.id)
             .map_or(thickness, |d| d.clamp(0., thickness));
         match lip.edge {
-            Edge::Top => Rect::new(0., thickness - depth, length, depth),
-            Edge::Bottom => Rect::new(0., 0., length, depth),
-            Edge::Left => Rect::new(thickness - depth, 0., depth, length),
-            Edge::Right => Rect::new(0., 0., depth, length),
+            // The docked tab touches the body with its side facing away from the screen edge.
+            Edge::Top => Rect::new(0., 0., length, depth),
+            Edge::Bottom => Rect::new(0., thickness - depth, length, depth),
+            Edge::Left => Rect::new(0., 0., depth, length),
+            Edge::Right => Rect::new(thickness - depth, 0., depth, length),
         }
     }
     fn maps_lip_surfaces(&self) -> bool {
@@ -1827,21 +1828,19 @@ mod tests {
         let top = lip(Edge::Top, 50.);
         assert_eq!(chrome.docked_input_band(&top), Rect::new(0., 0., 208., 50.));
         chrome.docked_input_depth.insert("l".into(), 32.);
+        // A top tab hangs under the body: its join side is its top.
+        assert_eq!(chrome.docked_input_band(&top), Rect::new(0., 0., 208., 32.));
         assert_eq!(
-            chrome.docked_input_band(&top),
+            chrome.docked_input_band(&lip(Edge::Bottom, 50.)),
             Rect::new(0., 18., 208., 32.)
         );
         assert_eq!(
-            chrome.docked_input_band(&lip(Edge::Bottom, 50.)),
-            Rect::new(0., 0., 208., 32.)
-        );
-        assert_eq!(
             chrome.docked_input_band(&lip(Edge::Right, 50.)),
-            Rect::new(0., 0., 32., 208.)
+            Rect::new(18., 0., 32., 208.)
         );
         assert_eq!(
             chrome.docked_input_band(&lip(Edge::Left, 50.)),
-            Rect::new(18., 0., 32., 208.)
+            Rect::new(0., 0., 32., 208.)
         );
         // Deeper than the lip clamps; side lips (10 px) are unchanged.
         assert_eq!(chrome.docked_input_band(&lip(Edge::Right, 10.)).w, 10.);
