@@ -1124,7 +1124,37 @@ impl FolderView {
         };
         let colors = Palette::read(&palette)?;
         let fallback = Scene::empty(size.0 as f32, size.1 as f32);
-        let mut session = Session::new(root, view, palette, colors, fallback);
+        let session = Session::new(root, view, palette, colors, fallback);
+        Self::with_session(session, title, size, runtime, services)
+    }
+    /// Build a view from a read-once `UiPackage` (spec 0285): no file is read, so changing
+    /// or deleting the installed UI cannot affect it; `watch` is a no-op.
+    pub fn from_package(
+        package: Arc<crate::ui::UiPackage>,
+        title: &str,
+        size: (u32, u32),
+    ) -> Result<Self, Box<dyn Error>> {
+        let session = Session::from_package(package, Scene::empty(size.0 as f32, size.1 as f32))?;
+        Self::with_session(session, title, size, None, FolderServices::default())
+    }
+    /// `from_package` attached to a shared services runtime, as `load_with_runtime`.
+    pub fn from_package_with_runtime(
+        package: Arc<crate::ui::UiPackage>,
+        title: &str,
+        size: (u32, u32),
+        runtime: Arc<FolderServicesRuntime>,
+    ) -> Result<Self, Box<dyn Error>> {
+        let session = Session::from_package(package, Scene::empty(size.0 as f32, size.1 as f32))?;
+        let services = runtime.services.clone();
+        Self::with_session(session, title, size, Some(runtime), services)
+    }
+    fn with_session(
+        mut session: Session,
+        title: &str,
+        size: (u32, u32),
+        runtime: Option<Arc<FolderServicesRuntime>>,
+        services: FolderServices,
+    ) -> Result<Self, Box<dyn Error>> {
         let mut host_stores = declared_desktop_values(&Snapshot::default(), &services.desktop);
         if services.desktop.contains("media") {
             host_stores.extend(media_values(&MediaSnapshot::default(), 0));

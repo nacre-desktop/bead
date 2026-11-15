@@ -66,6 +66,8 @@ pub struct Session {
     recovery_pending: std::collections::VecDeque<(u64, bead_core::recovery::Bundle, u64)>,
     pub(crate) root: PathBuf,
     pub(crate) entry: PathBuf,
+    /// Set for a session built by `from_package`: it reads no file after construction.
+    package: Option<std::sync::Arc<crate::generation::UiPackage>>,
     pub(super) palette_path: PathBuf,
     pub(super) palette: Palette,
     pub(super) base_palette: Palette,
@@ -232,6 +234,7 @@ impl Session {
             recovery_fingerprint: None,
             recovery_pending: Default::default(),
             root,
+            package: None,
             entry: entry
                 .components()
                 .filter(|c| *c != std::path::Component::CurDir)
@@ -265,6 +268,26 @@ impl Session {
             graph_wake: Default::default(),
             graph_labels: None,
         }
+    }
+    /// A session over a read-once package (spec 0285): palette and sources come from memory,
+    /// so a later change to the installed files cannot affect it. `watch` is a no-op and
+    /// startup recovery is skipped; `enable_recovery` still opts in to writing the last-good
+    /// bundle after a presented frame, and nothing is written otherwise.
+    pub fn from_package(
+        package: std::sync::Arc<crate::generation::UiPackage>,
+        fallback: Scene,
+    ) -> Result<Self, Diagnostic> {
+        let palette = Palette::parse(&package.palette)
+            .map_err(|e| Diagnostic::new(Path::new("palette.json"), 1, 1, e))?;
+        let mut session = Self::new(
+            package.root.clone(),
+            package.entry.clone(),
+            package.root.join("palette.json"),
+            palette,
+            fallback,
+        );
+        session.package = Some(package);
+        Ok(session)
     }
     /// Install the host frame callback, including snapshots published before registration.
     pub fn set_wakeup(&mut self, wake: std::sync::Arc<dyn Fn() + Send + Sync>) {
@@ -305,6 +328,9 @@ impl Session {
         &mut self,
         wakeup: Box<dyn Fn(Result<(), String>) + Send>,
     ) -> Result<(), Box<dyn std::error::Error>> {
+        if self.package.is_some() {
+            return Ok(()); // nothing on disk to watch
+        }
         let revision = self.watch_revision.clone();
         self.watcher = Some(super::watcher::subscribe(
             self.root.canonicalize()?,
@@ -420,7 +446,11 @@ impl Session {
         if result.is_ok() || self.generation.is_some() || self.recovered.is_some() {
             return result;
         }
-        let Some(path) = &self.recovery_path else {
+        let Some(path) = self
+            .recovery_path
+            .as_ref()
+            .filter(|_| self.package.is_none())
+        else {
             return result;
         };
         let restore = (|| -> Result<_, Box<dyn std::error::Error>> {
@@ -484,13 +514,19 @@ impl Session {
         let watch_revision = self
             .watch_revision
             .load(std::sync::atomic::Ordering::SeqCst);
-        let palette_bytes = fs::read(&self.palette_path)
-            .map_err(|e| Diagnostic::new(Path::new("palette.json"), 1, 1, e))?;
+        let palette_bytes = match &self.package {
+            Some(package) => package.palette.clone(),
+            None => fs::read(&self.palette_path)
+                .map_err(|e| Diagnostic::new(Path::new("palette.json"), 1, 1, e))?,
+        };
         let base_palette = Palette::parse(&palette_bytes)
             .map_err(|e| Diagnostic::new(Path::new("palette.json"), 1, 1, e))?;
         let palette = merged_palette(&base_palette, self.runtime_palette.as_ref());
         let (generation, mut stores) = Generation::load_with_picker(
-            &self.root,
+            self.package.as_deref().map_or(
+                crate::generation::Origin::Dir(&self.root),
+                crate::generation::Origin::Package,
+            ),
             &self.entry,
             &self.stores,
             self.attempts,
@@ -1271,12 +1307,12 @@ impl Session {
             .watch_revision
             .load(std::sync::atomic::Ordering::SeqCst);
         self.accepted_watch_revision == revision
-            && self
-                .generation
-                .as_ref()
-                .is_some_and(|generation| generation.check_sources(&self.root).is_ok())
-            && Palette::read(&self.palette_path)
-                .is_ok_and(|palette| palette.0 == self.base_palette.0)
+            && self.generation.as_ref().is_some_and(|generation| {
+                self.package.is_some() || generation.check_sources(&self.root).is_ok()
+            })
+            && (self.package.is_some()
+                || Palette::read(&self.palette_path)
+                    .is_ok_and(|palette| palette.0 == self.base_palette.0))
             && self
                 .watch_revision
                 .load(std::sync::atomic::Ordering::SeqCst)
@@ -1295,7 +1331,9 @@ impl Session {
             {
                 self.capture_bundle(generation, palette, &pending.entry)?;
             }
-            generation.check_sources(&pending.source_root)?;
+            if self.package.is_none() {
+                generation.check_sources(&pending.source_root)?;
+            }
             if pending.watch_revision
                 != self
                     .watch_revision
@@ -1309,6 +1347,7 @@ impl Session {
                 ));
             }
             if let Some(bytes) = &pending.palette_bytes
+                && self.package.is_none()
                 && fs::read(&pending.palette_source).ok().as_ref() != Some(bytes)
             {
                 return Err(Diagnostic::new(

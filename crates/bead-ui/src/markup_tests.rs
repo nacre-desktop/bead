@@ -4585,3 +4585,65 @@ return ui.Column{id="gallery",width=420,height=520,gap=6,
         "end slot sits 8 px from the tile edge"
     );
 }
+
+/// B0285: a view built from a package reads no file, so the installed UI can change under it.
+#[test]
+fn package_views_ignore_later_changes_to_the_directory() {
+    let f = fixture();
+    let package =
+        crate::UiPackage::load(&f.0, Path::new("ui/main.luau"), Path::new("palette.json")).unwrap();
+    let build = || {
+        let mut session = Session::from_package(package.clone(), Scene::empty(100., 100.)).unwrap();
+        let scene = session.reload().unwrap();
+        session.check_sources().unwrap();
+        session.commit(scene);
+        assert!(session.sources_current());
+        assert!(session.watch(Box::new(|_| {})).is_ok());
+        session
+    };
+    let original = texts(&build());
+    assert!(original.contains(&"Home".to_string()));
+    fs::write(f.0.join("ui/main.luau"), "this is not luau").unwrap();
+    assert_eq!(texts(&build()), original, "edited files are not re-read");
+    fs::remove_dir_all(&f.0).unwrap();
+    assert_eq!(texts(&build()), original, "deleted files are not re-read");
+}
+
+#[test]
+fn package_load_rejects_what_a_directory_load_rejects() {
+    let f = fixture();
+    fs::write(f.0.join("ui/main.luau"), "return 1 +").unwrap();
+    assert!(
+        crate::UiPackage::load(&f.0, Path::new("ui/main.luau"), Path::new("palette.json")).is_err()
+    );
+    assert!(
+        crate::UiPackage::load(&f.0, Path::new("main.json"), Path::new("palette.json")).is_err()
+    );
+}
+
+#[test]
+fn package_view_require_of_a_missing_module_errors_like_a_directory_view() {
+    let f = fixture();
+    fs::write(
+        f.0.join("ui/main.luau"),
+        "local ui=require('bead.ui')\nlocal Missing=require('./nowhere')\nreturn ui.Panel{id='p',width=10,height=10}",
+    )
+    .unwrap();
+    let mut dir = f.session();
+    dir.entry = "ui/main.luau".into();
+    let from_dir = dir.reload().err().unwrap().message;
+    // The package either fails while capturing or when its view is built: same message.
+    let from_package =
+        match crate::UiPackage::load(&f.0, Path::new("ui/main.luau"), Path::new("palette.json")) {
+            Err(e) => e.message,
+            Ok(package) => {
+                Session::from_package(package, Scene::empty(100., 100.))
+                    .unwrap()
+                    .reload()
+                    .err()
+                    .unwrap()
+                    .message
+            }
+        };
+    assert_eq!(from_package, from_dir);
+}

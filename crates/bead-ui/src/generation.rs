@@ -245,12 +245,86 @@ pub struct Generation {
     view_reads_overflow: std::cell::Cell<bool>,
     pub(super) root: PathBuf,
 }
+/// Read-once snapshot of a Luau UI root (spec 0285). Views built from it never touch the
+/// filesystem: it holds exactly the files a directory load reads (Luau modules, images,
+/// JSON, the `bundle.json` manifest and its shared files) plus the palette bytes.
+/// Not captured: mounted plugins (`bundle.json` `plugins: true`; loading from it is refused).
+pub struct UiPackage {
+    pub(super) root: PathBuf,
+    pub(super) entry: PathBuf,
+    pub(super) palette: Vec<u8>,
+    sources: BTreeMap<PathBuf, Vec<u8>>,
+}
+impl UiPackage {
+    /// Read and validate `root` once. `palette` is absolute or relative to `root`.
+    pub fn load(
+        root: &Path,
+        entry: &Path,
+        palette: &Path,
+    ) -> Result<std::sync::Arc<Self>, Diagnostic> {
+        if entry.extension().is_none_or(|ext| ext != "luau") {
+            return Err(Diagnostic::new(
+                entry,
+                1,
+                1,
+                "a UI package needs a .luau entry",
+            ));
+        }
+        let palette_bytes = fs::read(root.join(palette))
+            .map_err(|e| Diagnostic::new(Path::new("palette.json"), 1, 1, e))?;
+        Palette::parse(&palette_bytes)
+            .map_err(|e| Diagnostic::new(Path::new("palette.json"), 1, 1, e))?;
+        let (generation, _) = Generation::load(root, entry, &Stores::default(), 0)?;
+        Ok(std::sync::Arc::new(Self {
+            root: root.to_path_buf(),
+            entry: entry.to_path_buf(),
+            palette: palette_bytes,
+            sources: generation.sources,
+        }))
+    }
+    pub fn root(&self) -> &Path {
+        &self.root
+    }
+    pub fn entry(&self) -> &Path {
+        &self.entry
+    }
+}
+/// Where a load reads from: the directory, or a package (no filesystem access).
+#[derive(Clone, Copy)]
+pub(super) enum Origin<'a> {
+    Dir(&'a Path),
+    Package(&'a UiPackage),
+}
 struct Loader {
     pub(super) root: PathBuf,
     pub(super) sources: BTreeMap<PathBuf, Vec<u8>>,
+    packaged: bool,
 }
 impl Loader {
+    fn new(origin: Origin, entry: &Path) -> Result<Self, Diagnostic> {
+        Ok(match origin {
+            Origin::Dir(root) => Self {
+                root: root
+                    .canonicalize()
+                    .map_err(|e| Diagnostic::new(entry, 1, 1, e))?,
+                sources: BTreeMap::new(),
+                packaged: false,
+            },
+            Origin::Package(package) => Self {
+                root: package.root.clone(),
+                sources: package.sources.clone(),
+                packaged: true,
+            },
+        })
+    }
     pub(super) fn read(&mut self, path: &Path) -> Result<Vec<u8>, Diagnostic> {
+        if self.packaged {
+            return self
+                .sources
+                .get(path)
+                .cloned()
+                .ok_or_else(|| Diagnostic::new(path, 1, 1, "file is not in the UI package"));
+        }
         let full = self
             .root
             .join(path)
@@ -321,7 +395,7 @@ impl Generation {
         revision: u64,
     ) -> Result<(Self, Stores), Diagnostic> {
         Self::load_with_picker(
-            root,
+            Origin::Dir(root),
             entry,
             stores,
             revision,
@@ -331,7 +405,7 @@ impl Generation {
         )
     }
     pub(super) fn load_with_picker(
-        root: &Path,
+        origin: Origin,
         entry: &Path,
         stores: &Stores,
         revision: u64,
@@ -346,7 +420,7 @@ impl Generation {
         let entry = normalized_entry.as_path();
         if entry.extension().is_some_and(|ext| ext == "luau") {
             return Self::load_markup(
-                root,
+                origin,
                 entry,
                 stores,
                 revision,
@@ -355,12 +429,15 @@ impl Generation {
                 host_stores,
             );
         }
-        let mut loader = Loader {
-            root: root
-                .canonicalize()
-                .map_err(|e| Diagnostic::new(entry, 1, 1, e))?,
-            sources: BTreeMap::new(),
+        let Origin::Dir(_) = origin else {
+            return Err(Diagnostic::new(
+                entry,
+                1,
+                1,
+                "a UI package needs a .luau entry",
+            ));
         };
+        let mut loader = Loader::new(origin, entry)?;
         let doc: Document = loader.json(entry)?;
         if doc.version != 1
             || !doc.width.is_finite()
@@ -560,7 +637,7 @@ impl Generation {
         Ok((generation, stores))
     }
     pub(super) fn load_markup(
-        root: &Path,
+        origin: Origin,
         entry: &Path,
         stores: &Stores,
         revision: u64,
@@ -568,14 +645,13 @@ impl Generation {
         host_actions: &std::collections::BTreeSet<String>,
         host_stores: &BTreeMap<String, Value>,
     ) -> Result<(Self, Stores), Diagnostic> {
-        let mut loader = Loader {
-            root: root
-                .canonicalize()
-                .map_err(|e| Diagnostic::new(entry, 1, 1, e))?,
-            sources: BTreeMap::new(),
-        };
+        let mut loader = Loader::new(origin, entry)?;
         let mut directories = vec![entry.parent().unwrap_or(Path::new("")).to_path_buf()];
         let mut count = 0;
+        // A package already holds the walk's result: start with nothing to visit.
+        if loader.packaged {
+            directories.clear();
+        }
         while let Some(directory) = directories.pop() {
             for item in fs::read_dir(loader.root.join(&directory))
                 .map_err(|e| Diagnostic::new(&directory, 1, 1, e))?
@@ -618,7 +694,9 @@ impl Generation {
         // sibling views out of the bundle unless the application actually reuses them.
         let manifest = entry.parent().unwrap_or(Path::new("")).join("bundle.json");
         let mut plugins = None;
-        if loader.root.join(&manifest).is_file() {
+        if (loader.packaged && loader.sources.contains_key(&manifest))
+            || (!loader.packaged && loader.root.join(&manifest).is_file())
+        {
             #[derive(serde::Deserialize)]
             #[serde(deny_unknown_fields)]
             struct Bundle {
@@ -630,6 +708,14 @@ impl Generation {
                 plugins: bool,
             }
             let bundle: Bundle = loader.json(&manifest)?;
+            if bundle.plugins && loader.packaged {
+                return Err(Diagnostic::new(
+                    &manifest,
+                    1,
+                    1,
+                    "plugins are not part of a UI package",
+                ));
+            }
             if bundle.plugins {
                 plugins = Some((loader.root.clone(), crate::plugins::mount(&loader.root)));
             }
@@ -677,7 +763,12 @@ impl Generation {
             }
         }
         // Root assets are snapshots too, including ones initially outside the scroll viewport.
-        for item in fs::read_dir(&loader.root).map_err(|e| Diagnostic::new(entry, 1, 1, e))? {
+        let root_items = if loader.packaged {
+            None
+        } else {
+            Some(fs::read_dir(&loader.root).map_err(|e| Diagnostic::new(entry, 1, 1, e))?)
+        };
+        for item in root_items.into_iter().flatten() {
             let item = item.map_err(|e| Diagnostic::new(entry, 1, 1, e))?;
             let path = PathBuf::from(item.file_name());
             if path.extension().is_some_and(|ext| {
@@ -770,7 +861,9 @@ impl Generation {
             view_reads_overflow: Default::default(),
             root: loader.root,
         };
-        generation.check_sources(root)?;
+        if let Origin::Dir(root) = origin {
+            generation.check_sources(root)?;
+        }
         Ok((generation, stores))
     }
     pub(super) fn model_affects_view<'a>(&self, mut names: impl Iterator<Item = &'a str>) -> bool {

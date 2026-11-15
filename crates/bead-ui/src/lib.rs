@@ -30,7 +30,7 @@ mod transcript_tests;
 mod watcher;
 use bead_core::{Stores, Value};
 use bead_render::{Palette, Primitive, Rect, Scene};
-pub use generation::Generation;
+pub use generation::{Generation, UiPackage};
 use serde::Deserialize;
 pub use session::Session;
 use std::{
