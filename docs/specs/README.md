@@ -37,6 +37,7 @@ This index contains current framework contracts and repository-boundary decision
 | [0263 — Reveal close (B0277)](0263-motion-tokens-and-retarget.md#reveal-close-b0277) | A stationary reveal closes as the open reversed (shrinks into its anchor edge) on the CPU and compositor paths |
 | [0275 — Clock resync](0275-clock-resync.md) | The clock republishes at once after resume, wall-clock steps and timezone switches without the system bus (Linux timerfd + `/etc/localtime` watch) |
 | [0263 — Slide pacing and terminal pose (B0283)](0263-motion-tokens-and-retarget.md#slide-pacing-and-terminal-pose-b0283) | A CPU motion commits its terminal pose on the first frame callback after its end (no unrelated redraw needed); start pacing findings |
+| [0263 — Desktop pass (B0273)](0263-motion-tokens-and-retarget.md#desktop-pass-b0273) | Real-GPU 120 Hz frame gaps per phase: client vs compositor reveal under nested niri and labwc; B0277 close strips; lip tab arm; B0267 held |
 | [0278 — Lip open continuity](0278-lip-open-continuity.md) | An edge lip holds its completed-dwell look from fire until its panel is active instead of flashing to the rest bar |
 | [0280 — Kit batch 3](0280-kit-batch3.md) | Paint-only interaction poses (`visible_on_hover`, `press_scale`/`pressed_fill`, `reflow`), `shadow` on any surface, `prewarm_shadows` |
 | [0284 — Mirror validates once](0284-mirror-validate-once.md) | A mirrored snapshot is validated once per patch; `Publisher::publish_mirror` republishes it; one compare per publication |
