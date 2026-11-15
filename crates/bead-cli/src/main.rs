@@ -42,6 +42,8 @@ struct LipDecl {
     length: f32,
     #[serde(default = "lip_thickness")]
     thickness: f32,
+    /// Depth of the docked tab's input band on the join side; default = thickness.
+    docked_input_depth: Option<f32>,
 }
 fn lip_length() -> f32 {
     144.
@@ -174,6 +176,10 @@ impl App {
                 })
                 .collect(),
             hover_delay_ms: 350,
+            docked_input_depth: lips
+                .iter()
+                .filter_map(|(id, lip)| Some((id.clone(), lip.docked_input_depth?)))
+                .collect(),
             ..Default::default()
         })
     }

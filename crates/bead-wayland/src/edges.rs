@@ -82,8 +82,26 @@ pub struct EdgeChrome {
     /// The host receives hover cues from another source. Bead keeps lip artwork as an
     /// input-less surface; click-only mode still keeps the stock click target.
     pub external_source: bool,
+    /// Per lip id: how deep (px, join side) the docked tab takes the pointer; absent = the lip's
+    /// whole thickness. A host whose tab art fills only a band of a thicker lip sets it.
+    pub docked_input_depth: std::collections::BTreeMap<String, f32>,
 }
 impl EdgeChrome {
+    /// The docked tab's input band: the join side (against the panel body) of the lip's rect,
+    /// `docked_input_depth` deep, in the tab's own coordinates.
+    fn docked_input_band(&self, lip: &Lip) -> Rect {
+        let (length, thickness) = (lip.length.max(0.), lip.thickness.max(0.));
+        let depth = self
+            .docked_input_depth
+            .get(&lip.id)
+            .map_or(thickness, |d| d.clamp(0., thickness));
+        match lip.edge {
+            Edge::Top => Rect::new(0., thickness - depth, length, depth),
+            Edge::Bottom => Rect::new(0., 0., length, depth),
+            Edge::Left => Rect::new(thickness - depth, 0., depth, length),
+            Edge::Right => Rect::new(0., 0., depth, length),
+        }
+    }
     fn maps_lip_surfaces(&self) -> bool {
         !self.external_source || self.click_to_open
     }
@@ -965,7 +983,8 @@ impl App {
             return;
         };
         let Some(size) = self.output.info(&output).and_then(|info| info.logical_size) else {
-            self.edge.tab_outcome("skipped reason=no_logical_size".into());
+            self.edge
+                .tab_outcome("skipped reason=no_logical_size".into());
             return;
         };
         let Ok(pool) = SlotPool::new(4096, &self.shm) else {
@@ -975,10 +994,12 @@ impl App {
         self.edge
             .tab_outcome(format!("attached key={key} edge={:?}", lip.edge));
         let surface = self.compositor.create_surface(&self.qh);
-        if !self.edge.chrome.lip_surface_geometry(&lip, size).input
-            && let Ok(empty) = Region::new(&self.compositor)
-        {
-            surface.set_input_region(Some(empty.wl_region()));
+        if let Ok(region) = Region::new(&self.compositor) {
+            if self.edge.chrome.lip_surface_geometry(&lip, size).input {
+                let band = self.edge.chrome.docked_input_band(&lip);
+                region.add(band.x as i32, band.y as i32, band.w as i32, band.h as i32);
+            }
+            surface.set_input_region(Some(region.wl_region()));
         }
         let role = subcompositor.get_subsurface(&surface, parent, &self.qh, ());
         role.set_desync();
@@ -1792,6 +1813,38 @@ mod tests {
         // Odd output sizes round to whole pixels and never produce a zero-sized strip.
         let odd = lip_geometry(&lip(Edge::Left, 0., 0.), (1919, 1081));
         assert_eq!(odd.size, (1, 1));
+    }
+    #[test]
+    fn docked_tab_input_is_the_join_side_band() {
+        let lip = |edge, thickness| Lip {
+            id: "l".into(),
+            edge,
+            length: 208.,
+            thickness,
+            opens: "p".into(),
+        };
+        let mut chrome = EdgeChrome::default();
+        let top = lip(Edge::Top, 50.);
+        assert_eq!(chrome.docked_input_band(&top), Rect::new(0., 0., 208., 50.));
+        chrome.docked_input_depth.insert("l".into(), 32.);
+        assert_eq!(
+            chrome.docked_input_band(&top),
+            Rect::new(0., 18., 208., 32.)
+        );
+        assert_eq!(
+            chrome.docked_input_band(&lip(Edge::Bottom, 50.)),
+            Rect::new(0., 0., 208., 32.)
+        );
+        assert_eq!(
+            chrome.docked_input_band(&lip(Edge::Right, 50.)),
+            Rect::new(0., 0., 32., 208.)
+        );
+        assert_eq!(
+            chrome.docked_input_band(&lip(Edge::Left, 50.)),
+            Rect::new(18., 0., 32., 208.)
+        );
+        // Deeper than the lip clamps; side lips (10 px) are unchanged.
+        assert_eq!(chrome.docked_input_band(&lip(Edge::Right, 10.)).w, 10.);
     }
     #[test]
     fn input_exclusions_match_rounded_layer_placement() {
