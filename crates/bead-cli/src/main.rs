@@ -289,9 +289,9 @@ impl App {
                 )
                 .into());
             }
-            if lip.length <= 0. || lip.thickness <= 0. || lip.thickness > 32. {
+            if lip.length <= 0. || lip.thickness <= 0. {
                 return Err(format!(
-                    "{}: lip '{id}' needs a positive length and a thickness of 1..32",
+                    "{}: lip '{id}' needs a positive length and a positive thickness",
                     path.display()
                 )
                 .into());

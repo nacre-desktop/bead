@@ -2160,6 +2160,27 @@ mod tests {
         }
     }
 
+    /// B0287: the tab is its own subsurface at the lip's own size, so a lip thicker than the panel's 32 px
+    /// shadow margin (a ~50 px top lip) extends past the parent surface and keeps its full rect.
+    #[test]
+    fn tab_thicker_than_the_shadow_margin_extends_past_the_parent() {
+        let output = (1920., 1200.);
+        let top = Lip {
+            id: "l".into(),
+            edge: Edge::Top,
+            length: 144.,
+            thickness: 50.,
+            opens: "p".into(),
+        };
+        let (surface_h, body) = (364., Rect::new(32., 32., 600., 300.));
+        let tab = tab_rect(Edge::Top, body, top.rect(output), (628, 0), (0., 0.), 1.);
+        assert_eq!((tab.y, tab.h), (332., 50.));
+        assert!(
+            tab.y + tab.h > surface_h,
+            "tab ends below the parent surface"
+        );
+    }
+
     #[test]
     fn lip_state_default_is_the_free_rest_lip() {
         let state = LipState {

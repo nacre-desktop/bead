@@ -9,7 +9,7 @@ pearl), the lip is drawn as that panel's tab: a `wl_subsurface` of the panel's l
 (`edges::LipTab`), rasterised from the same `edge_art` callback at the lip's own size. Its position is
 set every panel frame from `Scene::posed_body()` (the body as drawn: cut to the revealed part under a
 reveal, moved with the scene under a slide) and `tab_rect` (flush against the body's inner edge, at the
-lip's rest place along the edge, inside the 32 px shadow margin). A subsurface position is applied with
+lip's rest place along the edge). A subsurface position is applied with
 the parent's commit, so the tab moves in the same frame as the panel pose with no configure round trip
 and no renderer dependency (CPU and GL panels alike). A width retarget while open changes the posed
 body, so the tab follows with no host code; both directions sample the same pose (continuous reversal).
