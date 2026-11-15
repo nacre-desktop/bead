@@ -965,7 +965,9 @@ impl App {
             Ok(found) => found,
             Err(reason) => {
                 self.lip_tab_detach();
-                self.edge.tab_outcome(format!("skipped reason={reason}"));
+                let panel = self.panel_name.as_deref().unwrap_or("-");
+                self.edge
+                    .tab_outcome(format!("skipped panel={panel} reason={reason}"));
                 return;
             }
         };

@@ -64,7 +64,7 @@ Top lip: identical mechanics, horizontal; a lip on the bar's edge is bar-hosted 
 ### Tab attach on layer-motion compositors (B0292)
 
 - `lip_tab_prepare` runs at the top of every companion draw, but `layer_motion_transport_eligible` (the atlas plan) did not check `edge.tab`; only the handoff gate did. A tab panel could therefore take the compositor-motion path with a tab posed once, while the compositor moved the body. It now requires `edge.tab.is_none()`, so a docked panel stays on the client path on any compositor.
-- Unconfirmed: the bar-hosted top peek drew every frame on niri and still showed no tab, so `panel_lip` or an early return may also skip there. One stderr line, printed only when the outcome changes: `LIP_TAB attached key=<output/lip> edge=<Edge>` or `LIP_TAB skipped reason=<no_panel_name|no_panel_output|no_motion|pearl|no_control|external_panel|no_lip_for_panel_edge|no_subcompositor_or_viewporter|no_logical_size|pool>`.
+- Unconfirmed: the bar-hosted top peek drew every frame on niri and still showed no tab, so `panel_lip` or an early return may also skip there. One stderr line, printed only when the outcome changes: `LIP_TAB attached key=<output/lip> edge=<Edge>` or `LIP_TAB skipped [panel=<name|->] reason=<no_panel_name|no_panel_output|no_motion|pearl|no_control|external_panel|no_lip_for_panel_edge|no_subcompositor_or_viewporter|no_logical_size|pool>`.
 - Docked input depth: `EdgeChrome::docked_input_depth` (lip id to px; `[lips.<id>] docked_input_depth` in bead.toml) limits the attached tab's input to that band on the join side (the side touching the panel body, e.g. the top of a top tab), default the full thickness. The free lip keeps its whole rect.
 
 ## Verification
