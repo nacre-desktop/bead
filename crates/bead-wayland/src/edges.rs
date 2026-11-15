@@ -478,6 +478,11 @@ fn cancel_for_external_source(edge: &mut EdgeState) -> Option<String> {
     edge.external = ExternalCueTracker::default();
     edge.hovered.take()
 }
+/// The bar-hosted cue shows while the dwell fills or an open is pending, never while the lip is
+/// the panel's tab: the cue and the tab would be two pills (a pending open holds progress at 1).
+fn cue_target(progress: f32, attached: bool) -> f32 {
+    f32::from(progress > 0. && !attached)
+}
 fn complete_edge_cue(edge: &mut EdgeState) {
     edge.cue_fade = 0.;
     edge.cue_epoch = edge.cue_epoch.wrapping_add(1);
@@ -1352,8 +1357,7 @@ impl App {
         {
             return;
         }
-        let progress = self.lip_progress(k);
-        let target = f32::from(progress > 0.);
+        let target = cue_target(self.lip_progress(k), self.edge.attached(k));
         self.publish_cue_values(k);
         if self.edge.cue_fade != target {
             self.edge.cue_epoch = self.edge.cue_epoch.wrapping_add(1);
@@ -1368,7 +1372,7 @@ impl App {
                         let now = Instant::now();
                         let step = now.duration_since(last).as_secs_f32() / CUE_FADE_S;
                         last = now;
-                        let target = f32::from(app.lip_progress(&k) > 0.);
+                        let target = cue_target(app.lip_progress(&k), app.edge.attached(&k));
                         let fade = app.edge.cue_fade;
                         app.edge.cue_fade = if target > fade {
                             (fade + step).min(target)
@@ -2132,14 +2136,18 @@ mod tests {
     #[test]
     fn tab_starts_on_the_free_lip_and_ends_flush_for_an_inset_body() {
         let output = (1920., 1200.);
-        for slide_distance in [None, Some(400.), Some(32.)] {
+        // Thickness 50 is a bar-hosted top lip (bar 40 + frame 10).
+        for (slide_distance, thickness) in [None, Some(400.), Some(32.), Some(300.)]
+            .into_iter()
+            .flat_map(|d| [(d, 10.), (d, 50.)])
+        {
             for inset in [0., 10., 24.] {
                 for edge in [Edge::Left, Edge::Right, Edge::Top] {
                     let lip = Lip {
                         id: "l".into(),
                         edge,
                         length: 144.,
-                        thickness: 10.,
+                        thickness,
                         opens: "p".into(),
                     };
                     let rest = lip.rect(output);
@@ -2177,7 +2185,8 @@ mod tests {
                         let (body, slide) = posed(p);
                         tab_rect(edge, body, rest, (0, 0), slide, p)
                     };
-                    let tag = format!("{edge:?} inset={inset} slide={slide_distance:?}");
+                    let tag =
+                        format!("{edge:?} inset={inset} slide={slide_distance:?} t={thickness}");
                     assert_eq!(at(0.), rest, "{tag}: attach 0 is the free lip");
                     let flush = tab_rect(edge, full, rest, (0, 0), (0., 0.), 1.);
                     assert_eq!(at(1.), flush, "{tag}: attach 1 is flush");
@@ -2237,6 +2246,28 @@ mod tests {
         let art: EdgeArt = Arc::new(|_, _, _| Some(Arc::from(&b"<svg/>"[..])));
         assert!(free_lip_art(true, Some(&art), &lip, (10, 144), state).is_none());
         assert!(free_lip_art(false, Some(&art), &lip, (10, 144), state).is_some());
+    }
+    #[test]
+    fn bar_cue_is_off_while_the_tab_is_attached() {
+        assert_eq!(cue_target(0.4, false), 1.);
+        assert_eq!(cue_target(1., true), 0., "pending open held at 1");
+        assert_eq!(cue_target(0., false), 0.);
+    }
+    #[test]
+    fn tab_input_follows_the_lip_on_the_edge() {
+        let lip = Lip {
+            id: "t".into(),
+            edge: Edge::Top,
+            length: 144.,
+            thickness: 50.,
+            opens: "p".into(),
+        };
+        let mut chrome = EdgeChrome::default();
+        assert!(chrome.lip_surface_geometry(&lip, (1920, 1200)).input);
+        chrome.external_source = true;
+        assert!(!chrome.lip_surface_geometry(&lip, (1920, 1200)).input);
+        chrome.click_to_open = true;
+        assert!(chrome.lip_surface_geometry(&lip, (1920, 1200)).input);
     }
     #[test]
     fn lip_state_default_is_the_free_rest_lip() {

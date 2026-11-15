@@ -44,6 +44,7 @@ This index contains current framework contracts and repository-boundary decision
 | [0281 — Cleanup and bloat pass](0281-cleanup-pass.md) | One snapshot hub for the event services, unused probes and dependency, stale spec text; deferred cleanup by owner |
 | [0285 — UI package](0285-ui-package.md) | `UiPackage` reads a UI root once; `FolderView::from_package` builds more views from memory (a lock screen survives a package upgrade) |
 | [0279 — Lip as its panel's tab](0279-lip-tab.md) | The edge lip rides its panel's inner edge as a subsurface posed with the panel each frame; 450 ms dock exit grace, press/key pin |
+| [0279 addendum — top tab (B0291)](0279-lip-tab.md) | Bar cue off while the tab is attached; top-tab rect tests at 50 px; detach before every unmap |
 | [0261 — Docs and tutorials pass](0261-docs-and-tutorials.md) | Reference pages and tutorials match the code; every snippet and tutorial step executed |
 
 This index covers Bead framework contracts. See the [documentation index](../README.md) for the current framework overview and the [framework ownership decision](0214-framework-split.md).

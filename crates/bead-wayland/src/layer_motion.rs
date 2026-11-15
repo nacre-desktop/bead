@@ -560,6 +560,9 @@ impl Dispatch<BeadLayerMotionV1, Arc<DispatchData>> for App {
             state.surfaces[index].layer_motion_resting_offset = None;
             state.panel_frame_until = None;
             if state.surfaces[index].companion && !state.panel_target {
+                // Same order as the client close: the tab goes before its parent unmaps (a tab panel
+                // stays on the client path, so this is a no-op guard).
+                state.lip_tab_detach();
                 state.surfaces[index].layer.unmap();
                 state.surfaces[index].panel_unmapped = true;
                 state.surfaces[index].layer_motion_open = None;

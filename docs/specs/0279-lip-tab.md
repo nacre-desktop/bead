@@ -45,6 +45,14 @@ Follow-up if that cost shows: a translating tab plane in `LayerMotionPlan`.
 Top lip: identical mechanics, horizontal; a lip on the bar's edge is bar-hosted (hit via the bar, cue via
 `bead.edge.*`), its tab rides under the top panel's bottom edge with the panel's layer order.
 
+## Top tab and bar-hosted hand-over (B0291)
+
+- A bar-hosted lip's cue (`bead.edge.dwell`/`fade`) targets 0 while its tab is attached (`cue_target`): a pending open holds progress at 1 and no strip surface clears it, so the bar would keep a pill under the tab. It returns only after hand-back and a new dwell.
+- Tab input follows `lip_surface_geometry(..).input`: the lip's own rect, exactly where the lip takes the pointer on the edge, empty for host-driven hover. The art must fill that rect; a pill smaller than a 50 px top lip should be a thinner lip, not a taller transparent tab.
+- Tab rect at thickness 10 and 50 (bar 40 + frame 10) under reveal and slide motions: attach 0 is the lip's rest rect, attach 1 flush, linear and continuous (test `tab_starts_on_the_free_lip_...`).
+- Every unmap of the resident panel detaches the tab first (client close, compositor-motion close). Close order: dismiss layer dropped at close request, then tab (viewport, subsurface, surface) and edge-lip redraw when the panel is ready to unmap, then the root unmaps. Tab panels stay on the client path (`edge.tab.is_none()` gates compositor motion).
+- Part B (nested niri and labwc, pills per frame): see below.
+
 ## Verification
 
 Tests: bead-render `posed_body_tracks_the_revealed_inner_edge_and_the_slid_scene` (4 edges, open/close,
