@@ -1971,15 +1971,20 @@ impl App {
                         // The held first pose (a reveal's zero-area frame) is not drawn by niri, so its
                         // callback only comes on the ~1 s fallback timer and the motion would not start
                         // until then. Draw the next pose a frame later unless a commit got there first (B0294).
-                        let (epoch, frames, kick) = (self.panel_epoch, s.frames + 1, qh.clone());
+                        let (epoch, frames) = (self.panel_epoch, s.frames + 1);
+                        let (identity, kick) = (wl_surface.clone(), qh.clone());
                         let _ = self.loop_handle.insert_source(
                             Timer::from_duration(Duration::from_millis(16)),
                             move |_, _, app| {
                                 if app.panel_epoch == epoch
-                                    && app.surfaces.get(index).is_some_and(|s| s.frames == frames)
+                                    && let Some(i) = app
+                                        .surfaces
+                                        .iter()
+                                        .position(|s| s.wl_surface() == &identity)
+                                    && app.surfaces[i].frames == frames
                                 {
-                                    app.surfaces[index].callbacks.invalidate();
-                                    app.draw(index, &kick);
+                                    app.surfaces[i].callbacks.invalidate();
+                                    app.draw(i, &kick);
                                 }
                                 TimeoutAction::Drop
                             },
