@@ -2249,6 +2249,7 @@ impl App {
                 && !s.layer_promoted
                 && !command_promotion_pending
                 && s.layer_motion.is_some()
+                && self.edge.tab.is_none()
                 && layer_motion_active
                 && !bead_core::animation::reduced_motion()
                 && !self.options.background_blur

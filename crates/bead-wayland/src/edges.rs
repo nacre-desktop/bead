@@ -384,8 +384,16 @@ pub(super) struct EdgeState {
     opening_epoch: u64,
     /// The lip attached to the open panel as its tab.
     pub(super) tab: Option<LipTab>,
+    /// The last `LIP_TAB` outcome printed, so the line appears only when it changes.
+    tab_outcome: String,
 }
 impl EdgeState {
+    fn tab_outcome(&mut self, outcome: String) {
+        if self.tab_outcome != outcome {
+            eprintln!("LIP_TAB {outcome}");
+            self.tab_outcome = outcome;
+        }
+    }
     /// The lip's live dwell/external progress (a pending open holds the completed dwell).
     fn progress(&self, key: &str) -> f32 {
         let raw = if let Some((external_key, progress)) = &self.external.progress
@@ -901,36 +909,46 @@ impl App {
     }
     /// The lip that attaches to the resident panel as its tab: it opens that view, sits on the
     /// edge the panel docks at, and the panel is local (not host-owned) and not a pearl.
-    fn panel_lip(&self) -> Option<(wl_output::WlOutput, Lip)> {
-        let name = self.panel_name.as_deref()?;
-        let output = self.panel_output.clone()?;
-        let edge = self.companion.as_ref()?.0.motion.as_ref()?.edge;
-        if self.pearl.is_some()
-            || self
-                .options
-                .control
-                .as_ref()?
-                .external_panel_open(name, &self.output_id(&output))
-                .is_some()
+    fn panel_lip(&self) -> Result<(wl_output::WlOutput, Lip), &'static str> {
+        let name = self.panel_name.as_deref().ok_or("no_panel_name")?;
+        let output = self.panel_output.clone().ok_or("no_panel_output")?;
+        let edge = self
+            .companion
+            .as_ref()
+            .and_then(|(scene, _, _)| scene.motion.as_ref())
+            .ok_or("no_motion")?
+            .edge;
+        if self.pearl.is_some() {
+            return Err("pearl");
+        }
+        let control = self.options.control.as_ref().ok_or("no_control")?;
+        if control
+            .external_panel_open(name, &self.output_id(&output))
+            .is_some()
         {
-            return None;
+            return Err("external_panel");
         }
         let lip = self
             .edge
             .chrome
             .lips
             .iter()
-            .find(|lip| lip.opens == name && lip.edge == edge)?
+            .find(|lip| lip.opens == name && lip.edge == edge)
+            .ok_or("no_lip_for_panel_edge")?
             .clone();
-        Some((output, lip))
+        Ok((output, lip))
     }
     /// Before a panel frame: attach the panel's lip as its tab (or drop a tab of another lip).
     /// While a tab exists the panel's motion stays on the client frame path: a subsurface is not
     /// part of a compositor-driven atlas, so the compositor could not move the tab with the body.
     pub(super) fn lip_tab_prepare(&mut self, parent: &wl_surface::WlSurface) {
-        let Some((output, lip)) = self.panel_lip() else {
-            self.lip_tab_detach();
-            return;
+        let (output, lip) = match self.panel_lip() {
+            Ok(found) => found,
+            Err(reason) => {
+                self.lip_tab_detach();
+                self.edge.tab_outcome(format!("skipped reason={reason}"));
+                return;
+            }
         };
         let key = key(&self.output_id(&output), &lip.id);
         if self.edge.tab.as_ref().is_some_and(|tab| tab.key != key) {
@@ -942,14 +960,20 @@ impl App {
         let (Some(subcompositor), Some(viewporter)) =
             (self.subcompositor.as_ref(), self.viewporter.as_ref())
         else {
+            self.edge
+                .tab_outcome("skipped reason=no_subcompositor_or_viewporter".into());
             return;
         };
         let Some(size) = self.output.info(&output).and_then(|info| info.logical_size) else {
+            self.edge.tab_outcome("skipped reason=no_logical_size".into());
             return;
         };
         let Ok(pool) = SlotPool::new(4096, &self.shm) else {
+            self.edge.tab_outcome("skipped reason=pool".into());
             return;
         };
+        self.edge
+            .tab_outcome(format!("attached key={key} edge={:?}", lip.edge));
         let surface = self.compositor.create_surface(&self.qh);
         if !self.edge.chrome.lip_surface_geometry(&lip, size).input
             && let Ok(empty) = Region::new(&self.compositor)
