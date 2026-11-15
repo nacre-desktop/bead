@@ -1772,7 +1772,10 @@ mod tests {
         );
         assert!(edge.exit.deadline().is_some());
         pin(&mut edge);
-        assert_eq!(edge.hover_opened, None, "closes only on Escape, lip or outside");
+        assert_eq!(
+            edge.hover_opened, None,
+            "closes only on Escape, lip or outside"
+        );
         assert!(edge.exit.deadline().is_none());
         assert_eq!(edge.exit_epoch, 5, "a pending exit timer is stale");
     }
