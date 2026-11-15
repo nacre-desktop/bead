@@ -131,3 +131,19 @@ static-body open/close; making it the default needs the compositor side and is n
   untracked): PANEL_SLIDE logged 2 of 24 slides before (one close at 454 ms, max gap 446 ms), 24 of 24
   after: opens 200-208 ms (nominal 200), closes 142-146 ms (nominal 140); max gaps opens 8.5-13.9 ms,
   closes 11.2-12.7 ms, the over-12 ones being the start gap above.
+
+## Desktop pass (B0273)
+
+- Rig (desktop test host, real amdgpu `renderD129`, shared lock turns handed out by Platform, no swap reset
+  by this unit): private headless labwc (gles2) with one output 1920x1080@120 (`wlr-randr --custom-mode`);
+  arms (1) client path, main `6907e640`, `BEAD_LAYER_REVEAL=0`, under nacre-niri r3109 nested through
+  winit; (2) compositor reveal, the held `claude/b0267-reveal-default` rebased clean onto main
+  (`591b61fc`), default; (3) client path on the labwc parent directly. Release builds from the
+  `nacre-ci/arch-nacre:current` image (glibc matches the desktop). B0270 (per-axis nine-patch, `113d9c69`)
+  is on main and included; B0270 fix 2 (GL transport) was not measured. 3 alternating runs per arm, the
+  B0263 phases (status open cold, grow, interrupt, shrink + close, resident reopen, calendar open/close),
+  one persistent virtual pointer and keyboard. Scripts: `.lead/capture-labwc.sh`, `gated.py`,
+  `summarize.py`, `strips.py`, `pass.sh` in the unit worktree (untracked: they name the host rig).
+- Results: PENDING (captures not yet run: the desktop gate was closed by swap use).
+- B0277 reveal close on the real GPU: PENDING.
+- Verdict on B0267: PENDING.
