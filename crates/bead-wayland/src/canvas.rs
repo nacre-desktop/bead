@@ -953,14 +953,7 @@ impl App {
         Ok(())
     }
     fn canvas_draw(&mut self, key: &(String, String)) -> Result<(), Box<dyn Error>> {
-        let rgba = cfg!(target_endian = "little")
-            && !self.options.force_argb
-            && self.shm.formats().contains(&wl_shm::Format::Abgr8888);
-        let format = if rgba {
-            PixelFormat::Rgba
-        } else {
-            PixelFormat::Bgra
-        };
+        let (format, shm_format) = self.shm_format();
         let canvas = self.canvases.get_mut(key).ok_or("canvas closed")?;
         if !canvas.lifecycle.open || !canvas.configured || canvas.bounds.is_none() {
             return Ok(());
@@ -1004,16 +997,7 @@ impl App {
             canvas.buffers.clear();
             let mut pool = SlotPool::new(size.next_multiple_of(64) * 2, &self.shm)?;
             for _ in 0..2 {
-                let (buffer, _) = pool.create_buffer(
-                    width,
-                    height,
-                    stride,
-                    if rgba {
-                        wl_shm::Format::Abgr8888
-                    } else {
-                        wl_shm::Format::Argb8888
-                    },
-                )?;
+                let (buffer, _) = pool.create_buffer(width, height, stride, shm_format)?;
                 canvas.buffers.push(buffer);
             }
             canvas.pool = Some(pool);

@@ -720,14 +720,7 @@ impl App {
     /// Draws one frame; true while a fade is still running.
     fn overlay_render(&mut self) -> Result<bool, Box<dyn Error>> {
         let frame_started = Instant::now();
-        let rgba = cfg!(target_endian = "little")
-            && !self.options.force_argb
-            && self.shm.formats().contains(&wl_shm::Format::Abgr8888);
-        let format = if rgba {
-            PixelFormat::Rgba
-        } else {
-            PixelFormat::Bgra
-        };
+        let (format, shm_format) = self.shm_format();
         let started = self.started;
         let o = self.overlay.as_mut().ok_or("overlay closed")?;
         let now = started.elapsed().as_secs_f64();
@@ -782,16 +775,7 @@ impl App {
             o.buffers.clear();
             let mut pool = SlotPool::new(size.next_multiple_of(64) * 3, &self.shm)?;
             for _ in 0..3 {
-                let (buffer, _) = pool.create_buffer(
-                    w,
-                    h,
-                    stride,
-                    if rgba {
-                        wl_shm::Format::Abgr8888
-                    } else {
-                        wl_shm::Format::Argb8888
-                    },
-                )?;
+                let (buffer, _) = pool.create_buffer(w, h, stride, shm_format)?;
                 o.buffers.push(buffer);
             }
             o.pool = Some(pool);

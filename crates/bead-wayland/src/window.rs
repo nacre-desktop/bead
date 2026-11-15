@@ -719,14 +719,7 @@ impl App {
     }
     fn window_render(&mut self) -> Result<(), Box<dyn Error>> {
         let frame_started = Instant::now();
-        let rgba = cfg!(target_endian = "little")
-            && !self.options.force_argb
-            && self.shm.formats().contains(&wl_shm::Format::Abgr8888);
-        let format = if rgba {
-            PixelFormat::Rgba
-        } else {
-            PixelFormat::Bgra
-        };
+        let (format, shm_format) = self.shm_format();
         let win = self.window.as_mut().ok_or("window closed")?;
         let scale = win.scale120 as f32 / 120.;
         let (w, h, stride, size) = buffer_dimensions(win.size.0, win.size.1, win.scale120)?;
@@ -742,16 +735,7 @@ impl App {
             win.buffers.clear();
             let mut pool = SlotPool::new(size.next_multiple_of(64) * 3, &self.shm)?;
             for _ in 0..3 {
-                let (buffer, _) = pool.create_buffer(
-                    w,
-                    h,
-                    stride,
-                    if rgba {
-                        wl_shm::Format::Abgr8888
-                    } else {
-                        wl_shm::Format::Argb8888
-                    },
-                )?;
+                let (buffer, _) = pool.create_buffer(w, h, stride, shm_format)?;
                 win.buffers.push(buffer);
             }
             win.pool = Some(pool);

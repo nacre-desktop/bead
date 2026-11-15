@@ -768,6 +768,17 @@ fn shm_compact_idle(surface: &Surface) -> Duration {
     }
 }
 impl App {
+    /// RGBA pixels in ABGR8888 buffers when the compositor takes them, else BGRA in ARGB8888.
+    pub(super) fn shm_format(&self) -> (PixelFormat, wl_shm::Format) {
+        if cfg!(target_endian = "little")
+            && !self.options.force_argb
+            && self.shm.formats().contains(&wl_shm::Format::Abgr8888)
+        {
+            (PixelFormat::Rgba, wl_shm::Format::Abgr8888)
+        } else {
+            (PixelFormat::Bgra, wl_shm::Format::Argb8888)
+        }
+    }
     fn prepare_surface_images(&mut self, index: usize, error: &(dyn Error + 'static)) -> bool {
         if error.is::<bead_render::tree::ResourcePreparationFailed>() {
             eprintln!("UI_ERROR resource preparation: {error}");
