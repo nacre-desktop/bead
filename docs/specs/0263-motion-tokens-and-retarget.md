@@ -180,3 +180,7 @@ static-body open/close; making it the default needs the compositor side and is n
 ## First open on niri (B0294)
 
 niri sends a layer surface its frame callback only after drawing the surface itself; for a frame it does not draw (a reveal's zero-area held first pose, or the `bead_layer_motion` atlas it draws instead) the callback waits for its ~995 ms fallback timer. Only a first open commits the prepared handoff frame, and the next pose (which starts the B0170 clock) waited for that callback: READY ~980 ms later, close frames=4-5. Now the handoff commit arms a 16 ms redraw that runs unless a newer commit got there first, and a draw whose compositor motion is active no longer waits for the callback (`draw_waits_for_callback`). Client-path pacing is unchanged. Not run against niri: the live READY / PANEL_OPEN_LATENCY lines confirm.
+
+## Slide gap attribution (B0295)
+
+The always-on `PANEL_SLIDE` line appends `gap_at` (commit index that ended the worst gap), `gap_wait_ms` (previous commit to the frame callback that drew it, 0 if none), `gap_queue_ms` (callback or previous commit to draw start) and `gap_render_ms` (draw start to commit); the three sum to `max_gap_ms`. Earlier fields keep their order. Presentation-feedback gaps are not included: feedback arrives after the slide line is written.

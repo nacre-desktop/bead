@@ -144,6 +144,8 @@ struct Motion {
     frames: u32,
     last_frame: f64,
     max_gap: f64,
+    /// The worst gap's commit index and its split (wait, queue, render), seconds (B0295).
+    worst: (u32, [f64; 3]),
 }
 /// One finished motion as the user saw it: request to first frame, then frames until the final pose.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -153,17 +155,28 @@ pub struct Slide {
     pub frames: u32,
     pub duration_ms: f64,
     pub max_gap_ms: f64,
+    /// Commit index that ended the worst gap, and where the gap went: previous commit to the frame
+    /// callback that drew it (0 if none), callback to draw start, draw start to commit.
+    pub gap_at: u32,
+    pub gap_wait_ms: f64,
+    pub gap_queue_ms: f64,
+    pub gap_render_ms: f64,
 }
 impl std::fmt::Display for Slide {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "dir={} first_frame_ms={:.1} frames={} duration_ms={:.1} max_gap_ms={:.1}",
+            "dir={} first_frame_ms={:.1} frames={} duration_ms={:.1} max_gap_ms={:.1} \
+             gap_at={} gap_wait_ms={:.1} gap_queue_ms={:.1} gap_render_ms={:.1}",
             if self.opening { "open" } else { "close" },
             self.first_frame_ms,
             self.frames,
             self.duration_ms,
-            self.max_gap_ms
+            self.max_gap_ms,
+            self.gap_at,
+            self.gap_wait_ms,
+            self.gap_queue_ms,
+            self.gap_render_ms
         )
     }
 }
@@ -194,6 +207,7 @@ impl Animations {
                     frames: 0,
                     last_frame: now,
                     max_gap: 0.,
+                    worst: (0, [0.; 3]),
                 },
             );
         }
@@ -205,6 +219,18 @@ impl Animations {
     /// before it was drawn, such as one dropdown switching to another, then finishes normally).
     /// The commit with `id`'s final pose returns its `Slide` (once).
     pub fn committed(&mut self, id: &str, drawn: f64, now: f64) -> Option<Slide> {
+        self.committed_timed(id, drawn, now, None, now)
+    }
+    /// `committed` with the frame's timing: the frame callback that triggered the draw (if any)
+    /// and the draw start, on the same clock as `now`. They split the worst gap for `Slide`.
+    pub fn committed_timed(
+        &mut self,
+        id: &str,
+        drawn: f64,
+        now: f64,
+        callback: Option<f64>,
+        draw_start: f64,
+    ) -> Option<Slide> {
         let finished = self
             .states
             .get(id)
@@ -218,7 +244,15 @@ impl Animations {
             return None;
         }
         if motion.frames > 0 {
-            motion.max_gap = motion.max_gap.max(now - motion.last_frame);
+            let gap = now - motion.last_frame;
+            if gap > motion.max_gap {
+                let start = draw_start.clamp(motion.last_frame, now);
+                let callback = callback.map(|c| c.clamp(motion.last_frame, start));
+                let wait = callback.map_or(0., |c| c - motion.last_frame);
+                let queue = start - callback.unwrap_or(motion.last_frame);
+                motion.max_gap = gap;
+                motion.worst = (motion.frames, [wait, queue, now - start]);
+            }
         }
         motion.frames += 1;
         motion.last_frame = now;
@@ -231,6 +265,10 @@ impl Animations {
             frames: motion.frames,
             duration_ms: (now - motion.started) * 1000.,
             max_gap_ms: motion.max_gap * 1000.,
+            gap_at: motion.worst.0,
+            gap_wait_ms: motion.worst.1[0] * 1000.,
+            gap_queue_ms: motion.worst.1[1] * 1000.,
+            gap_render_ms: motion.worst.1[2] * 1000.,
         };
         motion.frames = u32::MAX;
         Some(slide)
@@ -269,6 +307,7 @@ impl Animations {
                 frames: 0,
                 last_frame: now,
                 max_gap: 0.,
+                worst: (0, [0.; 3]),
             },
         );
     }
@@ -365,6 +404,25 @@ mod tests {
         a.target("plain", 0., 0., 0.4, Curve::EaseOut);
         a.target("plain", 1., 0., 0.4, Curve::EaseOut);
         assert_eq!(a.value("plain", 0.4), Some((1., false)));
+    }
+    #[test]
+    fn a_slide_splits_its_worst_gap_into_wait_queue_and_render() {
+        let mut a = Animations::default();
+        a.open_to("p", true, 0., 1., Curve::EaseOut);
+        a.committed_timed("p", 0., 0., None, 0.);
+        // Gap 0.1: wait 0.04, queue 0.02, render 0.04.
+        a.committed_timed("p", 0.1, 0.1, Some(0.04), 0.06);
+        // Smaller gap 0.05, no callback: queue 0.01, render 0.04.
+        a.committed_timed("p", 0.15, 0.15, None, 0.11);
+        let slide = a.committed_timed("p", 1., 1.15, Some(0.2), 1.1).unwrap();
+        assert_eq!((slide.gap_at, slide.frames), (3, 4));
+        assert!((slide.max_gap_ms - 1000.).abs() < 1e-6);
+        let sum = slide.gap_wait_ms + slide.gap_queue_ms + slide.gap_render_ms;
+        assert!((sum - slide.max_gap_ms).abs() < 1e-6);
+        assert!((slide.gap_wait_ms - 50.).abs() < 1e-6);
+        let text = slide.to_string();
+        assert!(text.starts_with("dir=open first_frame_ms=0.0 frames=4 duration_ms="));
+        assert!(text.contains(" max_gap_ms=1000.0 gap_at=3 gap_wait_ms=50.0"));
     }
     #[test]
     fn cubic_in_out_has_symmetric_endpoints_midpoint_and_quarters() {

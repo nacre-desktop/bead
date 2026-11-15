@@ -1605,6 +1605,7 @@ impl App {
         Ok(())
     }
     pub(super) fn draw(&mut self, index: usize, qh: &QueueHandle<Self>) {
+        let draw_start = self.started.elapsed().as_secs_f64();
         let _busy = bead_core::profile::Busy::new(if self.surfaces[index].companion {
             "draw_panel"
         } else {
@@ -3603,7 +3604,12 @@ impl App {
             // The first committed frame of a motion starts its clock: preparation, configure and
             // a slow first frame never spend the slide (B0170).
             let committed_at = self.started.elapsed().as_secs_f64();
-            let slide = self.animations.committed(&id, drawn, committed_at);
+            let callback = self.surfaces[index]
+                .last_callback
+                .map(|c| c.saturating_duration_since(self.started).as_secs_f64());
+            let slide =
+                self.animations
+                    .committed_timed(&id, drawn, committed_at, callback, draw_start);
             super::overlay::log_slide(&id, slide);
             let motion_active = self
                 .animations
