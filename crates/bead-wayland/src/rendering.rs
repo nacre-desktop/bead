@@ -1605,7 +1605,6 @@ impl App {
         Ok(())
     }
     pub(super) fn draw(&mut self, index: usize, qh: &QueueHandle<Self>) {
-        let draw_start = self.started.elapsed().as_secs_f64();
         let _busy = bead_core::profile::Busy::new(if self.surfaces[index].companion {
             "draw_panel"
         } else {
@@ -1792,6 +1791,7 @@ impl App {
         self.draw_current(index, qh);
     }
     fn draw_current(&mut self, index: usize, qh: &QueueHandle<Self>) {
+        let draw_start = self.started.elapsed().as_secs_f64();
         if (if self.surfaces[index].companion {
             self.panel_runtime.as_ref()
         } else {
