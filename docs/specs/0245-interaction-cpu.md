@@ -330,3 +330,61 @@ re-bake lives in the worker's `bake` and is a follow-up there. Taffy incremental
 relayout (B6) is not done: after this unit only store-driven structure changes,
 viewport changes and Luau animation frames lay out, and those re-run the
 frontend anyway.
+
+## Phase 3 — end-to-end proxy of the Platform scoreboard (B0272)
+
+Goal: measure a whole `bead run` shell and attribute what is left (target: Noctalia,
+~1.2 % of a core during scripted interaction).
+### Harness (`.lead/e2e/`, kept in the unit worktree, not tracked)
+`job.sh OUT RUNS name=/tree [name=/tree ...]` runs inside `nacre-ci/ubuntu-bead:current`
+(sway, grim, wlrctl, pipewire; vendor cache mounted `:ro`). It builds each tree in release,
+then per round runs every tree on `examples/bar-with-panels` and on `app-heavy/` (300-row
+list panel, 8 tinted icons, badge, clock with seconds) under a private headless sway
+(1920x1080 at 120 Hz, pixman). `arm.sh` starts sway and `bead run`; the driver script
+sweeps the bar every 2 s, opens/closes a panel every 5 s, scrolls the list (8 wheel steps)
+and then leaves 60 s with no input. `sample.py` reads utime+stime and voluntary context
+switches per thread from `/proc`; `attribute.py` splits traced arms by `UI_FRAME` stage. Run: `SECS=40 job.sh /out/cmp 2 main=/base cand=/workspace` (SECS =
+interaction seconds, default 120); `NOBUILD=name` reuses a prebuilt `/target/name`.
+CPU % is of one core; wakeups are voluntary context switches/s.
+### Numbers (dev-1 container, `--cpus=6`, CPU renderer)
+Origin/main 9e1d8259 (3 rounds of 120 s, Nov 13): bar-with-panels 0.82-0.92 % during
+interaction at ~120 wakeups/s, 0.20-0.22 % at 13 wakeups/s for the 60 s after the last
+input (flat); heavy 0.66-0.71 % and 0.32-0.35 % at 19 wakeups/s; pure idle 0.02 % at
+6 wakeups/s. Bead alone is below the 1.2 % target.
+
+Base (origin/main) vs candidate (fixes below), 40 s interaction + 60 s after, 2 rounds:
+
+| Arm | Interaction CPU | wakeups/s | After-input CPU | wakeups/s |
+|---|---:|---:|---:|---:|
+| bar-with-panels base | 0.75 / 0.92 % | 120 | 0.20 / 0.23 % | 14 |
+| bar-with-panels candidate | 0.60 / 0.72 % | 116-117 | 0.03 / 0.03 % | 5 |
+| heavy base | 0.62 / 0.82 % | 115-117 | 0.35 / 0.32 % | 20 |
+| heavy candidate | 3.42 / 3.10 % | 153 | 0.12 / 0.13 % | 11 |
+After input the shell is back at the idle floor (0.02 %, 5 wakeups/s) for bar-with-panels,
+and heavy drops by ~2/3 (its seconds clock still repaints). The heavy interaction rise is
+a harness artifact, not a render cost: in the base arms the list scroll never reached the
+panel (2 panel frames in the 0.7 s scroll phase), in the candidate arms it did (79 frames,
+132 ms of render CPU for 300 rows plus the off-render-thread row evaluation), so the arms
+do different work. The race (panel opened 0.6 s before the first wheel step) must be closed
+before the next comparison; why the base drops the wheel is not yet understood.
+### Attribution (traced arms, ms of thread CPU)
+1. Panel pose frames: 593 of 699 panel frames carry `motion=status`; `prepare` is 365 ms of
+   990 ms shell CPU (`TreeCache::prepare` re-runs per pose frame of a resizing reveal).
+2. 1 Hz seconds lease: taken whenever a folder app declares `clock`, so every second an
+   empty Model event reached every registered view and was staged (~7 wakeups/s, 0.2 %
+   after input). Heavy also paints 2 bar frames per seconds tick (121 per 60 s, 0.26 ms
+   each), one more than needed.
+3. Hover sweeps are cheap on the render thread (0.15 ms per bar frame, paint-dominated);
+   50-80 % of shell CPU sits off it (worker hover/scroll evaluation, service threads).
+   Named threads: `bead` (render) 66-72 %, `bead-worker` 3-10 %, rest service threads.
+### Fixes landed here
+- Threads are named (`bead-worker`, `bead-svc-bus`, `bead-media-tick`, `bead-scheduler`,
+  `bead-audio`, `bead-reap`), so `/proc` and profilers can split CPU by thread.
+- The 1 Hz seconds lease is taken only while a view's committed tree can read
+  `desktop.clock.seconds` (`Session::reads_store`); minute-only clocks tick at minute
+  boundaries. Tests: the lease follows a minute view and a seconds view.
+### Remaining
+- Fix 1: reuse the prepared frame across pose-only motion frames of a resizing reveal
+  (largest render-side item, 365 ms of 990 ms): follow-up unit.
+- The heavy bar still paints 2 frames per seconds tick; the driver must wait for the
+  panel's first frame before scrolling.
