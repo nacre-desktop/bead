@@ -215,14 +215,37 @@ impl Drop for LipTab {
 }
 /// Where the tab sits in panel-surface coordinates: flush against the posed body's inner edge, where
 /// the lip rests along the edge (`rest` on the output, `origin` = the surface's output position).
-fn tab_rect(edge: Edge, body: Rect, rest: Rect, origin: (i32, i32)) -> Rect {
+/// A body inset from the screen edge would make the tab step at hand-over, so the tab starts at the
+/// free lip (`attach` 0) and eases onto the flush pose by `attach` 1. `slide` is the scene's slide
+/// displacement, so the settled body's outer edge (not the slid one) measures the inset.
+fn tab_rect(
+    edge: Edge,
+    body: Rect,
+    rest: Rect,
+    origin: (i32, i32),
+    slide: (f32, f32),
+    attach: f32,
+) -> Rect {
     let (ox, oy) = (origin.0 as f32, origin.1 as f32);
-    match edge {
+    let lag = 1. - attach.clamp(0., 1.);
+    let mut tab = match edge {
         Edge::Right => Rect::new(body.x - rest.w, rest.y - oy, rest.w, rest.h),
         Edge::Left => Rect::new(body.x + body.w, rest.y - oy, rest.w, rest.h),
         Edge::Top => Rect::new(rest.x - ox, body.y + body.h, rest.w, rest.h),
         Edge::Bottom => Rect::new(rest.x - ox, body.y - rest.h, rest.w, rest.h),
+    };
+    // Distance from the free lip's outer edge (the screen edge) in to the settled body's outer edge.
+    match edge {
+        Edge::Right => {
+            tab.x += ((rest.x + rest.w) - (ox + body.x + body.w - slide.0)).max(0.) * lag
+        }
+        Edge::Left => tab.x -= ((ox + body.x - slide.0) - rest.x).max(0.) * lag,
+        Edge::Top => tab.y -= ((oy + body.y - slide.1) - rest.y).max(0.) * lag,
+        Edge::Bottom => {
+            tab.y += ((rest.y + rest.h) - (oy + body.y + body.h - slide.1)).max(0.) * lag
+        }
     }
+    tab
 }
 /// A layer surface's output position from its anchor, margins and size (unanchored axes centre).
 pub(super) fn surface_origin(
@@ -364,11 +387,13 @@ impl EdgeState {
     }
     /// Pose the tab for this panel frame, before the parent commits: `body` is the panel body as
     /// drawn (surface coordinates), `origin` the panel surface's output position.
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn pose_tab(
         &mut self,
         body: Rect,
         progress: f32,
         origin: (i32, i32),
+        slide: (f32, f32),
         active: bool,
         scale120: u32,
         art: Option<&EdgeArt>,
@@ -376,7 +401,7 @@ impl EdgeState {
         let Some(tab) = self.tab.as_mut() else {
             return;
         };
-        let rect = tab_rect(tab.lip.edge, body, tab.rest, origin);
+        let rect = tab_rect(tab.lip.edge, body, tab.rest, origin, slide, progress);
         tab.role
             .set_position(rect.x.round() as i32, rect.y.round() as i32);
         tab.attach = progress.clamp(0., 1.);
@@ -2039,7 +2064,7 @@ mod tests {
         assert_eq!(origin, (1488, 0));
         for p in [0., 0.3, 1.] {
             let body = Rect::new(32. + 400. * (1. - p), 32., 400. * p, 1200.);
-            let tab = tab_rect(Edge::Right, body, rest, origin);
+            let tab = tab_rect(Edge::Right, body, rest, origin, (0., 0.), p);
             assert_eq!(tab, Rect::new(body.x - 10., 528., 10., 144.), "right p={p}");
             if p == 0. {
                 // In surface coordinates the tab is where the lip rests on the output.
@@ -2049,7 +2074,7 @@ mod tests {
         let left = lip(Edge::Left);
         let body = Rect::new(32., 32., 400. * 0.5, 1200.);
         assert_eq!(
-            tab_rect(Edge::Left, body, left.rect(output), (-32, 0)),
+            tab_rect(Edge::Left, body, left.rect(output), (-32, 0), (0., 0.), 1.),
             Rect::new(232., 528., 10., 144.)
         );
         let top = lip(Edge::Top);
@@ -2058,7 +2083,7 @@ mod tests {
         let origin = surface_origin(Anchor::TOP, [0; 4], (664, 364), (1920, 1200));
         assert_eq!(origin, (628, 0));
         assert_eq!(
-            tab_rect(Edge::Top, body, top.rect(output), origin),
+            tab_rect(Edge::Top, body, top.rect(output), origin, (0., 0.), 1.),
             Rect::new(1920. / 2. - 72. - 628., 107., 144., 10.)
         );
         let bottom = lip(Edge::Bottom);
@@ -2071,9 +2096,68 @@ mod tests {
         );
         assert_eq!(origin, (100, 836));
         assert_eq!(
-            tab_rect(Edge::Bottom, body, bottom.rect(output), origin),
+            tab_rect(
+                Edge::Bottom,
+                body,
+                bottom.rect(output),
+                origin,
+                (0., 0.),
+                1.
+            ),
             Rect::new(888. - 100., 172., 144., 10.)
         );
+    }
+
+    /// B0287: a body inset N px from the screen edge: the tab is the free lip at attach 0, flush on the
+    /// body at attach 1, and never jumps more than the body's own travel in between.
+    #[test]
+    fn tab_starts_on_the_free_lip_and_ends_flush_for_an_inset_body() {
+        let output = (1920., 1200.);
+        for inset in [0., 10., 24.] {
+            for edge in [Edge::Left, Edge::Right, Edge::Top] {
+                let lip = Lip {
+                    id: "l".into(),
+                    edge,
+                    length: 144.,
+                    thickness: 10.,
+                    opens: "p".into(),
+                };
+                let rest = lip.rect(output);
+                // Surface at the output origin; body 400 deep, `inset` in from the screen edge.
+                let full = match edge {
+                    Edge::Left => Rect::new(inset, 0., 400., 1200.),
+                    Edge::Right => Rect::new(1920. - inset - 400., 0., 400., 1200.),
+                    _ => Rect::new(0., inset, 1920., 400.),
+                };
+                let posed = |p: f32| match edge {
+                    Edge::Left => Rect::new(full.x, full.y, full.w * p, full.h),
+                    Edge::Right => {
+                        Rect::new(full.x + full.w * (1. - p), full.y, full.w * p, full.h)
+                    }
+                    _ => Rect::new(full.x, full.y, full.w, full.h * p),
+                };
+                let at = |p: f32| tab_rect(edge, posed(p), rest, (0, 0), (0., 0.), p);
+                assert_eq!(
+                    at(0.),
+                    rest,
+                    "{edge:?} inset={inset}: attach 0 is the free lip"
+                );
+                let flush = tab_rect(edge, full, rest, (0, 0), (0., 0.), 1.);
+                assert_eq!(at(1.), flush, "{edge:?} inset={inset}: attach 1 is flush");
+                let (mut prev, steps) = (at(0.), 60);
+                for i in 1..=steps {
+                    let p = i as f32 / steps as f32;
+                    let now = at(p);
+                    let moved = (now.x - prev.x).abs().max((now.y - prev.y).abs());
+                    // Per-frame travel of a linear 400 px reveal, plus the inset easing out.
+                    assert!(
+                        moved <= 400. / steps as f32 + inset / steps as f32 + 0.01,
+                        "{edge:?} jump {moved}"
+                    );
+                    prev = now;
+                }
+            }
+        }
     }
 
     #[test]

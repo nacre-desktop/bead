@@ -2083,6 +2083,7 @@ impl App {
                         body,
                         progress,
                         origin,
+                        (dx, dy),
                         self.panel_target,
                         s.scale120,
                         self.options.edge_art.as_ref(),

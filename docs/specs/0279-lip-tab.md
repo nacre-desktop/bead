@@ -14,6 +14,8 @@ the parent's commit, so the tab moves in the same frame as the panel pose with n
 and no renderer dependency (CPU and GL panels alike). A width retarget while open changes the posed
 body, so the tab follows with no host code; both directions sample the same pose (continuous reversal).
 
+Inset bodies (B0287): a body inset from the screen edge (a framed dock) would step at hand-over, so `tab_rect` offsets the flush pose outward by the settled body's inset times `1 - attach`: attach 0 is exactly the free lip, attach 1 flush on the body, the close mirrors it. `examples/bar-with-panels` side-left is inset 10 px to show it.
+
 Hand-over: the panel's first posed frame carries the tab at `attach` 0 (over the lip, which holds its
 completed-dwell look, spec 0278); the edge lip surface clears only after that frame committed
 (`lip_tab_handover`), and on close it redraws before the panel unmaps or its surface goes
