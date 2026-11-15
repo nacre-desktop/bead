@@ -144,6 +144,35 @@ static-body open/close; making it the default needs the compositor side and is n
   B0263 phases (status open cold, grow, interrupt, shrink + close, resident reopen, calendar open/close),
   one persistent virtual pointer and keyboard. Scripts: `.lead/capture-labwc.sh`, `gated.py`,
   `summarize.py`, `strips.py`, `pass.sh` in the unit worktree (untracked: they name the host rig).
-- Results: PENDING (captures not yet run: the desktop gate was closed by swap use).
-- B0277 reveal close on the real GPU: PENDING.
-- Verdict on B0267: PENDING.
+- Results (pooled 3 runs; gap = presented-frame gap p50/p95/max ms, n = gaps > 12 ms; reveal rows count only the
+  frames the client itself drew; UI_ERROR 0 in all 14 captures):
+
+  | phase | client niri | reveal niri | client labwc |
+  |---|---|---|---|
+  | status open cold | 8.0/8.4/16.6, n 3 | 24.0/24.3/24.3, n 6 (9 frames) | 8.1/8.4/8.4, 0 |
+  | grow; interrupt | 8.1/10.5/11.1, 0; max 16.2, 3 | same, 0; 1 | 8.1/10.3/11.1, 0; 8.1/8.4/11.1, 0 |
+  | shrink + close | 8.0/15.9/16.1, 9 | 8.0/15.9/16.2, 21 | 7.3/8.4/11.0, 0 |
+  | status reopen (resident) | 8.1/9.6/16.3, 3 | 24.1/24.5/24.5, 3 | 8.1/8.4/9.2, 0 |
+  | open to first presented, cold / resident | 30.4 / 16.0 ms | 105 / 58 ms | 34.9 / 10.0 ms |
+  | first frame after configure, cold | 21.7 ms | 49.5 ms | 29 ms |
+  | calendar open cold | 22/243/243 (one outlier run) | 22/28/28 | 2.4/21.6/21.6 |
+
+  Client CPU p50 0.4-0.7 ms per frame (reveal open: one 24 ms full-body raster). Swap used before each capture
+  0 KiB except the last (3.4 MiB); lock held 601 s in total.
+- Verdict vs <= 12 ms: labwc direct meets it in every status phase (max 11.1); nested niri adds a 16 ms gap at
+  peek open, shrink/close and interrupt in every run, also with reveal: compositor side (nested hop). Calendar
+  cold open: 22 ms start gap in both arms, plus a 76-243 ms stall in one client run (unattributed).
+- B0277 (3 s close/reopen of the top peek, labwc and nested niri): ink bottom edge 45, 42, 40, 38 px, x range
+  stays the panel width (127..424 to 132..419), no line travels to the anchor edge, nothing left behind. PASS.
+- Tab (B0279/B0289, labwc, `side-right` inset slide dock via its lip, pointer resting on the edge; normal and 3 s
+  motion, 2 runs, grim samples ~13 ms apart, so not every frame). (a) open start: exactly one lip/tab region in
+  every frame. PASS. But while docked with the pointer on the edge a SECOND 4x48 pill (x 1913..1916, the free lip
+  in the 10 px gap) is drawn beside the tab for the whole open state and grace, gone after the close: the lip
+  does not clear at hand-over (needs a decision). (b) close end: the last tab sample is 4 px (slow) / 17 px (fast)
+  off the rest x, within the 5 / 90 px per-sample travel; the lip is absent after close, so equality with the
+  rest rect is not provable at this sampling. (c) tab rides the body edge: constant 2 px gap in every slide
+  frame. PASS. Nested niri tab arm not run.
+- Verdict on B0267: HOLD. Compositor reveal appears later on this GPU (first presented 105 vs 30 ms cold, 58
+  vs 16 resident; first frame after configure 49 vs 22 ms) and has more >12 ms close gaps (21 vs 9); grow and
+  interrupt are the same path. Follow-ups: (1) cache the reveal's static body so an open costs no 24 ms raster;
+  (2) the 16 ms start gap on nested niri is compositor frame-done timing; (3) docked free lip; (4) calendar stall.
