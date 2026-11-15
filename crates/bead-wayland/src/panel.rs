@@ -911,11 +911,12 @@ impl App {
         }
         self.sync_all_decorations()?;
         let factory = spec.factory.clone();
+        let label = format!("panel:{}", self.panel_name.as_deref().unwrap_or("-"));
         let mut source: Box<dyn SceneSource> =
             warm.map(|entry| entry.source).unwrap_or_else(|| {
                 Box::new(
                     worker::Source::new(Box::new(move || factory(open)), spec.fallback.clone())
-                        .with_label("panel")
+                        .with_label(label)
                         .with_image_policy(
                             if spec.renderer == bead_render::RendererKind::FemtovgGl {
                                 bead_render::tree::ImagePolicy::UploadOnly
