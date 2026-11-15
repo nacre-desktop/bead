@@ -4,12 +4,19 @@ Bead is a framework for building Wayland shells. Folder apps use a manifest and 
 
 ## Start here
 
-- [A bar in 50 lines](tutorial/bar.md) — build and run a desktop bar in about 15 minutes.
-- [Build your first shell widget](tutorial/widget.md) — add a plugin widget to the tutorial bar.
-- [Add a popup](tutorial/popup.md) — open a calendar panel from the bar's clock.
+1. [Build the `bead` CLI](../README.md#get-started) and run `examples/hello-bar`.
+2. [A bar in 50 lines](tutorial/bar.md): your first bar, with a live clock, battery and a mute button, in about 15 minutes.
+3. [Build your first shell widget](tutorial/widget.md): a plugin widget mounted in that bar.
+4. [Add a popup](tutorial/popup.md): a calendar panel opened from the bar's clock.
+5. Panels that grow and join the bar: [`examples/bar-with-panels`](../examples/bar-with-panels/) and [Panel body and joined edges](reference/luau-ui.md#panel-body-and-joined-edges).
+6. Reusable components: [`examples/kit-gallery`](../examples/kit-gallery/) and the [kit reference](reference/kit.md).
+7. A Rust host, when a folder app is not enough: [Rust hosts](reference/rust-hosts.md) and [`examples/minimal-shell`](../examples/minimal-shell/README.md).
+
+## Reference
+
 - [Example gallery](../examples/README.md) — runnable examples and what each demonstrates.
 - [Folder app manifest](reference/manifest.md) — every supported `bead.toml` key and validation error.
-- [Luau UI reference](reference/luau-ui.md) — view elements, state, bindings, and actions.
+- [Luau UI reference](reference/luau-ui.md) — view elements, state, bindings, motion and actions.
 - [Kit components](reference/kit.md) — reusable `bead.kit` components.
 - [Services](reference/services.md) — desktop snapshots and declared command results/actions.
 - [Rust hosts](reference/rust-hosts.md) — when to use Rust and the general folder host API.

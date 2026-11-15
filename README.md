@@ -20,7 +20,7 @@ target/release/bead run examples/hello-bar
 
 The build needs the Rust toolchain from `rust-toolchain.toml` and the system packages installed by the first step of [CI](.github/workflows/ci.yml). Put `target/release/bead` on your `PATH` to use `bead` as the docs do. `bead check examples/hello-bar` validates and renders an app on the CPU without a compositor; `bead run <folder> --seconds N` exits after N seconds.
 
-Then build a bar in 15 minutes with the [bar tutorial](docs/tutorial/bar.md).
+Then follow the [path in the documentation index](docs/README.md#start-here): your first bar in about 15 minutes with the [bar tutorial](docs/tutorial/bar.md), then a widget, a popup, growing panels, the kit gallery and a Rust host.
 
 ## Learn more
 

@@ -1,6 +1,6 @@
 # `bead.kit`
 
-`bead.kit` is the embedded Luau module of reusable components. It exposes `kit.tokens`, `kit.metrics` (read-only review radii `panel` 24, `tile` 18, `row` 12, `chip` 18 and text sizes `caption` 12, `label` 13, `body` 14, `title` 16, in logical px), `kit.motion` (the `ui.motion.duration` tokens plus the kit's `color`, `state` and `text` durations) and component constructors; property details can evolve with the source. The list below names the current component surface, with its primary role and key inputs. All components use caller-provided IDs and content. Consult [COMPONENTS.md](../COMPONENTS.md) for kit/theme context; this page is the API name index and avoids duplicating that overview.
+`bead.kit` is the embedded Luau module of reusable components. It exposes `kit.tokens`, `kit.metrics` (read-only review sizes in logical px: `kit.metrics.radius.panel` 24, `.tile` 18, `.row` 12, `.chip` 18 and `kit.metrics.text.caption` 12, `.label` 13, `.body` 14, `.title` 16), `kit.motion` (the `ui.motion.duration` tokens plus the kit's `color`, `state` and `text` durations) and component constructors; property details can evolve with the source. The list below names the current component surface, with its primary role and key inputs. All components use caller-provided IDs and content. Consult [COMPONENTS.md](../COMPONENTS.md) for kit/theme context; this page is the API name index and avoids duplicating that overview.
 
 - `Button`, `IconButton`, `StatusIcon`, `Switch`: controls; `text`, `checked`, `on_activate`, dimensions, colors. Every kit `Button` presses to `press_scale=.97` (pass `press_scale=1` to opt out); chips, segment options, pill buttons and tiles also set a `pressed_fill` (spec 0280). Tiles scale as a whole.
 - `Fill`: gradient fill primitive; `from`, `to`, `width`, `height`.
@@ -12,7 +12,7 @@
 - `Segment`: pill segment control (spec 0274); `options` (`{id, label, selected?, enabled?}`), `value` (marks the selected id when options do not), `enabled`, `aria_label`, `on_change` (action name, receives the option id).
 - `LinkRow`: settings row that navigates; `title` (or `label`), optional `subtitle` (or `description`) and `icon`, `enabled`, `on_activate`; chevron at the end.
 - `Chip`: 36 px pill; `text`, optional `icon`, `on` (primaryContainer fill), `on_activate`; presses to .97 with the hover tint one step deeper. `Tag`: 11 px mono tag with an outline border; `text`.
-- `EmptyState`: centred hero outline glyph, `title`, optional `detail` and at most one `chip` pill; `glyph`, `title`, `detail`, `chip`, `chip_glyph`, `on_chip`, `width`, `height` (spec 0276).
+- `EmptyState`: centred hero outline glyph, `title`, optional `detail` and at most one `chip` pill; `glyph`, `title`, `detail`, `chip`, `chip_glyph`, `on_chip`, `width`, `height`, optional `left`/`top` (absolute placement) (spec 0276).
 - `NoticeRow`: 72 px notification row; `id`, `icon` (host icon name; a bell glyph when empty), `caption`, `title`, `body`, `on_dismiss` (nil disables the button), `dismiss_label`, `width`, `fill` (spec 0276); the dismiss button shows only while the row is hovered or keyboard-focused (spec 0280).
 - `VirtualGrid`: virtualized keyed model; `model`, `key`, `render`, `scroll`.
 - `Transcript`: scrolling message list; `cells` (windowed model), `extent`, `width`, `on_action`. The Rust `transcript::Entry` that produces the cells takes `align_end` and `max_width` (a fraction of the row; 0 = full) per message, and an empty `label` drops the caption band (spec 0274).
@@ -39,5 +39,27 @@
 - `GraphCanvas`: force-directed graph view (spec 0232); `graph = ui.graph(nodes, edges)` (nodes `{id, label, weight}`, edges `{from, to}`; handed over once, best from a module), `style` (palette roles `node`, `edge`, `hover`, `selected`, `focus`, `label`; numbers `node_radius`, `label_size`, `label_zoom`, `max_labels`, `lod_zoom`, `far_edge_alpha`), `highlight` (node ids, or a bound list store of `{id=...}` records: those nodes and their edges at full strength, the rest dimmed; nil/empty dims nothing), `on_hover` (id or `""`), `on_select` (click; `""` when Escape clears), `on_activate` (double-click, or Enter on the focused node). The canvas is focusable: arrows walk the focused node to the nearest neighbour in that direction (camera glides only if it is off screen), Enter activates, Escape clears; the focused node's label is always shown. Layout, hit testing, pan, zoom, selection and labels run in Rust; data is reconciled by stable id and lives once in Rust after hand-over.
 
 Item callbacks (`on_change`, `on_pick`, `on_touch`, `on_action`, `ListEditor`'s `on_remove`, and the `CollectionSwitcher` callbacks) take an action name, and the component supplies the argument, such as the chosen item's `id`. Other `on_*` props take a `ui.action(...)` descriptor.
+
+The components added since the design review (specs 0264, 0274, 0276), one each; the stores and actions they name are declared in `behavior.luau`, as in [`examples/kit-gallery`](../../examples/kit-gallery/):
+
+```luau
+local ui = require("bead.ui")
+local kit = require("bead.kit")
+return ui.Column { id = "kit", width = "fill", height = "fill", padding = 16, gap = 8, fill = "surface",
+    ui.Box { id = "inbox", width = 32, height = 32, radius = 8, fill = "surfaceContainer",
+        kit.Badge { id = "count", text = "3", tone = "error" } },
+    kit.Segment { id = "mode", aria_label = "Mode", value = ui.bind("mode"), on_change = "set_mode",
+        options = { { id = "light", label = "Light" }, { id = "dark", label = "Dark" } } },
+    kit.Chip { id = "wifi", text = "Wi-Fi", icon = "wifi", on = true, on_activate = ui.action("toggle_wifi") },
+    kit.Tag { id = "tag", text = "beta" },
+    kit.LinkRow { id = "network", title = "Network", subtitle = "Wi-Fi and VPN", icon = "wifi", on_activate = ui.action("open_network") },
+    kit.SliderTile { id = "volume", width = 380, height = 56, label = "Volume", icon = "volume_up", value = ui.bind("volume"),
+        on_change = "set_volume", end_icon = "mic", end_label = "Mute microphone", on_end = ui.action("toggle_mic") },
+    kit.EmptyState { id = "empty", width = 200, height = 120, glyph = "inbox", title = "All clear", detail = "No notifications" },
+    kit.NoticeRow { id = "mail", width = 380, caption = "Mail", title = "New message", body = "Lunch at noon?", on_dismiss = ui.action("dismiss") },
+    kit.GraphCanvas { id = "graph", width = 380, height = 120, on_select = ui.action("select"),
+        graph = ui.graph({ { id = "a", label = "A", weight = 1 }, { id = "b", label = "B", weight = 1 } }, { { from = "a", to = "b" } }) },
+}
+```
 
 Names and props are read from `crates/bead-kit/assets/kit.luau`; private helper functions inside that module are internal and are not part of this list. Refer to [Luau UI](luau-ui.md) for the underlying primitives.

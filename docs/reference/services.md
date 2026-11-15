@@ -1,6 +1,6 @@
 # Folder app services
 
-Services are opt-in through `[services].desktop` and `[commands.NAME]`. The host publishes only declared desktop service groups. FolderView declares typed defaults for the keys published by each declared service and command, so `behavior.luau` can bind them directly. A view may repeat a key with the same type; conflicting types are a validation error. `bead check` supplies an empty snapshot and does not start services or commands.
+Services are opt-in through `[services].desktop` and `[commands.NAME]`. The host publishes only declared desktop service groups. FolderView declares typed defaults for the keys published by each declared service and command, so `behavior.luau` can bind them directly. A view may repeat a key with the same type; conflicting types are a validation error. `bead check` supplies an empty snapshot and does not start services or commands. A [popup panel](manifest.md) that is closed but kept for a fast reopen gets no service updates while closed and a fresh snapshot when it opens again.
 
 ## Desktop stores
 

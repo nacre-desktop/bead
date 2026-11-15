@@ -17,7 +17,44 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-`FolderView::load_with_services` takes a `FolderServices` (desktop service names from `bead::host::DESKTOP_SERVICES`, plus named `CommandSpec`s) and declares their stores and actions; `FolderServicesRuntime::start` starts them once and `FolderView::load_with_runtime` attaches each view to that runtime. `with_panel_actions` enables the `panel.*` actions in `PANEL_ACTIONS`. `FolderView` implements `bead::wayland::SceneSource`; `bead::wayland::run` puts it on screen, as `crates/bead-cli/src/main.rs` shows. Windows and panels run their source on a worker thread for you; wrap a bar's source in `bead::wayland::worker::Source::new(factory, fallback)` from `Options::primary_factory` the same way, because the CPU renderer prepares a scene with images on that worker. A custom `SceneSource` may return `Some(revision)` from `state_revision`, changed whenever its accessibility tree, state summary or saved state can differ, so the worker reuses its last copies; the default `None` reads them for every worker packet.
+To put the same bar on screen, give `bead::wayland::run` a bar factory. `Options` is `#[non_exhaustive]`, like `WindowSpec` and the service `Config` and snapshot types (spec 0262): start from `Options::default()` and assign fields, since a struct literal does not compile outside Bead:
+
+```rust
+use bead::{
+    host::FolderView,
+    render::Scene,
+    wayland::{Options, SceneSource, worker::Source},
+};
+use std::sync::Arc;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let root = std::fs::canonicalize("examples/hello-bar")?;
+    let size = (1280, 36);
+    let mut options = Options::default();
+    options.namespace = "org.example.HelloBar".into();
+    options.bar = true;
+    options.edge = bead::core::Edge::Top;
+    options.bar_size = Some(size.1);
+    options.primary_surface_viewport = true;
+    options.interactive = true;
+    options.seconds = Some(5.0);
+    options.primary_factory = Some(Arc::new(move |_output: String| {
+        let root = root.clone();
+        let load = move || {
+            FolderView::load(root, "view/main.luau".into(), "palette.json".into(), "Hello bar", size)
+                .map(|view| Box::new(view) as Box<dyn SceneSource>)
+                .map_err(|e| e.to_string())
+        };
+        let empty = Scene::empty(size.0 as f32, size.1 as f32);
+        Ok(Box::new(Source::new(Box::new(load), empty)) as Box<dyn SceneSource>)
+    }));
+    bead::wayland::run(options, Scene::empty(size.0 as f32, size.1 as f32))
+}
+```
+
+The factory runs once per output; `Source` moves the view's Luau and CPU image preparation onto a worker thread. A window is `options.window = Some(WindowSpec::new(app_id, title, size, fallback, factory))` with the optional fields (`min_size`, `size_for_output`, `on_resize`, `model`, `command_targets`) assigned afterwards, as [`examples/minimal-shell`](../../examples/minimal-shell/src/main.rs) does.
+
+`FolderView::load_with_services` takes a `FolderServices` (desktop service names from `bead::host::DESKTOP_SERVICES`, plus named `CommandSpec`s) and declares their stores and actions; `FolderServicesRuntime::start` starts them once and `FolderView::load_with_runtime` attaches each view to that runtime. `with_panel_actions` enables the `panel.*` actions in `PANEL_ACTIONS`. `FolderView` implements `bead::wayland::SceneSource`; `bead::wayland::run` puts it on screen, as `crates/bead-cli/src/main.rs` shows. Windows and panels run their source on a worker thread for you; wrap a bar's source in `bead::wayland::worker::Source::new(factory, fallback)` from `Options::primary_factory` the same way, because the CPU renderer prepares a scene with images on that worker. A custom `SceneSource` may return `Some(revision)` from `state_revision`, changed whenever its accessibility tree, state summary or saved state can differ, so the worker reuses its last copies; the default `None` reads them for every worker packet. A panel closed but kept alive for a fast reopen receives `UiEvent::PanelVisibility(false)` in `stage`, and `PanelVisibility(true)` when it opens again: `FolderView` stops its service wakeups on `false` and resubscribes with a fresh snapshot on `true`, and a custom source holding its own subscriptions or leases should do the same.
 
 `bead::ui::UiPackage::load(root, entry, palette)` reads a Luau UI root once; `FolderView::from_package` / `from_package_with_runtime` build views from that copy without touching the filesystem, so a screen lock can add views after the installed files change ([spec 0285](../specs/0285-ui-package.md); plugins are not captured, `watch` is a no-op).
 

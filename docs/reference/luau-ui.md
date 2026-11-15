@@ -46,8 +46,8 @@ ui.TextInput { id="name", text=ui.bind("name"), placeholder="Name" }
 ```
 ```luau
 ui.Image { id="image", path="logo.png", width=120, height=80 }
--- Image file inside the app folder. icon="NAME" names a host slot instead (folder apps look
--- NAME up in the hicolor icon directories).
+-- Image file inside the app folder. icon="NAME" names a host slot instead: the folder host uses
+-- NAME.svg, else NAME.png, from icons/hicolor or pixmaps under $XDG_DATA_HOME and $XDG_DATA_DIRS.
 -- tint="secondary" (a palette role, `ui.alpha(...)` or `ui.tint(...)`) draws the image's alpha as a
 -- mask filled with that colour, so themed icons and symbol glyphs follow the palette.
 -- radius=16 clips the image to an antialiased rounded rectangle (album art inside a rounded card).
@@ -86,7 +86,7 @@ Render a list store with `ui.Repeat { id = "rows", model = ui.bind("NAME"), key 
 
 ## Motion
 
-`ui.motion` is a frozen table of tokens: `ui.motion.duration.<name>` (seconds: `hover` .09, `press` .06, `release` .12, `trace` .12, `badge` .14, `close` .16, `fade` .16, `osd_in` .16, `switch` .18, `peek` .2, `osd_out` .2, `open` .22, `toast` .22, `dock` .22, `slide` .24, `drop` .26, `pulse` 1.6) and `ui.motion.curve.<name>` (keyed with `_` for `-`, so `m.curve.out_cubic` is `"out-cubic"`; the curve strings `linear`, `out-cubic`, `in-cubic`, `out-quint`, `in-out-cubic`, `out-back`, `in-quart`, `spring`; `ease`, `ease-out`, `ease-in` and `ease-in-out` remain accepted). The same names work in `ui.animate`, `ui.animated` and `Panel.transition`; see [spec 0263](../specs/0263-motion-tokens-and-retarget.md).
+`ui.motion` is a frozen table of tokens: `ui.motion.duration.<name>` (seconds: `hover` .09, `press` .06, `release` .12, `trace` .12, `badge` .14, `close` .16, `fade` .16, `osd_in` .16, `switch` .18, `peek` .2, `osd_out` .2, `open` .22, `toast` .22, `dock` .22, `slide` .24, `drop` .26, `pulse` 1.6) and `ui.motion.curve.<name>` (keyed with `_` for `-`, so `m.curve.out_cubic` is `"out-cubic"`; the curve strings `linear`, `out-cubic`, `in-cubic`, `out-quint`, `in-out-cubic`, `out-back`, `in-quart`, `spring`; `ease`, `ease-out`, `ease-in` and `ease-in-out` remain accepted). `ui.animate` and `ui.animated` take these names. `Panel.transition` currently honours only `spring` and `ease-in-out` (any other value eases out) and `return_transition` takes `ease`, `ease-in-out` or `spring`; see [spec 0263](../specs/0263-motion-tokens-and-retarget.md).
 
 ```luau
 local m = ui.motion
@@ -117,3 +117,15 @@ ui.Column { id = "stack", gap = 8, reflow = ui.motion.duration.switch, ui.Repeat
 ## Panel body and joined edges
 
 A root `Panel` may name a child as its `body`: the reveal (`reveal=true`) grows that child out of the panel's edge, its box and shadow keep their corners while growing, and pointer input stops at it, so a transparent root can stay at the surface's maximum size while the body is resized, moved or reshaped with `ui.animated` markers (a hover peek that grows into a panel as one surface). `shadow=true` is accepted on `Box` for such a body (and on any surface, see below). `join_edge="top"|"bottom"|"left"|"right"` with `join` (0..1, default 1, animatable) makes a box's two corners on that edge square and flush with the surface it hangs from; `join=0` rounds all four corners (a detached panel).
+
+A `Panel` with `open` animates: `open` (default true) is the target state, `edge` (default `top`) the side it opens from, `duration` (seconds, default .2), `transition`, `fade` (default true), and `return_duration`/`return_transition` for the close. With `reveal=true` the panel grows out of `edge` in place and closes as the open reversed, shrinking back into that edge; `slide_distance` (0..4000 px) slides the whole panel that far instead. A peek whose body grows on a store, as in the [bar-with-panels](../../examples/bar-with-panels/) Status panel:
+
+```luau
+local ui = require("bead.ui")
+local m = ui.motion
+local tall = ui.resolve_for_check(ui.bind("tall"))
+return ui.Panel { id = "peek", width = "fill", height = "fill", fill = "transparent", body = "body",
+    open = true, reveal = true, edge = "top", duration = m.duration.peek,
+    ui.Box { id = "body", position = "absolute", top = 0, left = 0, width = 300, shadow = true, fill = "surface",
+        radius = 16, join_edge = "top", height = ui.animated("peek.h", tall and 300 or 120, m.duration.open, m.curve.out_cubic) } }
+```
