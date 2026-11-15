@@ -149,12 +149,47 @@ impl Source for Notifications {
         })
     }
 }
+/// `false` once stopped. Service callbacks publish under this lock, so `stop` waits out an
+/// in-flight callback and a late one cannot reconnect the source.
+type Live = Arc<Mutex<bool>>;
+fn follow(
+    service: &bead_services::Desktop,
+    publisher: &Publisher,
+    live: &Live,
+    project: fn(&bead_services::Snapshot) -> Json,
+) -> bead_services::Subscription {
+    let (changed, live) = (publisher.clone(), live.clone());
+    service.subscribe(move |snapshot| {
+        let live = live.lock().unwrap_or_else(|e| e.into_inner());
+        if *live
+            && changed
+                .publish_revision(snapshot.revision, project(&snapshot))
+                .is_err()
+        {
+            let _ = changed.disconnect();
+        }
+    })
+}
+fn stop_projection(
+    publisher: &Publisher,
+    live: &Live,
+    subscription: &Mutex<Option<bead_services::Subscription>>,
+) -> Result<Json> {
+    subscription
+        .lock()
+        .map_err(|_| Error::new("internal", "projection subscription unavailable", false))?
+        .take();
+    *live.lock().unwrap_or_else(|e| e.into_inner()) = false;
+    publisher.disconnect()?;
+    Ok(Json::Null)
+}
 /// Read-only clock projection from a host's existing desktop service.
 /// Tray pixmaps and unrelated sensor state never enter this Source.
 pub struct Clock {
     publisher: Publisher,
     _service: Arc<bead_services::Desktop>,
     subscription: Mutex<Option<bead_services::Subscription>>,
+    live: Live,
 }
 fn clock_data(snapshot: &bead_services::Snapshot) -> Json {
     serde_json::json!({"clock":snapshot.clock,"date":snapshot.date})
@@ -167,19 +202,13 @@ impl Clock {
             initial.revision,
             clock_data(&initial),
         )?;
-        let changed = publisher.clone();
-        let subscription = service.subscribe(move |snapshot| {
-            if changed
-                .publish_revision(snapshot.revision, clock_data(&snapshot))
-                .is_err()
-            {
-                let _ = changed.disconnect();
-            }
-        });
+        let live = Arc::new(Mutex::new(true));
+        let subscription = follow(&service, &publisher, &live, clock_data);
         Ok(Self {
             publisher,
             _service: service,
             subscription: Mutex::new(Some(subscription)),
+            live,
         })
     }
 }
@@ -203,14 +232,7 @@ impl Source for Clock {
         Box::pin(async { Ok(Json::Null) })
     }
     fn stop(&self) -> Reply<'_> {
-        Box::pin(async {
-            self.subscription
-                .lock()
-                .map_err(|_| Error::new("internal", "clock subscription unavailable", false))?
-                .take();
-            self.publisher.disconnect()?;
-            Ok(Json::Null)
-        })
+        Box::pin(async { stop_projection(&self.publisher, &self.live, &self.subscription) })
     }
 }
 
@@ -221,6 +243,7 @@ pub struct DesktopView {
     publisher: Publisher,
     _service: Arc<bead_services::Desktop>,
     subscription: Mutex<Option<bead_services::Subscription>>,
+    live: Live,
 }
 impl DesktopView {
     pub fn attach(
@@ -233,19 +256,13 @@ impl DesktopView {
             initial.revision,
             project(&initial),
         )?;
-        let changed = publisher.clone();
-        let subscription = service.subscribe(move |snapshot| {
-            if changed
-                .publish_revision(snapshot.revision, project(&snapshot))
-                .is_err()
-            {
-                let _ = changed.disconnect();
-            }
-        });
+        let live = Arc::new(Mutex::new(true));
+        let subscription = follow(&service, &publisher, &live, project);
         Ok(Self {
             publisher,
             _service: service,
             subscription: Mutex::new(Some(subscription)),
+            live,
         })
     }
 }
@@ -269,16 +286,7 @@ impl Source for DesktopView {
         Box::pin(async { Ok(Json::Null) })
     }
     fn stop(&self) -> Reply<'_> {
-        Box::pin(async {
-            self.subscription
-                .lock()
-                .map_err(|_| {
-                    Error::new("internal", "desktop view subscription unavailable", false)
-                })?
-                .take();
-            self.publisher.disconnect()?;
-            Ok(Json::Null)
-        })
+        Box::pin(async { stop_projection(&self.publisher, &self.live, &self.subscription) })
     }
 }
 
@@ -337,6 +345,45 @@ mod clock_projection_tests {
 #[cfg(test)]
 mod desktop_view_tests {
     use super::*;
+    #[test]
+    fn stop_waits_for_an_in_flight_service_callback() {
+        use std::sync::atomic::AtomicBool;
+        static ARMED: AtomicBool = AtomicBool::new(false);
+        static ENTERED: AtomicBool = AtomicBool::new(false);
+        static RELEASED: AtomicBool = AtomicBool::new(false);
+        let mut config = bead_services::Config::default();
+        config.audio = false;
+        config.bus = false;
+        let host = bead_services::Desktop::start_config(config);
+        let source = DesktopView::attach(host.clone(), |s| {
+            if ARMED.swap(false, Ordering::SeqCst) {
+                ENTERED.store(true, Ordering::SeqCst);
+                while !RELEASED.load(Ordering::SeqCst) {
+                    std::thread::sleep(std::time::Duration::from_millis(1));
+                }
+            }
+            serde_json::json!({"clock":s.clock})
+        })
+        .unwrap();
+        ARMED.store(true, Ordering::SeqCst);
+        // Enabling seconds changes the clock text, so the worker publishes into the callback.
+        let _lease = host.clock_seconds_lease();
+        while !ENTERED.load(Ordering::SeqCst) {
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        let release = std::thread::spawn(|| {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+            RELEASED.store(true, Ordering::SeqCst);
+        });
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .build()
+            .unwrap();
+        runtime.block_on(source.stop()).unwrap();
+        release.join().unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        assert!(!source.snapshot().connected, "late callback reconnected");
+        host.stop();
+    }
     #[test]
     fn stopping_a_read_only_projection_detaches_only_its_own_subscription() {
         let mut config = bead_services::Config::default();
