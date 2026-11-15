@@ -25,10 +25,14 @@ The design review's parked framework asks (0274 "Not built"): hover-only childre
 
 - Untinted images, shadows and graphs inside a hover-only child do not fade (no primitive opacity).
 - Clips inside a sliding reflow child stay at its new place; press scale keeps clips (the content only shrinks).
+- Only pinned shadows are cached as whole pixmaps. Any other radius/blur/scale (a status peek's shadow while it moves) is still
+  composited per frame from the per-axis template cache (0270); a general whole-shadow cache is not part of this unit.
 - An immediate-action button (action on press) does not track leave while held (`drag` updates the hover only for deferred gestures), so it stays pressed until the release.
 
 ## Evidence
 
+Press: the kit no longer reads `bead.pressed` in Luau, so a press and its release evaluate no view (B0282 measured 78 view
+evaluations for 38 gallery clicks before, about 2 ms each); the press test asserts 0 evaluations over press and release.
 Tests (`bead-ui` materialized_tests): `hover_only_child_fades_in_with_its_group_and_keyboard_focus_without_luau_or_layout`, `pressed_view_scales_and_deepens_its_fill_until_release_without_luau`, `reflow_children_slide_from_their_drawn_position_without_luau_or_layout_per_frame`, `shadow_on_any_surface_and_a_hover_box_inserted_behind_it_paints_like_a_rebuild`; `prewarmed_shadows_are_pinned_and_replaced_per_call` (`bead-render`). `bead check examples/kit-gallery`. No golden changed.
 
 Headless sway capture of the gallery (dev-1, 1000x900, scale 1, pixman; screenshots kept in the worktree's `.lead/`): at rest no
