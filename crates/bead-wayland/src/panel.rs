@@ -915,6 +915,7 @@ impl App {
             warm.map(|entry| entry.source).unwrap_or_else(|| {
                 Box::new(
                     worker::Source::new(Box::new(move || factory(open)), spec.fallback.clone())
+                        .with_label("panel")
                         .with_image_policy(
                             if spec.renderer == bead_render::RendererKind::FemtovgGl {
                                 bead_render::tree::ImagePolicy::UploadOnly

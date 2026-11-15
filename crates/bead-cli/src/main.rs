@@ -488,15 +488,18 @@ impl App {
         let view = self.manifest.view.clone();
         let palette = self.manifest.palette.clone();
         let title = self.manifest.title.clone();
-        Arc::new(move |_: String| {
+        Arc::new(move |output: String| {
             let (root, view, palette) = (root.clone(), view.clone(), palette.clone());
             let (title, runtime) = (title.clone(), runtime.clone());
-            Ok(Box::new(bead::wayland::worker::Source::new(
-                Box::new(move || {
-                    load_source(root, view, palette, title, size, runtime, panel_actions)
-                }),
-                Scene::empty(size.0 as f32, size.1 as f32),
-            )) as Box<dyn bead::wayland::SceneSource>)
+            Ok(Box::new(
+                bead::wayland::worker::Source::new(
+                    Box::new(move || {
+                        load_source(root, view, palette, title, size, runtime, panel_actions)
+                    }),
+                    Scene::empty(size.0 as f32, size.1 as f32),
+                )
+                .with_label(format!("primary:{output}")),
+            ) as Box<dyn bead::wayland::SceneSource>)
         })
     }
     fn surface_size(&self) -> (u32, u32) {

@@ -56,3 +56,9 @@ Same harness on oyster (3 alternating rounds, base 327d5399), µs / allocator ca
 
 Fade-frame samples follow a sleep to the frame deadline, so they run colder than the other cases. Added coverage: the state revision holds exactly while the tree and summary cannot change; settled packets share copies until the revision changes; feedback frames keep the committed nodes; Accepted reuses the Ready candidate; thumb-only frames equal a full prepare across appear, fade, vanish and content changes.
 
+
+## Busy worker attribution (B0296)
+
+- Each worker thread accounts the thread CPU of every job (`thread_cpu_ns` around the job, from the job's receipt to the next loop turn) in two windows that open at its first job: 30 s at 25% (stretches) and 600 s at 1% (the steady idle tick, at most 6 lines an hour). When a job arrives after a window has run its length and the window's CPU is at least its share of the wall time, the worker prints one stderr line and starts a new window; a quiet worker prints nothing, and idle gaps are never reported on their own.
+- `WORKER_BUSY session=<label> window_s=30 cpu_pct=<n> jobs=<n> top=<kind>:<count>:<cpu_ms>,... animation_packets=<n> top_key=<store key>:<count>`: `top_key` is the most named key of the window's `Model` updates (keys only, absent without any); `top` is the three costliest kinds. A kind is the `Job` variant; `Stage` and `ContentScroll` add the `UiEvent` variant, through `Output/Panel/Window/Overlay/Canvas` wrappers (`Stage/Output/StoreChanged`). Names come from a `Debug` writer that stops at the first non-identifier character, so no payload is formatted.
+- The label is `primary:<output>` for the bar session, otherwise `panel`, `window`, `overlay` or `canvas`. `animation_packets` counts empty `Model` stages (the animation frame signal).

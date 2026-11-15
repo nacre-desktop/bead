@@ -407,10 +407,13 @@ impl App {
         let epoch = self.window_epoch;
         let factory = spec.factory.clone();
         let factory_args = args.to_vec();
-        let mut source: Box<dyn SceneSource> = Box::new(worker::Source::new(
-            Box::new(move || factory(&factory_args)),
-            spec.fallback.clone(),
-        ));
+        let mut source: Box<dyn SceneSource> = Box::new(
+            worker::Source::new(
+                Box::new(move || factory(&factory_args)),
+                spec.fallback.clone(),
+            )
+            .with_label("window"),
+        );
         let sender = self
             .event_sender
             .clone()

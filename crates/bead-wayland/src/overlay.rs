@@ -296,10 +296,10 @@ impl App {
         let factory = spec.factory.clone();
         let mut source: Box<dyn SceneSource> =
             warm.map(|entry| entry.source).unwrap_or_else(|| {
-                Box::new(worker::Source::new(
-                    Box::new(move || factory(true)),
-                    spec.fallback.clone(),
-                ))
+                Box::new(
+                    worker::Source::new(Box::new(move || factory(true)), spec.fallback.clone())
+                        .with_label("overlay"),
+                )
             });
         let sender = self
             .event_sender

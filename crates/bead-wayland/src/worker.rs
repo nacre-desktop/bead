@@ -171,6 +171,124 @@ enum Job {
     Ack(u64, Result<(), String>),
     Stop,
 }
+/// One window of worker CPU, printed as `WORKER_BUSY` only when it ran hot (B0296).
+struct BusyWindow {
+    seconds: u64,
+    min_pct: f64,
+    start: Option<std::time::Instant>,
+    cpu_ns: u64,
+    jobs: u32,
+    animation: u32,
+    kinds: std::collections::HashMap<String, (u32, u64)>,
+    keys: std::collections::HashMap<String, u32>,
+}
+impl BusyWindow {
+    fn new(seconds: u64, min_pct: f64) -> Self {
+        Self {
+            seconds,
+            min_pct,
+            start: None,
+            cpu_ns: 0,
+            jobs: 0,
+            animation: 0,
+            kinds: Default::default(),
+            keys: Default::default(),
+        }
+    }
+    /// Add one finished job that began at `at`; the line body when its window closed hot.
+    fn record(
+        &mut self,
+        at: std::time::Instant,
+        kind: &str,
+        cpu_ns: u64,
+        animation: bool,
+        keys: &[String],
+    ) -> Option<String> {
+        let start = *self.start.get_or_insert(at);
+        let wall = at.saturating_duration_since(start);
+        let line = (wall.as_secs() >= self.seconds).then(|| {
+            let pct = self.cpu_ns as f64 / wall.as_nanos() as f64 * 100.;
+            let mut top = self.kinds.drain().collect::<Vec<_>>();
+            top.sort_by(|a, b| b.1.1.cmp(&a.1.1).then_with(|| a.0.cmp(&b.0)));
+            let top = top
+                .iter()
+                .take(3)
+                .map(|(kind, (n, ns))| format!("{kind}:{n}:{}", ns / 1_000_000))
+                .collect::<Vec<_>>()
+                .join(",");
+            let key = self
+                .keys
+                .iter()
+                .max_by(|a, b| a.1.cmp(b.1).then_with(|| b.0.cmp(a.0)))
+                .map(|(key, n)| format!(" top_key={key}:{n}"))
+                .unwrap_or_default();
+            (pct >= self.min_pct).then(|| {
+                format!(
+                    "window_s={} cpu_pct={pct:.0} jobs={} top={top} animation_packets={}{key}",
+                    wall.as_secs(),
+                    self.jobs,
+                    self.animation
+                )
+            })
+        });
+        if line.is_some() {
+            *self = Self::new(self.seconds, self.min_pct);
+            self.start = Some(at);
+        }
+        let entry = self.kinds.entry(kind.into()).or_default();
+        for key in keys {
+            *self.keys.entry(key.clone()).or_default() += 1;
+        }
+        entry.0 += 1;
+        entry.1 += cpu_ns;
+        self.cpu_ns += cpu_ns;
+        self.jobs += 1;
+        self.animation += u32::from(animation);
+        line.flatten()
+    }
+}
+/// The leading identifier of a `Debug` value: formatting stops at the first other character.
+struct Ident(String);
+impl std::fmt::Write for Ident {
+    fn write_str(&mut self, text: &str) -> std::fmt::Result {
+        for c in text.chars() {
+            if !(c.is_alphanumeric() || c == '_') {
+                return Err(std::fmt::Error);
+            }
+            self.0.push(c);
+        }
+        Ok(())
+    }
+}
+fn event_kind(event: &UiEvent) -> String {
+    let mut name = Ident(String::new());
+    let _ = std::fmt::write(&mut name, format_args!("{event:?}"));
+    match event {
+        UiEvent::Output(_, _, inner)
+        | UiEvent::Panel(_, inner)
+        | UiEvent::Window(_, inner)
+        | UiEvent::Overlay(_, inner)
+        | UiEvent::Canvas(_, inner) => format!("{}/{}", name.0, event_kind(inner)),
+        _ => name.0,
+    }
+}
+/// Store keys a model update names (keys only, never values).
+fn model_keys(job: &Job) -> Vec<String> {
+    match job {
+        Job::Stage(UiEvent::Model(values), _) => values.keys().cloned().collect(),
+        _ => Vec::new(),
+    }
+}
+fn job_kind(job: &Job) -> String {
+    match job {
+        Job::Stage(event, _) => format!("Stage/{}", event_kind(event)),
+        Job::ContentScroll(event, _) => format!("ContentScroll/{}", event_kind(event)),
+        Job::Resume(_) => "Resume".into(),
+        Job::PrepareImages(_) => "PrepareImages".into(),
+        Job::PrepareCpu(_) => "PrepareCpu".into(),
+        _ => "Other".into(),
+    }
+}
 // Pointer positions are replaceable only within the same gesture. Every other
 // job is an ordering barrier (especially press, release and model updates).
 fn enqueue(queue: &mut VecDeque<Job>, mut job: Job) -> bool {
@@ -271,6 +389,7 @@ pub struct Source {
     candidate: Option<Scene>,
     viewport: Option<(u32, u32)>,
     frame_interval: Option<std::time::Duration>,
+    label: String,
 }
 impl Source {
     pub fn new(factory: Factory, fallback: Scene) -> Self {
@@ -294,7 +413,13 @@ impl Source {
             candidate: None,
             viewport: None,
             frame_interval: None,
+            label: "worker".into(),
         }
+    }
+    /// Names this worker in its `WORKER_BUSY` line.
+    pub fn with_label(mut self, label: impl Into<String>) -> Self {
+        self.label = label.into();
+        self
     }
     pub fn with_image_policy(mut self, policy: bead_render::tree::ImagePolicy) -> Self {
         self.image_policy = policy;
@@ -548,6 +673,7 @@ impl SceneSource for Source {
         self.sender = Some(sender);
         bead_core::profile::mark("worker_spawn");
         let image_policy = self.image_policy;
+        let label = self.label.clone();
         let retired = self.retired.clone();
         let pending = self.pending.clone();
         // Leave Rust's stack-size policy intact; only admission accounting reads
@@ -595,7 +721,18 @@ impl SceneSource for Source {
                 let mut needs_trim = false;
                 let mut accepted_resource_revision = None;
                 let mut mirrored = Arc::new(Mirror::default());
+                // Stretches (30 s at 25%) and the steady idle tick (10 min at 1%).
+                let mut busy = [BusyWindow::new(30, 25.), BusyWindow::new(600, 1.)];
+                let mut running: Option<(std::time::Instant, u64, String, bool, Vec<String>)> = None;
                 'actor: loop {
+                    if let Some((at, cpu, kind, animation, keys)) = running.take() {
+                        let cpu = bead_core::profile::thread_cpu_ns().saturating_sub(cpu);
+                        for window in &mut busy {
+                            if let Some(line) = window.record(at, kind.as_str(), cpu, animation, keys.as_slice()) {
+                                eprintln!("WORKER_BUSY session={label} {line}");
+                            }
+                        }
+                    }
                     for job in receiver.try_iter() {
                         match job {
                             Job::Stop => break 'actor,
@@ -624,6 +761,13 @@ impl SceneSource for Source {
                             Err(_) => break,
                         }
                     };
+                    running = Some((
+                        std::time::Instant::now(),
+                        bead_core::profile::thread_cpu_ns(),
+                        job_kind(&job),
+                        matches!(&job, Job::Stage(UiEvent::Model(v), _) if v.is_empty()),
+                        model_keys(&job),
+                    ));
                     let job = match prepare_resource_job(job, &mut cache) {
                         Ok(result) => {
                             wakeup(UiEvent::ResourcesPrepared(result));
@@ -1140,6 +1284,76 @@ impl SceneSource for Source {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn busy_window_prints_only_hot_windows_with_top_three_by_cpu() {
+        let t0 = std::time::Instant::now();
+        let at = |s| t0 + Duration::from_secs(s);
+        let ms = 1_000_000;
+        let mut busy = BusyWindow::new(30, 25.);
+        for (s, kind, cpu) in [
+            (0, "A", 2),
+            (1, "B", 3000),
+            (2, "C", 2000),
+            (3, "D", 1000),
+            (4, "A", 4000),
+        ] {
+            assert!(busy.record(at(s), kind, cpu * ms, s == 4, &[]).is_none());
+        }
+        let line = busy
+            .record(
+                at(30),
+                "E",
+                0,
+                false,
+                &["bead.desktop.clock.seconds".into()],
+            )
+            .expect("hot window");
+        assert_eq!(
+            line,
+            "window_s=30 cpu_pct=33 jobs=5 top=A:2:4002,B:1:3000,C:1:2000 animation_packets=1"
+        );
+        // The next window starts empty and stays under the threshold: no line.
+        assert!(busy.record(at(31), "A", 100 * ms, false, &[]).is_none());
+        assert!(busy.record(at(61), "A", 0, false, &[]).is_none());
+    }
+    #[test]
+    fn idle_tick_window_prints_a_steady_one_percent_with_the_top_key() {
+        let t0 = std::time::Instant::now();
+        let mut busy = BusyWindow::new(600, 1.);
+        let key = ["bead.desktop.clock.seconds".to_string()];
+        // A 1 Hz store update costing 20 ms: 2% of a core, silent under the 30 s tier.
+        for s in 0..600 {
+            let at = t0 + Duration::from_secs(s);
+            assert!(
+                busy.record(at, "Stage/Model", 20_000_000, false, &key)
+                    .is_none()
+            );
+        }
+        let line = busy
+            .record(t0 + Duration::from_secs(600), "Stage/Model", 0, false, &key)
+            .expect("steady tick");
+        assert_eq!(
+            line,
+            "window_s=600 cpu_pct=2 jobs=600 top=Stage/Model:600:12000 animation_packets=0 top_key=bead.desktop.clock.seconds:600"
+        );
+        assert!(
+            BusyWindow::new(30, 25.)
+                .record(t0, "A", 1, false, &[])
+                .is_none()
+        );
+    }
+    #[test]
+    fn event_kind_stops_at_the_first_non_identifier_and_names_nested_events() {
+        let inner = UiEvent::LivePalette(BTreeMap::from([("k".into(), [0; 4])]));
+        assert_eq!(event_kind(&inner), "LivePalette");
+        let nested = UiEvent::Output(
+            1,
+            "DP-1".into(),
+            Box::new(UiEvent::Panel(2, Box::new(inner))),
+        );
+        assert_eq!(event_kind(&nested), "Output/Panel/LivePalette");
+        assert_eq!(event_kind(&UiEvent::Reload), "Reload");
+    }
     use std::{
         collections::BTreeMap,
         sync::atomic::{AtomicUsize, Ordering},

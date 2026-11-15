@@ -449,10 +449,10 @@ impl App {
         let epoch = self.canvas_epoch;
         let factory = spec.factory.clone();
         let fallback = spec.fallback.clone();
-        let mut source: Box<dyn SceneSource> = Box::new(worker::Source::new(
-            Box::new(move || factory(true)),
-            fallback.clone(),
-        ));
+        let mut source: Box<dyn SceneSource> = Box::new(
+            worker::Source::new(Box::new(move || factory(true)), fallback.clone())
+                .with_label("canvas"),
+        );
         source.frame_interval(self.output_frame_interval(&output));
         let Some(sender) = self.event_sender.clone() else {
             return;
