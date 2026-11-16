@@ -121,6 +121,12 @@ pub(super) struct App {
     pub(super) wallpaper_unconfirmed: Vec<crate::WallpaperFrameConfirmation>,
     pub(super) fade_animations: bead_core::animation::Animations,
     pub(super) wallpaper_gl_failed: bool,
+    pub(super) palette_tween: Option<crate::wallpaper_fade::PaletteTween>,
+    pub(super) palette_tween_generation: u64,
+    /// Final palette of a change whose fade has not started yet (set by `complete_wallpaper_inner`).
+    pub(super) pending_palette_target: Option<std::collections::BTreeMap<String, [u8; 4]>>,
+    /// Until this clock time, a settle of an older tween step is stale, not a rollback.
+    pub(super) palette_tween_until: f64,
     pub(super) report_surfaces: Vec<serde_json::Value>,
     pub(super) options: Options,
     pub(super) signal: LoopSignal,
@@ -474,6 +480,10 @@ pub fn run_runtime(
         wallpaper_unconfirmed: Vec::new(),
         fade_animations: Default::default(),
         wallpaper_gl_failed: false,
+        palette_tween: None,
+        palette_tween_generation: 0,
+        pending_palette_target: None,
+        palette_tween_until: 0.,
         report_surfaces: Vec::new(),
         options,
         signal: loop_.get_signal(),
@@ -1201,6 +1211,14 @@ impl App {
             .collect();
         let stage_revision = frame.revision;
         let stage_token = frame.commit_token.clone();
+        #[cfg(feature = "native-gl")]
+        if !staged && self.install_with_palette_tween(&palette_key, frame.output.as_str()) {
+            let installed = frame.revision;
+            self.install_wallpaper(frame);
+            self.settle_palette_tween_start(&output_name, installed);
+            self.request_dirty_wallpaper(&output_name);
+            return;
+        }
         if self.options.primary_factory.is_some() {
             if self.wallpaper_palette.as_ref() == Some(&palette_key)
                 || self.output_sessions.is_empty()
@@ -1533,7 +1551,7 @@ impl App {
         self.apply_wallpaper_palette(palette, true);
     }
 
-    fn apply_wallpaper_palette(
+    pub(super) fn apply_wallpaper_palette(
         &mut self,
         palette: std::collections::BTreeMap<String, [u8; 4]>,
         notify_panel: bool,
@@ -1574,6 +1592,13 @@ impl App {
             .iter()
             .filter(|frame| frame_matches_palette(frame, palette))
             .collect();
+        if matching.is_empty()
+            && self.wallpaper_palette.as_ref() != Some(palette)
+            && self.started.elapsed().as_secs_f64() < self.palette_tween_until
+        {
+            // A step of the running palette tween that a later step already replaced.
+            return;
+        }
         if matching.is_empty() {
             if accepted && self.wallpaper_palette.as_ref() != Some(palette) {
                 self.restore_wallpaper_palette();
@@ -1655,10 +1680,8 @@ impl App {
         }
     }
 
-    fn prepare_wallpaper_palette_group(
-        &mut self,
-        palette_key: std::collections::BTreeMap<String, [u8; 4]>,
-    ) {
+    /// Every output session that wears the wallpaper palette, and the active one.
+    pub(super) fn palette_participants(&self) -> (Vec<(String, u64)>, Option<String>) {
         let mut participants: Vec<_> = self
             .output_sessions
             .iter()
@@ -1673,6 +1696,14 @@ impl App {
         {
             participants.push((id.clone(), self.active_output_epoch.unwrap_or_default()));
         }
+        (participants, active)
+    }
+
+    fn prepare_wallpaper_palette_group(
+        &mut self,
+        palette_key: std::collections::BTreeMap<String, [u8; 4]>,
+    ) {
+        let (participants, active) = self.palette_participants();
         if participants.is_empty() && self.panel_runtime.is_none() {
             self.wallpaper_palette_outputs = None;
             return;

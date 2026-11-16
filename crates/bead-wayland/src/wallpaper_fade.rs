@@ -35,6 +35,57 @@ impl Default for WallpaperFade {
     }
 }
 
+type PaletteMap = std::collections::BTreeMap<String, [u8; 4]>;
+/// The palette follows the fade in this many steps: a step repaints the bar and open panels on
+/// the CPU, so the rate is bounded (about 14 steps per second at the default duration).
+pub(crate) const PALETTE_STEPS: usize = 10;
+
+fn to_linear(c: u8) -> f32 {
+    (f32::from(c) / 255.).powf(2.2)
+}
+fn from_linear(c: f32) -> u8 {
+    (c.clamp(0., 1.).powf(1. / 2.2) * 255.).round() as u8
+}
+/// Mix in linear light (gamma 2.2); alpha mixes directly. A role missing from `from` is taken as is.
+pub(crate) fn mix_palette(from: &PaletteMap, to: &PaletteMap, t: f32) -> PaletteMap {
+    if t >= 1. {
+        return to.clone();
+    }
+    to.iter()
+        .map(|(role, new)| {
+            let old = from.get(role).unwrap_or(new);
+            let mix = |a: u8, b: u8| from_linear(to_linear(a) + (to_linear(b) - to_linear(a)) * t);
+            let alpha = f32::from(old[3]) + (f32::from(new[3]) - f32::from(old[3])) * t;
+            (
+                role.clone(),
+                [
+                    mix(old[0], new[0]),
+                    mix(old[1], new[1]),
+                    mix(old[2], new[2]),
+                    alpha.round() as u8,
+                ],
+            )
+        })
+        .collect()
+}
+/// (seconds after the clock starts, mix) per step: each step shows the colour the wallpaper
+/// blend has reached at that time, and the last one is exactly the new palette.
+pub(crate) fn palette_schedule(duration: f64, curve: Curve) -> Vec<(f64, f32)> {
+    (1..=PALETTE_STEPS)
+        .map(|k| {
+            let t = k as f32 / PALETTE_STEPS as f32;
+            (duration * f64::from(t), curve.ease(t))
+        })
+        .collect()
+}
+pub(crate) struct PaletteTween {
+    from: PaletteMap,
+    pub(crate) to: PaletteMap,
+    steps: Vec<(f64, f32)>,
+    next: usize,
+    generation: u64,
+}
+
 /// Reduced motion, a failed GL setup or no spec is a cut.
 pub(crate) fn plan_fade(
     spec: Option<WallpaperFade>,
@@ -70,6 +121,124 @@ impl App {
             self.wallpaper_gl_failed,
         )
         .is_some()
+    }
+
+    /// Whether this change swaps the palette with a fade instead of the palette fence.
+    pub(super) fn install_with_palette_tween(&mut self, key: &PaletteMap, output: &str) -> bool {
+        if !self.fade_wanted()
+            || self.wallpaper_palette_outputs.is_some()
+            || !self.wallpaper_pending_frames.is_empty()
+            || self.wallpaper_surfaces.iter().all(|s| s.name != output)
+        {
+            return false;
+        }
+        if self
+            .palette_tween
+            .as_ref()
+            .is_some_and(|tween| tween.to == *key)
+        {
+            return true; // another output of the same change
+        }
+        let differs = self
+            .wallpaper_palette
+            .as_ref()
+            .is_some_and(|current| current != key);
+        if differs {
+            self.pending_palette_target = Some(key.clone());
+        }
+        differs
+    }
+
+    /// After install: a fade starts the tween itself; a cut applies the new palette at once.
+    pub(super) fn settle_palette_tween_start(&mut self, output: &str, revision: u64) {
+        let Some(target) = self.pending_palette_target.take() else {
+            return;
+        };
+        let installed = self
+            .wallpaper_surfaces
+            .iter()
+            .any(|s| s.name == output && s.revision == revision);
+        if installed {
+            self.apply_palette_step(target);
+        }
+    }
+
+    fn start_palette_tween(&mut self, to: PaletteMap, spec: WallpaperFade) {
+        let from = self.wallpaper_palette.clone().unwrap_or_else(|| to.clone());
+        self.palette_tween_generation += 1;
+        let generation = self.palette_tween_generation;
+        let steps = palette_schedule(f64::from(spec.duration_ms) / 1000., spec.curve);
+        let first = steps[0].0;
+        self.palette_tween = Some(PaletteTween {
+            from,
+            to,
+            steps,
+            next: 0,
+            generation,
+        });
+        self.schedule_palette_step(first, generation);
+    }
+
+    fn schedule_palette_step(&self, after: f64, generation: u64) {
+        let _ = self.loop_handle.clone().insert_source(
+            Timer::from_duration(Duration::from_secs_f64(after)),
+            move |_, _, app| match app.palette_tween_step(generation) {
+                Some(wait) => TimeoutAction::ToDuration(Duration::from_secs_f64(wait)),
+                None => TimeoutAction::Drop,
+            },
+        );
+    }
+
+    /// Apply the next step; the wait until the one after it, if any.
+    fn palette_tween_step(&mut self, generation: u64) -> Option<f64> {
+        let tween = self
+            .palette_tween
+            .as_mut()
+            .filter(|t| t.generation == generation)?;
+        let (at, mix) = tween.steps[tween.next];
+        let palette = mix_palette(&tween.from, &tween.to, mix);
+        tween.next += 1;
+        let wait = tween.steps.get(tween.next).map(|(next, _)| next - at);
+        if wait.is_none() {
+            self.palette_tween = None;
+        }
+        self.palette_tween_until = self.started.elapsed().as_secs_f64() + 1.;
+        self.apply_palette_step(palette);
+        wait
+    }
+
+    /// One palette step through the same recipients as a fenced change, without the fence.
+    fn apply_palette_step(&mut self, palette: PaletteMap) {
+        let _span = bead_core::profile::Span::new("wallpaper_palette_step");
+        self.apply_wallpaper_palette(palette.clone(), true);
+        if self.options.primary_factory.is_some() {
+            let (participants, active) = self.palette_participants();
+            for (id, epoch) in participants {
+                if active.as_ref() == Some(&id) {
+                    self.ui(UiEvent::WallpaperPalette(palette.clone()));
+                } else {
+                    self.ui(UiEvent::Output(
+                        epoch,
+                        id,
+                        Box::new(UiEvent::WallpaperPalette(palette.clone())),
+                    ));
+                }
+            }
+        } else if let Some(Ok(Some(scene))) = self.runtime.as_mut().map(|runtime| {
+            runtime.wallpaper_palette(bead_render::Palette(std::sync::Arc::new(
+                palette.into_iter().collect(),
+            )))
+        }) && self
+            .runtime
+            .as_mut()
+            .is_some_and(|runtime| runtime.commit())
+        {
+            self.scene = scene;
+            let qh = self.qh.clone();
+            for index in 0..self.surfaces.len() {
+                self.draw(index, &qh);
+            }
+        }
     }
 
     /// Reads the shown image from the attached SHM buffer (still mapped until the idle release).
@@ -172,6 +341,9 @@ impl App {
         }
         self.fade_committed(index, now);
         self.schedule_fade_watchdog(&name, generation, spec.duration_ms);
+        if let Some(target) = self.pending_palette_target.take() {
+            self.start_palette_tween(target, spec);
+        }
         Ok(())
     }
 
@@ -491,6 +663,42 @@ mod tests {
         assert_eq!(blend(&a, 0.45), 0., "no jump on retarget");
         a.committed("DP-1", 0.45, 0.45);
         assert_eq!(a.value("DP-1", 0.45 + 0.7), Some((1., false)));
+    }
+    fn palette(colour: [u8; 4]) -> PaletteMap {
+        [("accent".to_owned(), colour)].into()
+    }
+    #[test]
+    fn the_palette_mixes_in_linear_light_and_ends_exactly_on_the_target() {
+        let (a, b) = (palette([0, 0, 0, 255]), palette([255, 255, 255, 255]));
+        assert_eq!(mix_palette(&a, &b, 0.), a);
+        assert_eq!(mix_palette(&a, &b, 1.), b);
+        let mid = mix_palette(&a, &b, 0.5)["accent"][0];
+        assert!(
+            (180..=190).contains(&mid),
+            "linear mid grey is about 0.73 in sRGB: {mid}"
+        );
+        let new_role = mix_palette(&a, &[("other".to_owned(), [9, 9, 9, 9])].into(), 0.3);
+        assert_eq!(
+            new_role["other"],
+            [9, 9, 9, 9],
+            "a role without a source starts at its target"
+        );
+    }
+    #[test]
+    fn the_palette_schedule_is_bounded_and_follows_the_curve() {
+        let steps = palette_schedule(0.7, Curve::EaseInOut);
+        assert_eq!(steps.len(), PALETTE_STEPS);
+        assert!((steps[PALETTE_STEPS - 1].0 - 0.7).abs() < 1e-9);
+        assert_eq!(steps[PALETTE_STEPS - 1].1, 1.);
+        assert!(
+            steps
+                .windows(2)
+                .all(|w| w[0].0 < w[1].0 && w[0].1 <= w[1].1)
+        );
+        assert!(
+            (steps[PALETTE_STEPS / 2 - 1].1 - 0.5).abs() < 1e-6,
+            "half time, half way"
+        );
     }
     #[test]
     fn reduced_motion_and_failed_gl_are_a_cut() {
