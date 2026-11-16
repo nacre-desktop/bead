@@ -1851,10 +1851,9 @@ impl App {
             let output = self.surfaces[index].output.clone();
             self.position_panel_surface(&self.surfaces[index].layer, &output, scene);
         }
-        let traced_frame = bead_core::profile::frame_trace().then(|| {
-            bead_core::profile::take_splits(0);
-            (monotonic_ns(), bead_core::profile::thread_cpu_ns())
-        });
+        let split_start = bead_core::profile::begin_splits();
+        let traced_frame = bead_core::profile::frame_trace()
+            .then(|| (monotonic_ns(), bead_core::profile::thread_cpu_ns()));
         let mut damage_px = 0u64;
         let decoration_result = if self.surfaces[index].companion {
             self.sync_all_decorations()
@@ -3015,6 +3014,7 @@ impl App {
                     Damage::full(w as u32, h as u32),
                 )?;
                 drop(compose_profile);
+                bead_core::profile::split("gl_draw");
                 if self.started.elapsed().as_secs_f64() > 2. {
                     s.render_ms.push(start.elapsed().as_secs_f64() * 1000.);
                 }
@@ -3064,6 +3064,7 @@ impl App {
                     bead_core::profile::mark("panel_commit");
                 }
                 transport.present(s.gl.as_ref().unwrap(), &regions)?;
+                bead_core::profile::split("swap");
                 if pending_promotion_staged {
                     self.promotion_pending = false;
                 }
@@ -3608,9 +3609,14 @@ impl App {
             let callback = self.surfaces[index]
                 .last_callback
                 .map(|c| c.saturating_duration_since(self.started).as_secs_f64());
-            let slide =
-                self.animations
-                    .committed_timed(&id, drawn, committed_at, callback, draw_start);
+            let slide = self.animations.committed_timed(
+                &id,
+                drawn,
+                committed_at,
+                callback,
+                draw_start,
+                &bead_core::profile::splits(split_start),
+            );
             super::overlay::log_slide(&id, slide);
             let motion_active = self
                 .animations

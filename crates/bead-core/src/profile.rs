@@ -126,7 +126,6 @@ struct BusyState {
     stack: Vec<BusyFrame>,
     totals: Vec<(std::borrow::Cow<'static, str>, u64, u64, u32)>,
     last_cpu: u64,
-    marks: Vec<(&'static str, u64)>,
 }
 thread_local! {
     static BUSY: std::cell::RefCell<BusyState> = Default::default();
@@ -222,31 +221,56 @@ pub fn busy_iteration() {
         }
     });
 }
-/// Per-frame split points for `UI_FRAME` (wall clock, [`frame_trace`] only).
-pub fn split(stage: &'static str) {
-    if frame_trace() {
-        let now = monotonic_ns();
-        BUSY.with(|b| b.borrow_mut().marks.push((stage, now)));
-    }
+/// Most phases one frame can mark; later marks are dropped.
+pub const MAX_SPLITS: usize = 12;
+/// A frame's phases as (stage, seconds); unused slots are `("", 0.)`.
+pub type Splits = [(&'static str, f64); MAX_SPLITS];
+pub const NO_SPLITS: Splits = [("", 0.); MAX_SPLITS];
+thread_local! {
+    static MARKS: std::cell::RefCell<(usize, [(&'static str, u64); MAX_SPLITS])> =
+        const { std::cell::RefCell::new((0, [("", 0); MAX_SPLITS])) };
 }
-/// The splits since `begin` as `stage:ms` deltas, clearing them; empty when tracing is off.
+/// Starts a frame's splits (B0310): clears the marks and returns the start clock.
+pub fn begin_splits() -> u64 {
+    MARKS.with(|m| m.borrow_mut().0 = 0);
+    monotonic_ns()
+}
+/// A phase boundary of the frame (always on: one clock read, no allocation).
+pub fn split(stage: &'static str) {
+    let now = monotonic_ns();
+    MARKS.with(|m| {
+        let mut m = m.borrow_mut();
+        let n = m.0;
+        if n < MAX_SPLITS {
+            m.1[n] = (stage, now);
+            m.0 = n + 1;
+        }
+    });
+}
+/// The phases marked since `begin`, as deltas in seconds.
+pub fn splits(begin: u64) -> Splits {
+    let mut out = NO_SPLITS;
+    MARKS.with(|m| {
+        let m = m.borrow();
+        let mut previous = begin;
+        for (slot, (stage, at)) in out.iter_mut().zip(&m.1[..m.0]) {
+            *slot = (stage, at.saturating_sub(previous) as f64 / 1e9);
+            previous = *at;
+        }
+    });
+    out
+}
+/// The splits since `begin` as `stage:ms` deltas; empty when tracing is off.
 pub fn take_splits(begin: u64) -> String {
     if !frame_trace() {
         return String::new();
     }
-    BUSY.with(|b| {
-        let mut previous = begin;
-        let marks = std::mem::take(&mut b.borrow_mut().marks);
-        marks
-            .iter()
-            .map(|(stage, at)| {
-                let delta = at.saturating_sub(previous);
-                previous = *at;
-                format!("{stage}:{:.3}", delta as f64 / 1e6)
-            })
-            .collect::<Vec<_>>()
-            .join(",")
-    })
+    splits(begin)
+        .iter()
+        .filter(|(stage, _)| !stage.is_empty())
+        .map(|(stage, s)| format!("{stage}:{:.3}", s * 1000.))
+        .collect::<Vec<_>>()
+        .join(",")
 }
 /// One timeline line (`PANEL_TRACE`) under [`frame_trace`], with the caller's numeric fields.
 pub fn trace(stage: &'static str, fields: impl FnOnce() -> String) {

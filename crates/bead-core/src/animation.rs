@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 //! Stable-ID animation state lives outside views. Rendering consumes only the pose.
+use crate::profile::{NO_SPLITS, Splits};
 use std::{
     collections::BTreeMap,
     sync::atomic::{AtomicBool, Ordering},
@@ -168,6 +169,8 @@ struct Motion {
     worst: (u32, [f64; 3]),
     /// The three costliest frame renders (commit index, seconds), costliest first (B0305).
     top: [(u32, f64); 3],
+    /// The costliest render's largest phases (name, seconds), largest first (B0310).
+    top_split: [(&'static str, f64); 4],
 }
 /// One finished motion as the user saw it: request to first frame, then frames until the final pose.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -185,6 +188,8 @@ pub struct Slide {
     pub gap_render_ms: f64,
     /// The three costliest frame renders (commit index, ms), costliest first; unused slots are 0.
     pub render_top: [(u32, f64); 3],
+    /// The largest phases (name, ms) of the costliest render, largest first; unused slots are empty.
+    pub top_split: [(&'static str, f64); 4],
 }
 impl std::fmt::Display for Slide {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -209,6 +214,15 @@ impl std::fmt::Display for Slide {
             .enumerate()
         {
             write!(f, "{}{at}:{ms:.1}", if n > 0 { "," } else { "" })?;
+        }
+        f.write_str(" top_split=")?;
+        for (n, (stage, ms)) in self
+            .top_split
+            .iter()
+            .filter(|(stage, _)| !stage.is_empty())
+            .enumerate()
+        {
+            write!(f, "{}{stage}:{ms:.1}", if n > 0 { "," } else { "" })?;
         }
         Ok(())
     }
@@ -242,6 +256,7 @@ impl Animations {
                     max_gap: 0.,
                     worst: (0, [0.; 3]),
                     top: [(0, 0.); 3],
+                    top_split: [("", 0.); 4],
                 },
             );
         }
@@ -253,7 +268,7 @@ impl Animations {
     /// before it was drawn, such as one dropdown switching to another, then finishes normally).
     /// The commit with `id`'s final pose returns its `Slide` (once).
     pub fn committed(&mut self, id: &str, drawn: f64, now: f64) -> Option<Slide> {
-        self.committed_timed(id, drawn, now, None, now)
+        self.committed_timed(id, drawn, now, None, now, &NO_SPLITS)
     }
     /// `committed` with the frame's timing: the frame callback that triggered the draw (if any)
     /// and the draw start, on the same clock as `now`. They split the worst gap for `Slide`.
@@ -264,6 +279,7 @@ impl Animations {
         now: f64,
         callback: Option<f64>,
         draw_start: f64,
+        splits: &Splits,
     ) -> Option<Slide> {
         let finished = self
             .states
@@ -289,6 +305,11 @@ impl Animations {
             }
         }
         let render = now - draw_start.clamp(motion.last_frame, now);
+        if render > motion.top[0].1 {
+            let mut phases = *splits;
+            phases.sort_by(|a, b| b.1.total_cmp(&a.1));
+            motion.top_split = std::array::from_fn(|i| phases[i]);
+        }
         if render > motion.top[2].1 {
             motion.top[2] = (motion.frames, render);
             motion.top.sort_by(|a, b| b.1.total_cmp(&a.1));
@@ -309,6 +330,7 @@ impl Animations {
             gap_queue_ms: motion.worst.1[1] * 1000.,
             gap_render_ms: motion.worst.1[2] * 1000.,
             render_top: motion.top.map(|(at, s)| (at, s * 1000.)),
+            top_split: motion.top_split.map(|(stage, s)| (stage, s * 1000.)),
         };
         motion.frames = u32::MAX;
         Some(slide)
@@ -354,6 +376,7 @@ impl Animations {
                 max_gap: 0.,
                 worst: (0, [0.; 3]),
                 top: [(0, 0.); 3],
+                top_split: [("", 0.); 4],
             },
         );
     }
@@ -479,12 +502,16 @@ mod tests {
     fn a_slide_splits_its_worst_gap_into_wait_queue_and_render() {
         let mut a = Animations::default();
         a.open_to("p", true, 0., 1., Curve::EaseOut);
-        a.committed_timed("p", 0., 0., None, 0.);
+        a.committed_timed("p", 0., 0., None, 0., &NO_SPLITS);
         // Gap 0.1: wait 0.04, queue 0.02, render 0.04.
-        a.committed_timed("p", 0.1, 0.1, Some(0.04), 0.06);
+        a.committed_timed("p", 0.1, 0.1, Some(0.04), 0.06, &NO_SPLITS);
         // Smaller gap 0.05, no callback: queue 0.01, render 0.04.
-        a.committed_timed("p", 0.15, 0.15, None, 0.11);
-        let slide = a.committed_timed("p", 1., 1.15, Some(0.2), 1.1).unwrap();
+        a.committed_timed("p", 0.15, 0.15, None, 0.11, &NO_SPLITS);
+        let mut splits = NO_SPLITS;
+        splits[..3].copy_from_slice(&[("prepare", 0.01), ("gl_draw", 0.03), ("swap", 0.002)]);
+        let slide = a
+            .committed_timed("p", 1., 1.15, Some(0.2), 1.1, &splits)
+            .unwrap();
         assert_eq!((slide.gap_at, slide.frames), (3, 4));
         assert!((slide.max_gap_ms - 1000.).abs() < 1e-6);
         let sum = slide.gap_wait_ms + slide.gap_queue_ms + slide.gap_render_ms;
@@ -495,7 +522,12 @@ mod tests {
         assert!(text.contains(" max_gap_ms=1000.0 gap_at=3 gap_wait_ms=50.0"));
         // The three costliest renders by commit index, costliest first (the last render is 50 ms).
         assert!(text.contains(" render_top=3:50.0,"), "{text}");
-        assert_eq!(text.matches(':').count(), 3, "{text}");
+        // The phases of that costliest render, largest first.
+        assert!(
+            text.ends_with(" top_split=gl_draw:30.0,prepare:10.0,swap:2.0"),
+            "{text}"
+        );
+        assert_eq!(text.matches(':').count(), 6, "{text}");
     }
     #[test]
     fn cubic_in_out_has_symmetric_endpoints_midpoint_and_quarters() {
