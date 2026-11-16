@@ -2284,12 +2284,15 @@ impl App {
         let result = (|| -> Result<Surface, Box<dyn Error>> {
             let surface = self.compositor.create_surface(qh);
             let empty = Region::new(&self.compositor)?;
-            if !self.options.interactive
-                || (companion
-                    && (!self.panel_target
-                        || self.options.panel_spec.is_none()
-                        || self.options.panel_spec.as_ref().is_some_and(|s| s.passive)))
-            {
+            let companion_closed = !self.panel_target
+                || self.options.panel_spec.is_none()
+                || self.options.panel_spec.as_ref().is_some_and(|s| s.passive);
+            if starts_input_less(
+                self.options.interactive,
+                companion,
+                companion_closed,
+                self.options.bar || self.options.panel,
+            ) {
                 surface.set_input_region(Some(empty.wl_region()));
             }
             let fractional = if self.viewporter.is_some() {
@@ -2664,6 +2667,52 @@ fn attach_wallpaper_buffer(
     );
     layer.commit();
     Ok(())
+}
+
+/// Whether a new layer surface starts with an empty input region. Only the bar and a
+/// panel-mode primary have a rule that later sets their hit area; any other primary
+/// (a panels-only app's) draws nothing interactive, so it must never cover the desktop.
+fn starts_input_less(
+    interactive: bool,
+    companion: bool,
+    companion_closed: bool,
+    has_hit_rule: bool,
+) -> bool {
+    !interactive
+        || if companion {
+            companion_closed
+        } else {
+            !has_hit_rule
+        }
+}
+
+#[cfg(test)]
+mod input_rule_tests {
+    use super::starts_input_less;
+
+    #[test]
+    fn only_surfaces_with_a_hit_rule_start_with_input() {
+        assert!(
+            starts_input_less(true, false, false, false),
+            "panels-only primary"
+        );
+        assert!(
+            !starts_input_less(true, false, false, true),
+            "bar or panel primary"
+        );
+        assert!(
+            starts_input_less(false, false, false, true),
+            "non-interactive"
+        );
+        assert!(
+            starts_input_less(true, true, true, false),
+            "closed companion"
+        );
+        assert!(
+            !starts_input_less(true, true, false, false),
+            "open companion"
+        );
+    }
 }
 
 fn write_bgra(bytes: &mut [u8], rgba: &[u8]) {

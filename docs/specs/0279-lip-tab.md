@@ -80,3 +80,8 @@ opening the status peek. Headless 120 Hz capture strips: pending (see the unit h
 ## Pearl slots keep the resident tab (B0297)
 The tab belongs to its panel group: `swap_group` swaps `edge.tab` with the slot's group, so a pearl or guide draw (whose `lip_tab_prepare` skips with `pearl`) sees no tab and detaches, poses or redraws nothing.
 Before, each pearl draw (about 1/s) dropped the resident's tab and redrew the free pill at the screen edge; the next resident draw re-attached it. The slot's own detach sites (close, unmap) are covered the same way. `edges_panel_changed` returns early inside a slot (like `edge_panel_hover`): a pearl or guide starting there would otherwise redraw the lips without seeing the resident tab and show its free pill beside it.
+
+## Input under the bar (B0298)
+
+- A layer surface takes input only where something visible is interactive. The bar and a panel-mode primary set their hit area as they draw; a primary that is neither (a panels-only app's `(0, 32)` strip under the bar's exclusive zone) starts with an empty input region (`starts_input_less`), so it never swallows clicks meant for windows.
+- Reserved frame strips are always input-less; a lip's input is its own rect (see the top-tab rule above).
