@@ -1072,6 +1072,7 @@ mod tests {
             duration: 0.150,
             return_duration: None,
             return_curve: None,
+            auto_open: false,
             spring: false,
             curve: None,
             edge: bead_core::Edge::Bottom,

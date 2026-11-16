@@ -1038,6 +1038,8 @@ impl ViewSpec {
                         art: None,
                         body: None,
                         open: boolean(p, "open", true, source)?,
+                        // Absent: the panel profile's open duration, set once the layout knows the travel.
+                        auto_open: !p.contains_key("duration"),
                         duration: f64::from(number(p, "duration", 0.2, source)?),
                         return_duration: if p.contains_key("return_duration") {
                             let value = number(p, "return_duration", 0., source)?;
@@ -1696,6 +1698,7 @@ pub fn layout(
             motion.parts = parts;
         }
     }
+    output.scene.settle_open_duration();
     Ok(output)
 }
 /// `primitive` grown by `extent` behind `edge`: the part that `joined_clip` cuts off.

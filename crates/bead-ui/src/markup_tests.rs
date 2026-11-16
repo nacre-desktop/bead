@@ -1672,6 +1672,36 @@ fn panel_transition_selects_cubic_in_out_without_changing_legacy_curves() {
 }
 
 #[test]
+fn the_luau_panel_profile_mirrors_the_rust_token_and_defaults_the_durations() {
+    use bead_core::animation::PANEL;
+    let f = fixture();
+    let panel = |props: &str| {
+        fs::write(
+            f.0.join("ui/main.luau"),
+            format!(r#"local ui=require("bead.ui"); local p=ui.motion.panel; return ui.Panel{{id="preview",open=true,{props}}}"#),
+        )
+        .unwrap();
+        session(&f)
+    };
+    // Each token read from Luau lands in a prop the scene reports back.
+    let s = panel("width=p.leave_ms,height=60,duration=p.open_min,return_duration=p.close,slide_distance=p.speed/4");
+    let m = s.current.motion.as_ref().unwrap();
+    assert_eq!(s.current.width, PANEL.leave_ms as f32);
+    assert_eq!((m.duration, m.return_duration), (PANEL.open_min, Some(PANEL.close)));
+    assert_eq!(f64::from(m.slide_distance.unwrap()), PANEL.speed / 4.);
+    assert_eq!(panel("width=10,height=60,duration=p.open_max").current.motion.as_ref().unwrap().duration, PANEL.open_max);
+    // Unauthored: the travel sets the open duration and the close is the profile's.
+    let m = panel("edge='left',width=400,height=900").current.motion.clone().unwrap();
+    assert_eq!((m.duration, m.close_duration()), (0.25, PANEL.close));
+    let m = panel("edge='top',width=400,height=900").current.motion.clone().unwrap();
+    assert_eq!(m.duration, PANEL.open_max);
+    let m = panel("edge='left',width=400,height=900,slide_distance=100").current.motion.clone().unwrap();
+    assert_eq!(m.duration, PANEL.open_min);
+    let m = panel("edge='left',width=400,height=900,duration=.5,return_duration=.1").current.motion.clone().unwrap();
+    assert_eq!((m.duration, m.close_duration()), (0.5, 0.1));
+}
+
+#[test]
 fn panel_return_duration_is_optional_and_bounded() {
     let f = fixture();
     fs::write(
@@ -2637,6 +2667,7 @@ fn closed_error_overlay_replaces_retained_body_without_stale_layer_ranges() {
             duration: 0.2,
             return_duration: None,
             return_curve: None,
+            auto_open: false,
             spring: false,
             curve: None,
             edge: bead_core::Edge::Right,

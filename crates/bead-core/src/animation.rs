@@ -103,6 +103,26 @@ pub const DURATIONS: [(&str, f64); 17] = [
     ("toast", 0.22),
     ("dock", 0.22),
 ];
+/// The one panel motion profile (`ui.motion.panel` in Luau): open takes `travel / speed` clamped
+/// to `open_min..=open_max`, close takes `close`, a hover-opened panel closes `leave_ms` after the pointer leaves.
+pub struct PanelProfile {
+    pub speed: f64,
+    pub open_min: f64,
+    pub open_max: f64,
+    pub close: f64,
+    pub leave_ms: u64,
+}
+pub const PANEL: PanelProfile = PanelProfile {
+    speed: 1600.,
+    open_min: 0.18,
+    open_max: 0.32,
+    close: 0.18,
+    leave_ms: 150,
+};
+/// Default open duration in seconds of a panel that travels `travel` logical pixels.
+pub fn panel_open_duration(travel: f32) -> f64 {
+    (f64::from(travel.max(0.)) / PANEL.speed).clamp(PANEL.open_min, PANEL.open_max)
+}
 pub fn duration(name: &str) -> Option<f64> {
     DURATIONS.iter().find(|(n, _)| *n == name).map(|(_, d)| *d)
 }
@@ -355,6 +375,13 @@ impl Animations {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn the_panel_open_duration_is_travel_over_speed_within_its_bounds() {
+        assert_eq!(panel_open_duration(0.), PANEL.open_min);
+        assert_eq!(panel_open_duration(100.), PANEL.open_min, "short travel");
+        assert!((panel_open_duration(400.) - 0.25).abs() < 1e-9, "in range");
+        assert_eq!(panel_open_duration(4000.), PANEL.open_max, "long travel");
+    }
     #[test]
     fn a_held_motion_starts_at_its_first_committed_frame() {
         let mut a = Animations::default();

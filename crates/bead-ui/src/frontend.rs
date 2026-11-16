@@ -201,7 +201,7 @@ return function(ui, constructors, allowed, arrayMarker)
         return {__animate=ui.__pulse(string_arg(key, "pulse key"), number_arg(period, "pulse period"),
             number_arg(lo, "pulse low"), number_arg(hi, "pulse high"))}
     end
-    table.freeze(ui.motion.duration); table.freeze(ui.motion.curve); table.freeze(ui.motion)
+    table.freeze(ui.motion.duration); table.freeze(ui.motion.panel); table.freeze(ui.motion.curve); table.freeze(ui.motion)
     ui.action = function(name, argument)
         return {name=string_arg(name, "action name"), argument=argument}
     end
@@ -854,6 +854,13 @@ impl Vm {
                 .iter()
                 .map(|(name, seconds)| (*name, *seconds))
                 .collect::<BTreeMap<_, _>>(),
+            "panel": {
+                "speed": bead_core::animation::PANEL.speed,
+                "open_min": bead_core::animation::PANEL.open_min,
+                "open_max": bead_core::animation::PANEL.open_max,
+                "close": bead_core::animation::PANEL.close,
+                "leave_ms": bead_core::animation::PANEL.leave_ms,
+            },
             "curve": Curve::NAMES
                 .iter()
                 .map(|(name, _)| (name.replace('-', "_"), *name))

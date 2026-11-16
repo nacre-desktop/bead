@@ -621,13 +621,10 @@ fn key(output: &str, lip: &str) -> String {
     format!("{output}/{lip}")
 }
 const SIDES: [Edge; 4] = [Edge::Top, Edge::Right, Edge::Bottom, Edge::Left];
-/// Delay between pointer leave and closing a hover-opened panel: a bar popup closes fast; a
-/// panel docked on a screen edge (opened from a strip lip) tolerates the usual 100-300 ms
-/// overshoot past its inner edge.
-const EXIT_MS: u64 = 130;
-const DOCK_EXIT_MS: u64 = 450;
-fn exit_grace(bar_hosted: bool) -> Duration {
-    Duration::from_millis(if bar_hosted { EXIT_MS } else { DOCK_EXIT_MS })
+/// Delay between pointer leave and closing a hover-opened panel: the panel profile's leave delay,
+/// for bar-hosted and docked panels alike.
+fn exit_grace() -> Duration {
+    Duration::from_millis(bead_core::animation::PANEL.leave_ms)
 }
 /// A press or key on the hover-opened panel pins it: it then closes only on Escape, a lip
 /// click or a click outside.
@@ -1798,12 +1795,7 @@ impl App {
                 self.edge.panel_hovered
             );
         }
-        let delay = exit_grace(
-            opened
-                .split_once('/')
-                .and_then(|(_, id)| self.lip_named(id))
-                .is_some_and(|lip| self.bar_hosts(&lip)),
-        );
+        let delay = exit_grace();
         if self.edge.exit.update(
             enabled,
             (held, self.edge.panel_hovered),
@@ -2773,19 +2765,19 @@ mod tests {
     }
 
     #[test]
-    fn docked_panels_get_a_longer_exit_grace_and_reentry_cancels_the_close() {
-        assert_eq!(exit_grace(true), Duration::from_millis(130), "bar popup");
-        let grace = exit_grace(false);
-        assert_eq!(grace, Duration::from_millis(450), "edge dock");
+    fn every_panel_gets_the_profile_exit_grace_and_reentry_cancels_the_close() {
+        // Bar-hosted lips, popouts, peeks and docked panels share one delay (B0307).
+        let grace = exit_grace();
+        assert_eq!(grace, Duration::from_millis(150));
         let mut hover = bead_core::edge_hover::EdgeHover::default();
         let left = Instant::now();
         assert!(!hover.update(true, (false, false), false, left, grace));
-        // Overshooting the inner edge for 300 ms and coming back cancels the pending close.
+        // Overshooting the inner edge for 100 ms and coming back cancels the pending close.
         assert!(!hover.update(
             true,
             (false, true),
             false,
-            left + Duration::from_millis(300),
+            left + Duration::from_millis(100),
             grace
         ));
         assert!(hover.deadline().is_none());
@@ -2807,7 +2799,7 @@ mod tests {
             (false, false),
             false,
             Instant::now(),
-            exit_grace(false),
+            exit_grace(),
         );
         assert!(edge.exit.deadline().is_some());
         pin(&mut edge);

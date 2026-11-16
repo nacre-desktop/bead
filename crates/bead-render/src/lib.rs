@@ -403,6 +403,8 @@ pub struct Motion {
     pub return_duration: Option<f64>,
     /// Optional curve for returning to the attached pose.
     pub return_curve: Option<bead_core::animation::Curve>,
+    /// No authored `duration`: the open duration follows the panel's travel (`Scene::settle_open_duration`).
+    pub auto_open: bool,
     pub spring: bool,
     /// Explicit easing overrides the legacy spring/ease-out selection.
     pub curve: Option<bead_core::animation::Curve>,
@@ -438,12 +440,16 @@ impl Motion {
             )
         } else {
             (
-                // A host-authored return duration is honoured as written (it may exceed the open).
-                self.return_duration
-                    .unwrap_or_else(|| (self.duration * 0.7).min(0.22)),
-                bead_core::animation::Curve::EmphasizedAccelerate,
+                self.close_duration(),
+                self.return_curve
+                    .unwrap_or(bead_core::animation::Curve::EmphasizedAccelerate),
             )
         }
+    }
+    /// A host-authored return duration is honoured as written (it may exceed the open); else the panel profile's close.
+    pub fn close_duration(&self) -> f64 {
+        self.return_duration
+            .unwrap_or(bead_core::animation::PANEL.close)
     }
 }
 impl Motion {
@@ -852,6 +858,24 @@ impl Scene {
                 body.h + 2. * M,
             )
         })
+    }
+    /// Gives an unauthored open duration the panel profile's value for the distance the panel travels:
+    /// `slide_distance`, else the body extent along its edge.
+    pub fn settle_open_duration(&mut self) {
+        let Some(travel) = self.motion.as_ref().filter(|m| m.auto_open).map(|m| {
+            m.slide_distance.or_else(|| {
+                let body = self.reveal_body()?;
+                Some(match m.edge {
+                    bead_core::Edge::Left | bead_core::Edge::Right => body.w,
+                    bead_core::Edge::Top | bead_core::Edge::Bottom => body.h,
+                })
+            })
+        }) else {
+            return;
+        };
+        if let Some(m) = self.motion.as_mut() {
+            m.duration = bead_core::animation::panel_open_duration(travel.unwrap_or(0.));
+        }
     }
     pub fn bounds(&self) -> Rect {
         self.bounds.translated(self.offset.0, self.offset.1)
@@ -2786,6 +2810,7 @@ mod tests {
             duration: 0.3,
             return_duration: None,
             return_curve: None,
+            auto_open: false,
             spring: false,
             curve: None,
             edge: bead_core::Edge::Top,
@@ -2856,6 +2881,7 @@ mod tests {
             duration: 0.3,
             return_duration: None,
             return_curve: None,
+            auto_open: false,
             spring: false,
             curve: None,
             edge: bead_core::Edge::Top,
@@ -3127,6 +3153,7 @@ mod tests {
             duration: 0.36,
             return_duration: None,
             return_curve: None,
+            auto_open: false,
             spring: false,
             curve: None,
             edge: bead_core::Edge::Top,
@@ -3202,6 +3229,7 @@ mod tests {
             duration: 0.3,
             return_duration: None,
             return_curve: None,
+            auto_open: false,
             spring: false,
             curve: None,
             edge: bead_core::Edge::Bottom,
@@ -3293,6 +3321,7 @@ mod tests {
             duration: 0.3,
             return_duration: None,
             return_curve: None,
+            auto_open: false,
             spring: false,
             curve: None,
             edge,
@@ -3359,6 +3388,7 @@ mod tests {
                 duration: 0.3,
                 return_duration: None,
                 return_curve: None,
+                auto_open: false,
                 spring: false,
                 curve: None,
                 edge,
@@ -3440,6 +3470,7 @@ mod tests {
                 duration: 0.3,
                 return_duration: None,
                 return_curve: None,
+                auto_open: false,
                 spring: false,
                 curve: None,
                 edge: bead_core::Edge::Bottom,
@@ -3500,7 +3531,7 @@ mod tests {
         animations.committed("panel", 0., 0.);
         assert_eq!(animations.value("panel", 0.3), Some((1., false)));
         let (duration, curve) = scene.motion.as_ref().unwrap().transition(false);
-        assert!((duration - 0.21).abs() < 0.001);
+        assert!((duration - 0.18).abs() < 0.001);
         assert_eq!(curve, bead_core::animation::Curve::EmphasizedAccelerate);
         animations.open_to("panel", false, 0.3, duration, curve);
         let mut last_positions = Vec::new();
@@ -4359,6 +4390,7 @@ mod motion_transition_tests {
             duration,
             return_duration,
             return_curve: None,
+            auto_open: false,
             spring: false,
             curve: None,
             edge: bead_core::Edge::Top,
@@ -4373,13 +4405,46 @@ mod motion_transition_tests {
     }
 
     /// B0274: a host-authored close duration is used as written, longer than the open too
-    /// (the review's OSD opens in .16 s and closes in .2 s); the default stays 0.7x, at most .22 s.
+    /// (the review's OSD opens in .16 s and closes in .2 s); B0307: otherwise the panel profile's close.
     #[test]
-    fn close_duration_may_exceed_the_open_and_defaults_are_unchanged() {
+    fn close_duration_may_exceed_the_open_and_defaults_to_the_profile() {
         assert_eq!(motion(0.16, Some(0.2)).transition(false).0, 0.2);
         assert_eq!(motion(0.22, Some(0.2)).transition(false).0, 0.2);
-        assert!((motion(0.36, None).transition(false).0 - 0.22).abs() < 1e-9);
-        assert!((motion(0.2, None).transition(false).0 - 0.14).abs() < 1e-9);
+        assert_eq!(motion(0.36, None).transition(false).0, 0.18);
+        assert_eq!(motion(0.2, None).transition(false).0, 0.18);
         assert_eq!(motion(0.16, Some(0.2)).transition(true).0, 0.16);
+    }
+
+    #[test]
+    fn return_curve_is_honoured_and_defaults_to_the_accelerating_exit() {
+        use bead_core::animation::Curve;
+        assert_eq!(motion(0.2, None).transition(false).1, Curve::EmphasizedAccelerate);
+        let mut m = motion(0.2, None);
+        m.return_curve = Some(Curve::EaseInOut);
+        assert_eq!(m.transition(false).1, Curve::EaseInOut);
+    }
+
+    fn settled(edge: bead_core::Edge, slide: Option<f32>, auto: bool) -> f64 {
+        let mut scene = Scene::empty(800., 600.);
+        let mut m = motion(0.2, None);
+        (m.edge, m.slide_distance, m.auto_open) = (edge, slide, auto);
+        m.body = Some(Rect::new(0., 0., 400., 800.));
+        scene.motion = Some(m);
+        scene.settle_open_duration();
+        scene.motion.unwrap().duration
+    }
+
+    /// B0307: an unauthored open takes travel / 1600 px/s clamped to .18..=.32 s; the travel is
+    /// `slide_distance`, else the body extent along its edge (width for left/right, height for top/bottom).
+    #[test]
+    fn an_unauthored_open_duration_follows_the_travel() {
+        use bead_core::Edge::*;
+        assert_eq!(settled(Left, Some(100.), true), 0.18, "short travel clamps up");
+        assert!((settled(Left, Some(400.), true) - 0.25).abs() < 1e-9);
+        assert_eq!(settled(Left, Some(2000.), true), 0.32, "long travel clamps down");
+        assert!((settled(Right, None, true) - 0.25).abs() < 1e-9, "width 400");
+        assert_eq!(settled(Top, None, true), 0.32, "height 800 clamps");
+        assert!((settled(Left, Some(400.), true) - settled(Bottom, Some(400.), true)).abs() < 1e-9);
+        assert_eq!(settled(Left, Some(400.), false), 0.2, "an authored duration wins");
     }
 }

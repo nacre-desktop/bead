@@ -32,9 +32,9 @@ External (host-owned) panels do not attach; a separate Bead app process that own
 (`edge_chrome`) and its panel (local `Panels`) gets the tab unchanged, as the `bead` folder host shows:
 nothing here depends on the hosting process, and no cross-process position feed exists or is needed.
 
-Exit grace and pin (Shell ask): a panel opened from a strip-surface lip closes 450 ms after the pointer
-left both body and lip/tab (`DOCK_EXIT_MS`); bar-hosted lips keep 130 ms. Chosen over a spec field: the
-strip/bar distinction already exists and matches dock/popup. A press or key on a hover-opened panel
+Exit grace and pin (Shell ask): a panel opened from a strip-surface lip closes after the pointer
+left both body and lip/tab; since B0307 that is the panel profile's `leave_ms` (150 ms) for docked and
+bar-hosted lips alike (it was 450 / 130 ms). A press or key on a hover-opened panel
 clears `hover_opened`, so it then closes only on Escape, a lip/tab click or a click outside.
 
 Compositor path (spec 0218): a subsurface is not in the atlas, so while a tab exists the panel's motion

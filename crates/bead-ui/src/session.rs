@@ -780,7 +780,7 @@ impl Session {
         let seconds = if opening {
             motion.duration
         } else {
-            motion.return_duration.unwrap_or(motion.duration)
+            motion.close_duration()
         };
         Some(std::time::Duration::from_secs_f64(seconds.max(0.)))
     }
@@ -911,6 +911,7 @@ impl Session {
             self.pointer_inside = false;
             self.pointer_seen = false;
         }
+        // An authored `panel.leave_delay` wins; else the panel profile's.
         let delay = generation
             .script
             .resolve("panel.leave_delay", &stores)
@@ -920,18 +921,21 @@ impl Session {
                     Some(std::time::Duration::from_secs_f64(delay))
                 }
                 _ => None,
-            });
+            })
+            .unwrap_or(std::time::Duration::from_millis(
+                bead_core::animation::PANEL.leave_ms,
+            ));
         let focused = matches!(stores.get("bead.focused"), Some(Value::Text(id))
             if self.current_nodes.iter().any(|node| &node.id == id && node.input.is_some()));
         if self.edge_hover.update(
-            open && hover_close && delay.is_some(),
+            open && hover_close,
             (
                 stores.get("panel.anchor_hovered") == Some(&Value::Bool(true)),
                 self.pointer_inside,
             ),
             focused,
             std::time::Instant::now(),
-            delay.unwrap_or_default(),
+            delay,
         ) {
             self.pointer_seen = false;
             stores

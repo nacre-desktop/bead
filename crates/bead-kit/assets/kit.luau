@@ -4,6 +4,7 @@ return function(ui, tokens)
     -- Durations: the framework's named tokens (ui.motion.duration) plus the kit's own.
     local motion = table.clone(ui.motion.duration)
     motion.color, motion.state, motion.text = .200, .120, .400
+    motion.panel = ui.motion.panel -- the panel profile: speed, open_min, open_max, close, leave_ms
     -- Review metrics in logical px (spec 0274): the corner radii and type sizes tiles, rows and chips share.
     local metrics={radius=table.freeze{panel=24,tile=18,row=12,chip=18},text=table.freeze{caption=12,label=13,body=14,title=16}}
     local kit = {tokens=tokens, motion=table.freeze(motion), metrics=table.freeze(metrics)}
@@ -566,7 +567,7 @@ return function(ui, tokens)
     end
     function kit.Panel(p)
         edge(p)
-        return ui.Panel(props(p,{edge="left",open=true,duration=kit.motion.color,radius=tokens.radii.medium,fill="surface",gap=tokens.spacing.sm}))
+        return ui.Panel(props(p,{edge="left",open=true,radius=tokens.radii.medium,fill="surface",gap=tokens.spacing.sm}))
     end
     function kit.Popover(p)
         local e=edge(p);local out=props(p,{position="absolute",width=240,padding=tokens.spacing.md,

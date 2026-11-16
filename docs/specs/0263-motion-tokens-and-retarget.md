@@ -193,3 +193,10 @@ A fading panel's opacity group (the body flattened once) used to be built on its
 
 A revealing panel's far-edge shadow (and art) slides a pre-rasterised band instead of re-rastering per pose, but the band carries an empty margin past the raster's edge. That margin made the template unusable (`matches` failed at build for a top panel's shadow, and `start + band > extent` rejected it within ~8 px of rest), so every pose rastered the whole shadow, at a cost growing with the revealed height (about 7 ms at dashboard height: a close's frames 1-2 under ease-out, and an open's last frames) and uploaded it. The margin is now required to be empty at build and trimmed from the band at use, so these poses slide the band like a mid-slide frame.
 The dashboard's 3-6 ms open frames 5-6 are not this (only ~3-5 px are revealed there); PANEL_SLIDE's `render_top=<frame>:<ms>,...` (the three costliest frame renders) shows which frames cost live.
+
+## Panel profile (B0307)
+
+One source of truth for panel motion: `bead_core::animation::PANEL` (`speed` 1600 px/s, `open_min` .18, `open_max` .32, `close` .18, `leave_ms` 150), exposed generated to Luau as `ui.motion.panel` (and `kit.motion.panel`).
+An unauthored open `duration` is `clamp(travel / speed, open_min, open_max)` (`Scene::settle_open_duration`, after layout), travel being `slide_distance` or else the body extent along `edge` (width for left/right, height for top/bottom); an authored `duration` wins. The close is `return_duration`, else `close`; the open curve stays EaseOut, the close EmphasizedAccelerate unless `return_transition` is authored (it was parsed but ignored: now honoured).
+`kit.Panel` no longer forces `duration`. Every hover-opened panel closes `leave_ms` after the pointer leaves it, its tab and its strip: the edge exit grace is one value for docked and bar-hosted panels, and a close-on-leave view without `panel.leave_delay` uses it (an authored delay wins).
+Changed defaults: unauthored open .2 -> .18-.32 s; unauthored close min(.7 x open, .22) -> .18 s; dock exit 450 ms and bar exit 130 ms -> 150 ms; a close-on-leave view with no `panel.leave_delay` now closes (it never did).
