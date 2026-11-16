@@ -265,9 +265,10 @@ impl App {
                                 Ok(())
                             } else {
                                 self.request_panel_at(name, output, true, center)?;
+                                self.edge.parent_anchor = call.method == "hover-open";
                                 self.panel_ui(UiEvent::PanelHover {
                                     opened: Some(call.method == "hover-open"),
-                                    anchor: call.method == "hover-open",
+                                    anchor: self.edge.anchor(),
                                 });
                                 Ok(())
                             }
@@ -276,9 +277,11 @@ impl App {
                 }
             }
             "hover-enter" | "hover-leave" => {
+                // The docked tab may hold the anchor too: the parent's leave must not drop it.
+                self.edge.parent_anchor = call.method == "hover-enter";
                 self.panel_ui(UiEvent::PanelHover {
                     opened: None,
-                    anchor: call.method == "hover-enter",
+                    anchor: self.edge.anchor(),
                 });
                 Ok(serde_json::Value::Null)
             }

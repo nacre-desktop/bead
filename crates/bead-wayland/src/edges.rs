@@ -457,6 +457,10 @@ pub(super) struct EdgeState {
     opening_epoch: u64,
     /// The lip attached to the open panel as its tab.
     pub(super) tab: Option<LipTab>,
+    /// The parent shell's lip hover for this process's panel (hover-open/enter/leave requests).
+    pub(super) parent_anchor: bool,
+    /// The hovered lip whose externally owned panel was last seen open.
+    external_open: Option<String>,
     /// Host art of the bar-hosted lips, one per output.
     bar_arts: Vec<BarArt>,
     /// The cursor last sent for a lip surface: pointer (a button) or the default arrow.
@@ -465,6 +469,11 @@ pub(super) struct EdgeState {
     tab_outcome: String,
 }
 impl EdgeState {
+    /// The panel's anchor: the parent's lip hover or the docked tab's own. Two inputs, because the
+    /// parent's leave (over IPC) can arrive after the tab's enter as the tab rides over its lip.
+    pub(super) fn anchor(&self) -> bool {
+        self.parent_anchor || self.tab.as_ref().is_some_and(|tab| tab.hovered)
+    }
     fn tab_outcome(&mut self, outcome: String) {
         if self.tab_outcome != outcome {
             eprintln!("LIP_TAB {outcome}");
@@ -579,6 +588,14 @@ fn lip_shape(button: bool) -> wp_cursor_shape_device_v1::Shape {
     }
 }
 /// The tab glows only while the pointer is on the tab surface itself.
+/// The lip to gate shut: its externally owned panel was seen open and is closed now while the lip
+/// is still hovered (`now` = the hovered lip and whether its panel is open).
+fn external_closed(was_open: Option<&str>, now: Option<(&str, bool)>) -> Option<String> {
+    match now {
+        Some((k, false)) if was_open == Some(k) => Some(k.to_owned()),
+        _ => None,
+    }
+}
 fn tab_hovered(current: bool, kind: &PointerEventKind) -> bool {
     match kind {
         PointerEventKind::Enter { .. } | PointerEventKind::Motion { .. } => true,
@@ -1477,6 +1494,7 @@ impl App {
         a.drawn = Some(stamp);
     }
     fn redraw_lips(&mut self) {
+        self.gate_external_close();
         for i in 0..self.edge.bar_arts.len() {
             self.draw_bar_art(i);
         }
@@ -1486,6 +1504,26 @@ impl App {
                 self.draw_edge(i);
             }
         }
+    }
+    /// An externally owned panel that closes under its resting lip must not reopen until the pointer
+    /// leaves, as `edges_panel_changed` does for a local one. Runs with every lip redraw: the hover
+    /// and the host's open state change there.
+    fn gate_external_close(&mut self) {
+        let now = self.edge.hovered.clone().and_then(|k| {
+            let (output, id) = k.split_once('/')?;
+            let lip = self.lip_named(id)?;
+            let open = self
+                .options
+                .control
+                .as_ref()?
+                .external_panel_open(&lip.opens, output)?;
+            Some((k, open))
+        });
+        let now = now.as_ref().map(|(k, open)| (k.as_str(), *open));
+        if let Some(k) = external_closed(self.edge.external_open.as_deref(), now) {
+            self.edge.gate.dismiss(&k);
+        }
+        self.edge.external_open = now.filter(|(_, open)| *open).map(|(k, _)| k.to_owned());
     }
     fn lip_allowed(&self, lip: &Lip) -> bool {
         let Some(control) = &self.options.control else {
@@ -1675,6 +1713,7 @@ impl App {
         }
     }
     fn redraw_lip(&mut self, k: &str) {
+        self.gate_external_close();
         self.refresh_strip_cursor();
         self.publish_cue(k);
         if self.edge.attached(k) {
@@ -1849,7 +1888,7 @@ impl App {
     /// surface. The tab is the lip: hovering it holds the panel open, clicking it closes it.
     pub(super) fn edge_pointer(&mut self, event: &PointerEvent) -> bool {
         let mut on_tab = false;
-        let mut anchor = None;
+        let mut anchor = false;
         let (lip, output, wl_output) = if let Some(tab) = self
             .edge
             .tab
@@ -1859,7 +1898,7 @@ impl App {
             on_tab = true;
             let was = tab.hovered;
             tab.hovered = tab_hovered(tab.hovered, &event.kind);
-            anchor = (was != tab.hovered).then_some(tab.hovered);
+            anchor = was != tab.hovered;
 
             let (lip, wl_output) = (tab.lip.clone(), tab.output.clone());
             (lip, self.output_id(&wl_output), wl_output)
@@ -1883,10 +1922,10 @@ impl App {
         };
         // The tab is part of the panel's hover region: a panel session that closes on leave (a child
         // process's hover-opened panel, whose lip lives in another process) sees the anchor held.
-        if let Some(anchor) = anchor {
+        if anchor {
             self.panel_ui(UiEvent::PanelHover {
                 opened: None,
-                anchor,
+                anchor: self.edge.anchor(),
             });
         }
         let button = lip_button(on_tab, self.lip_active(&wl_output, &lip));
@@ -2468,6 +2507,22 @@ mod tests {
         assert_eq!((r.x - o.0, r.y - o.1), (856., 0.));
         assert_eq!(bar_origin(Edge::Bottom, output, 40.), (0., 1040.));
         assert_eq!(bar_origin(Edge::Right, output, 40.), (1880., 0.));
+    }
+    #[test]
+    fn an_external_panel_closing_under_its_hovered_lip_gates_the_dwell() {
+        let k = "DP-1/assistant";
+        assert_eq!(
+            external_closed(Some(k), Some((k, false))).as_deref(),
+            Some(k)
+        );
+        // Still open, closed after the pointer left, or never seen open: no gate.
+        assert_eq!(external_closed(Some(k), Some((k, true))), None);
+        assert_eq!(external_closed(Some(k), None), None);
+        assert_eq!(external_closed(None, Some((k, false))), None);
+        assert_eq!(
+            external_closed(Some(k), Some(("DP-1/controls", false))),
+            None
+        );
     }
     #[test]
     fn tab_glow_follows_only_the_tab_surface_pointer() {
