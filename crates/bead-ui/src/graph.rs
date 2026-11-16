@@ -1389,6 +1389,8 @@ return ui.Column{id="root",width=400,height=300,
     #[test]
     fn reorder_remaps_interaction_and_discards_older_snapshots() {
         let (f, mut s) = session();
+        // A snapshot landing during the reload would move the positions this test compares against.
+        settle(s.graphs.get_mut("root.canvas").unwrap());
         let positions = s.graphs["root.canvas"].positions.to_vec();
         let canvas = s.graphs.get_mut("root.canvas").unwrap();
         (canvas.hover, canvas.selected) = (Some(1), Some(2));
