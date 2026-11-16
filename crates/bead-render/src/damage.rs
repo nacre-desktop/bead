@@ -4,10 +4,14 @@ use crate::{
     Damage, Rect,
     tree::{Frame, hash_primitive, rect},
 };
-use std::hash::Hasher;
+use std::hash::{Hash, Hasher};
 #[derive(Clone)]
 struct Record {
     key: u64,
+    /// The item's id hash: pairs the same item across a hand-over where the item count changed.
+    id: u64,
+    /// A plain filled rounded rect's fill and radius (its size may change).
+    solid: Option<([u8; 4], f32)>,
     bounds: Damage,
     geometry: Rect,
     clip: Option<Rect>,
@@ -72,6 +76,28 @@ fn clip_difference(a: Damage, b: Damage) -> Vec<Damage> {
     }
     vec![a, b]
 }
+/// The rows (or columns) in which a rounded rect of `radius` differs after growing or shrinking at one
+/// end only: from the old far corners to the new far edge. None when it moved, changed on both axes
+/// or is short enough for its radius to clamp.
+fn grown_band(old: Rect, new: Rect, radius: f32) -> Option<Rect> {
+    let m = radius + 2.;
+    let vertical = |o: Rect, n: Rect| {
+        if o.x != n.x || o.w != n.w || o.h.min(n.h) <= 2. * m {
+            return None;
+        }
+        let (o_end, n_end) = (o.y + o.h, n.y + n.h);
+        let (from, to) = if o.y == n.y {
+            (o_end.min(n_end) - m, o_end.max(n_end) + 2.)
+        } else if o_end == n_end {
+            (o.y.min(n.y) - 2., o.y.max(n.y) + m)
+        } else {
+            return None;
+        };
+        Some(Rect::new(o.x - 2., from, o.w + 4., to - from))
+    };
+    let swap = |r: Rect| Rect::new(r.y, r.x, r.h, r.w);
+    vertical(old, new).or_else(|| vertical(swap(old), swap(new)).map(swap))
+}
 fn add(regions: &mut Vec<Damage>, mut next: Damage) {
     if next.w == 0 || next.h == 0 {
         return;
@@ -91,6 +117,37 @@ fn add(regions: &mut Vec<Damage>, mut next: Damage) {
         }
     }
     regions.push(next);
+}
+/// Pair one unmatched run: the same item (by id) first, so an item inserted or removed ahead of the
+/// run (a reveal's edge piece at a hand-over) does not shift every later pair; the rest by position.
+fn pair_run(
+    old: &[Record],
+    new: &[Record],
+    o: std::ops::Range<usize>,
+    n: std::ops::Range<usize>,
+    pairs: &mut Vec<(Option<usize>, Option<usize>)>,
+) {
+    let mut ids = std::collections::HashMap::with_capacity(n.len());
+    for j in n.clone() {
+        ids.entry(new[j].id).or_insert(j);
+    }
+    let mut taken = vec![false; n.len()];
+    let mut rest = Vec::new();
+    for i in o {
+        // An identical pair is left to the positional fallback: its order against others may have changed.
+        match ids.get(&old[i].id) {
+            Some(&j) if !taken[j - n.start] && !old[i].same_pixels(&new[j]) => {
+                taken[j - n.start] = true;
+                pairs.push((Some(i), Some(j)));
+            }
+            _ => rest.push(i),
+        }
+    }
+    let mut free = n.clone().filter(|j| !taken[j - n.start]);
+    for i in rest {
+        pairs.push((Some(i), free.next()));
+    }
+    pairs.extend(free.map(|j| (None, Some(j))));
 }
 /// Pair the items that differ between two frames, in order. Identical records are matched by a
 /// bounded longest-common-subsequence over the differing middle; each unmatched run between two
@@ -141,12 +198,7 @@ fn align(
     let mut pairs = Vec::new();
     let (mut o, mut n) = (prefix, prefix);
     for (anchor_old, anchor_new) in anchors {
-        for k in 0..(anchor_old - o).max(anchor_new - n) {
-            pairs.push((
-                (o + k < anchor_old).then_some(o + k),
-                (n + k < anchor_new).then_some(n + k),
-            ));
-        }
+        pair_run(old, new, o..anchor_old, n..anchor_new, &mut pairs);
         (o, n) = (anchor_old + 1, anchor_new + 1);
     }
     pairs
@@ -203,8 +255,20 @@ impl FrameDamage {
                 hash_primitive(&item.primitive, false, &mut h);
                 h.finish()
             };
+            let mut id = std::collections::hash_map::DefaultHasher::new();
+            item.id.hash(&mut id);
             let next = Record {
                 key,
+                id: id.finish(),
+                solid: match item.primitive {
+                    crate::Primitive::Rounded {
+                        radius,
+                        fill,
+                        border: None,
+                        ..
+                    } => Some((fill, radius)),
+                    _ => None,
+                },
                 bounds,
                 geometry,
                 clip,
@@ -278,6 +342,15 @@ impl FrameDamage {
                         for part in clip_difference(old.bounds, next.bounds) {
                             add(&mut dirty, part);
                         }
+                    } else if old.clip == next.clip
+                        && old.opacity == next.opacity
+                        && let (Some((fill, radius)), Some(other)) = (old.solid, next.solid)
+                        && (fill, radius) == other
+                        && let Some(band) = grown_band(old.geometry, next.geometry, radius)
+                    {
+                        // A plain rounded rect that only grew or shrank: its far corners and the added strip.
+                        let band = band.pixels(frame.scale, width, height);
+                        add(&mut dirty, intersect(band, old.bounds.union(next.bounds)));
                     } else {
                         add(&mut dirty, old.bounds);
                         add(&mut dirty, next.bounds);
@@ -351,6 +424,73 @@ impl FrameDamage {
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn solid(id: &str, rect: Rect, clip: Option<Rect>) -> crate::tree::Item {
+        crate::tree::Item {
+            image: None,
+            id: id.into(),
+            primitive: crate::Primitive::Rounded {
+                rect,
+                radius: 8.,
+                fill: [10, 20, 30, 255],
+                border: None,
+            },
+            clip,
+            raster: None,
+        }
+    }
+    fn frame(items: Vec<crate::tree::Item>) -> Frame {
+        Frame {
+            native_resource_budget: None,
+            _assets: Vec::new(),
+            items,
+            scale: 1.,
+            key: 0,
+            layer_count: 0,
+            layers: vec![],
+            _accounting: None,
+        }
+    }
+    #[test]
+    fn a_rounded_rect_growing_or_shrinking_damages_its_far_corners_and_the_strip() {
+        for (from, to) in [(100., 120.), (120., 100.)] {
+            let mut damage = FrameDamage::default();
+            let body = |h| frame(vec![solid("body", Rect::new(10., 0., 200., h), None)]);
+            damage.update(&body(from), (0., 0.), 1., 300, 300).unwrap();
+            let dirty = damage.update(&body(to), (0., 0.), 1., 300, 300).unwrap();
+            assert_eq!(dirty.len(), 1);
+            let d = dirty[0];
+            assert!(d.y >= 80 && d.y <= 92, "{d:?}");
+            assert!(d.y + d.h >= 120 && d.h <= 42, "{d:?}");
+        }
+        let (short, moved) = (Rect::new(0., 0., 50., 15.), Rect::new(0., 4., 50., 120.));
+        assert_eq!(grown_band(short, Rect::new(0., 0., 50., 25.), 8.), None);
+        assert_eq!(grown_band(Rect::new(0., 0., 50., 100.), moved, 8.), None);
+    }
+    #[test]
+    fn an_item_inserted_ahead_of_a_clip_change_does_not_damage_the_whole_run() {
+        // A reveal's hand-over: an edge piece is inserted at index 1 and every later item gets a clip.
+        let rows = |clip| {
+            (0..6)
+                .map(|i| {
+                    let rect = Rect::new(0., 40. * i as f32, 200., 30.);
+                    solid(&format!("row{i}"), rect, clip)
+                })
+                .collect::<Vec<_>>()
+        };
+        let mut damage = FrameDamage::default();
+        damage
+            .update(&frame(rows(None)), (0., 0.), 1., 300, 300)
+            .unwrap();
+        let mut moving = rows(Some(Rect::new(0., 0., 200., 200.)));
+        moving.insert(1, solid("edge", Rect::new(0., 200., 200., 10.), None));
+        let dirty = damage
+            .update(&frame(moving), (0., 0.), 1., 300, 300)
+            .unwrap();
+        let area: u32 = dirty.iter().map(|d| d.w * d.h).sum();
+        // The edge piece and the rows the clip hides (row5 at y 200..230), not the 200x240 body.
+        assert!(area < 200 * 80, "{dirty:?}");
+        assert!(dirty.iter().any(|d| d.y + d.h >= 230), "{dirty:?}");
+    }
     #[test]
     fn a_moving_clip_edge_damages_only_the_strip_between_the_edges() {
         let rect = |y, h| Damage { x: 10, y, w: 50, h };
@@ -412,7 +552,7 @@ mod tests {
                         [180, 40, 30, 128],
                     ),
                 ]);
-                for case in 0..8 {
+                for case in 0..12 {
                     let mut next = frame(old.items.clone());
                     for (i, node) in next.items.iter_mut().enumerate().skip(1) {
                         node.id = format!("new-{i}");
@@ -455,6 +595,25 @@ mod tests {
                                 Rect::new(20., 20., 20., 20.),
                                 [90, 80, 12, 110],
                             ));
+                        }
+                        8 | 9 => {
+                            // The body grows or shrinks at its far edge (a reveal's fill).
+                            if let Primitive::Rounded { rect, .. } = &mut next.items[0].primitive {
+                                rect.h = if case == 8 { 56. } else { 80. };
+                            }
+                        }
+                        10 | 11 => {
+                            // A reveal hand-over: an edge piece joins ahead of clipped items (ids kept).
+                            next = frame(old.items.clone());
+                            for node in &mut next.items {
+                                node.clip = Some(Rect::new(0., 0., 60., 40.));
+                            }
+                            if case == 11 {
+                                next.items.insert(
+                                    1,
+                                    item("edge", Rect::new(2., 40., 50., 8.), [9, 70, 19, 90]),
+                                );
+                            }
                         }
                         _ => unreachable!(),
                     }
