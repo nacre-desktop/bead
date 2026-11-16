@@ -1596,8 +1596,7 @@ impl TreeCache {
                             bead_core::cache::Budget::new("retained-cpu-rasters", LIVE_RASTER_LIMIT)
                         })
                         .reserve(bytes)?;
-                    item.image = None;
-                    item.raster = Some(Arc::new(Raster {
+                    let raster = Some(Arc::new(Raster {
                         changed: Damage::full(pixels.width(), pixels.height()),
                         pixels: Arc::new(pixels),
                         origin: (0, 0),
@@ -1605,6 +1604,18 @@ impl TreeCache {
                         base_key: None,
                         _charge: charge,
                     }));
+                    if matches!(shaped, Primitive::Shadow { .. }) && item.raster.is_some() {
+                        // B0310: the open-state raster stays in the frame, clipped out, so a texture presenter
+                        // uploads it in the held first pose and not when the growing edge first slides it.
+                        let mut pose = item.clone();
+                        pose.id = format!("{}/pose", item.id);
+                        (pose.raster, pose.primitive) = (raster, shaped);
+                        item.clip = Some(Rect::new(0., 0., 0., 0.));
+                        edge_pieces.push((index + 1, pose));
+                        continue;
+                    }
+                    item.image = None;
+                    item.raster = raster;
                 }
                 item.primitive = shaped;
             } else {
@@ -5917,6 +5928,80 @@ mod tests {
                 "progress {progress}: {} pixels differ, worst {worst:?}",
                 bad.len()
             );
+        }
+    }
+    #[test]
+    fn a_revealing_shadow_keeps_its_open_raster_resident_while_the_pose_is_rastered_apart() {
+        let mut scene = Scene {
+            opacity: 1.,
+            motion: None,
+            resource_revision: 1,
+            asset_data: BTreeMap::new(),
+            clips: BTreeMap::new(),
+            layers: vec![],
+            prepared: Default::default(),
+            font_files: vec![],
+            width: 984.,
+            slide: None,
+            primitives: vec![
+                Primitive::Shadow {
+                    rect: Rect::new(-30., -30., 1044., 710.),
+                    radius: 12.,
+                    blur: 10.,
+                },
+                Primitive::Rounded {
+                    rect: Rect::new(0., 0., 984., 650.),
+                    radius: 12.,
+                    fill: [30, 30, 40, 255],
+                    border: None,
+                },
+            ],
+            offset: (32., 32.),
+            bounds: Rect::new(-32., -32., 1048., 714.),
+        };
+        scene.motion = Some(crate::Motion {
+            id: "resident-test".into(),
+            open: true,
+            duration: 0.3,
+            return_duration: None,
+            return_curve: None,
+            auto_open: false,
+            spring: false,
+            curve: None,
+            edge: bead_core::Edge::Top,
+            slide_distance: None,
+            fade: false,
+            reveal: true,
+            progress: 1.,
+            parts: vec![],
+            art: None,
+            body: None,
+        });
+        scene.reveal(1.);
+        let mut worker = TreeCache::default();
+        worker.prepare(&scene, 1.5).unwrap();
+        let open = worker.frame.clone().unwrap();
+        let open_raster = open.items[0].raster.clone().unwrap();
+        scene.prepared.insert(1.5f32.to_bits(), open);
+        let mut cache = TreeCache::default();
+        // 0: the held pose and 0.05: a slow-path pose (under the edge threshold); 0.5: the sliding band.
+        for progress in [0., 0.05, 0.5] {
+            scene.motion.as_mut().unwrap().progress = progress;
+            scene.reveal(progress);
+            cache.prepare(&scene, 1.5).unwrap();
+            let items = &cache.frame.as_ref().unwrap().items;
+            let base = items
+                .iter()
+                .find(|i| i.id == "primitive-0/shadow/0")
+                .unwrap();
+            assert!(
+                Arc::ptr_eq(base.raster.as_ref().unwrap(), &open_raster),
+                "progress {progress}: the open-state raster stays in its slot"
+            );
+            let hidden = base.clip.is_some_and(|c| c.w == 0. && c.h == 0.);
+            assert_eq!(hidden, progress < 0.5, "progress {progress}");
+            let pose = items.iter().any(|i| i.id == "primitive-0/shadow/0/pose");
+            assert_eq!(pose, progress < 0.5, "progress {progress}");
         }
     }
     #[test]
