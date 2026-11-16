@@ -86,6 +86,34 @@ pub(crate) struct PaletteTween {
     generation: u64,
 }
 
+/// One journal line per finished fade, in the PANEL_SLIDE style: what the user saw.
+pub(crate) fn transition_marker(
+    output: &str,
+    kind: WallpaperFadeKind,
+    slide: &bead_core::animation::Slide,
+) -> String {
+    let render_top: Vec<String> = slide
+        .render_top
+        .iter()
+        .filter(|(_, ms)| *ms > 0.)
+        .map(|(at, ms)| format!("{at}:{ms:.1}"))
+        .collect();
+    format!(
+        "WALLPAPER_TRANSITION output={output} kind={} frames={} duration_ms={:.1} \
+         first_frame_ms={:.1} max_gap_ms={:.1} gap_at={} render_top={}",
+        match kind {
+            WallpaperFadeKind::Fade => "fade",
+            WallpaperFadeKind::Grow { .. } => "grow",
+        },
+        slide.frames,
+        slide.duration_ms,
+        slide.first_frame_ms,
+        slide.max_gap_ms,
+        slide.gap_at,
+        render_top.join(",")
+    )
+}
+
 /// Reduced motion, a failed GL setup or no spec is a cut.
 pub(crate) fn plan_fade(
     spec: Option<WallpaperFade>,
@@ -455,7 +483,7 @@ impl App {
     fn fade_committed(&mut self, index: usize, drawn: f64) {
         let now = self.started.elapsed().as_secs_f64();
         let name = self.wallpaper_surfaces[index].name.clone();
-        self.fade_animations.committed_timed(
+        let slide = self.fade_animations.committed_timed(
             &name,
             drawn,
             now,
@@ -464,6 +492,9 @@ impl App {
             &bead_core::profile::NO_SPLITS,
         );
         let surface = &mut self.wallpaper_surfaces[index];
+        if let (Some(slide), Some(run)) = (slide, &surface.fade) {
+            println!("{}", transition_marker(&name, run.spec.kind, &slide));
+        }
         if let Some((revision, token)) = surface.fade.as_mut().and_then(|run| run.commit.take()) {
             self.wallpaper_committed(&name, revision, &token, true);
         }
@@ -699,6 +730,33 @@ mod tests {
             (steps[PALETTE_STEPS / 2 - 1].1 - 0.5).abs() < 1e-6,
             "half time, half way"
         );
+    }
+    #[test]
+    fn a_finished_fade_reports_its_frames_in_the_marker() {
+        let mut a = Animations::default();
+        a.open_to("DP-1", true, 0., 0.7, Curve::EaseInOut);
+        let mut time = 0.05;
+        let slide = loop {
+            if let Some(slide) = a.committed("DP-1", time, time + 0.002) {
+                break slide;
+            }
+            time += if time > 0.3 && time < 0.35 {
+                0.025
+            } else {
+                1. / 120.
+            };
+        };
+        let line = transition_marker(
+            "DP-1",
+            WallpaperFadeKind::Grow { origin: (0.5, 0.5) },
+            &slide,
+        );
+        assert!(line.starts_with("WALLPAPER_TRANSITION output=DP-1 kind=grow frames="));
+        assert!(
+            line.contains("first_frame_ms=52.0") && line.contains("max_gap_ms=2"),
+            "{line}"
+        );
+        assert!(line.contains(" render_top="));
     }
     #[test]
     fn reduced_motion_and_failed_gl_are_a_cut() {

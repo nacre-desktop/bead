@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: MIT
 //! Private-compositor proof host for the wallpaper crossfade: a generated wallpaper that changes
-//! every `BEAD_FADE_INTERVAL_MS` (default 3000) with alternating palettes.
-use bead_wayland::{Options, WallpaperFade, WallpaperFrame, WallpaperProvider, run};
+//! every `BEAD_FADE_INTERVAL_MS` (default 3000) with alternating palettes; `BEAD_FADE_KIND=grow`
+//! grows the new image from the output centre.
+use bead_wayland::{
+    Options, WallpaperFade, WallpaperFadeKind, WallpaperFrame, WallpaperProvider, run,
+};
 use std::sync::{
     Arc, Mutex,
     atomic::{AtomicU64, Ordering},
@@ -76,6 +79,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
     let mut options = Options::default();
     options.wallpaper = Some(provider);
-    options.wallpaper_fade = Some(WallpaperFade::default());
+    options.wallpaper_fade = Some(WallpaperFade {
+        kind: if std::env::var("BEAD_FADE_KIND").as_deref() == Ok("grow") {
+            WallpaperFadeKind::Grow { origin: (0.5, 0.5) }
+        } else {
+            WallpaperFadeKind::Fade
+        },
+        ..WallpaperFade::default()
+    });
     run(options, bead_render::Scene::empty(100., 32.))
 }
