@@ -60,8 +60,12 @@ impl ShellControl for Lips {
     }
 }
 /// Stock lip art: a rounded bar centred on the lip that swells while the dwell charges, while the
-/// pointer is on it and as the lip docks onto its panel as the tab (`attach`).
+/// pointer is on it and as the lip docks onto its panel as the tab (`attach`). An active lip at
+/// rest draws nothing: its pill is the tab (stock folder apps have no frame material to fill with).
 fn lip_art(lip: &Lip, (w, h): (f32, f32), state: LipState) -> Option<Arc<[u8]>> {
+    if state.active && state.attach == 0. && state.progress == 0. && !state.hovered {
+        return None;
+    }
     let swell = state
         .progress
         .max(state.attach)

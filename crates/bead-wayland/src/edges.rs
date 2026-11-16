@@ -357,7 +357,9 @@ fn present_art(
     surface.commit();
     Some(buffer)
 }
-/// The free lip's art: nothing while it rides its panel as the tab, hovered or not.
+/// The free lip's art. While it rides its panel as the tab, its rest box is drawn as an active lip
+/// at rest (`attach` 0, never hovered or charging): the host's frame material, no pill, so a hole
+/// the open panel leaves for the lip stays filled and only the tab glows.
 fn free_lip_art(
     attached: bool,
     art: Option<&EdgeArt>,
@@ -365,9 +367,16 @@ fn free_lip_art(
     size: (u32, u32),
     state: LipState,
 ) -> Option<Arc<[u8]>> {
-    if attached {
-        return None;
-    }
+    let state = if attached {
+        LipState {
+            progress: 0.,
+            active: true,
+            attach: 0.,
+            hovered: false,
+        }
+    } else {
+        state
+    };
     art?(lip, (size.0 as f32, size.1 as f32), state)
 }
 /// Skip identical frames: the art is a pure function of the state.
@@ -462,7 +471,9 @@ impl EdgeState {
         let state = LipState {
             progress: self.progress(&tab.key),
             active: tab.active,
-            attach: tab.attach,
+            // Never 0: `active` at `attach` 0 means the docked rest box (no pill), and the tab's
+            // held first pose must still draw the pill.
+            attach: tab.attach.max(0.001),
             hovered: tab.hovered,
         };
         let size = (
@@ -2337,7 +2348,7 @@ mod tests {
     }
 
     #[test]
-    fn hovered_free_lip_draws_no_art_while_its_tab_is_attached() {
+    fn attached_free_lip_draws_its_rest_box_active_and_never_hovered() {
         let lip = Lip {
             id: "right".into(),
             edge: Edge::Right,
@@ -2350,9 +2361,13 @@ mod tests {
             progress: 1.,
             ..LipState::default()
         };
-        let art: EdgeArt = Arc::new(|_, _, _| Some(Arc::from(&b"<svg/>"[..])));
-        assert!(free_lip_art(true, Some(&art), &lip, (10, 144), state).is_none());
-        assert!(free_lip_art(false, Some(&art), &lip, (10, 144), state).is_some());
+        // The art only answers for the docked rest state.
+        let art: EdgeArt = Arc::new(|_, _, s| {
+            (s.active && s.attach == 0. && s.progress == 0. && !s.hovered)
+                .then(|| Arc::from(&b"<svg/>"[..]))
+        });
+        assert!(free_lip_art(true, Some(&art), &lip, (10, 144), state).is_some());
+        assert!(free_lip_art(false, Some(&art), &lip, (10, 144), state).is_none());
     }
     #[test]
     fn bar_cue_is_off_while_the_tab_is_attached() {
