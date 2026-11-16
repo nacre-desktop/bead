@@ -8,7 +8,7 @@ local function rand()
 end
 local nodes, edges = {}, {}
 for i = 1, 2000 do
-    nodes[i] = { id = "n" .. i, label = "Note " .. i, weight = i % 50 == 0 and 6 or 1 }
+    nodes[i] = { id = "n" .. i, label = "Note " .. i, weight = i % 50 == 0 and 6 or 1, group = i % 3 + 1 }
 end
 for _ = 1, 10000 do
     local from = math.floor(rand() * 2000) + 1

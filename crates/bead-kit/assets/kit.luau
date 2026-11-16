@@ -468,12 +468,14 @@ return function(ui, tokens)
     end
     function kit.List(p) return ui.Scroll(props(p,{grow=1})) end
     function kit.ListRow(p) return kit.Button(props(p,{height=40,width="fill",text_align="left"})) end
-    -- A graph canvas (spec 0232). `graph=ui.graph(nodes, edges)` hands `{{id,label?,weight?}}` and
+    -- A graph canvas (spec 0232). `graph=ui.graph(nodes, edges)` hands `{{id,label?,weight?,group?}}` and
     -- `{{from,to}}` to Rust once (from a module, so the tables can go); Rust reconciles by id and owns
     -- layout, hit testing, pan, zoom, hover, selection, keyboard focus and labels. `on_hover` gets the
     -- node id ("" when nothing is hovered), `on_select` the clicked node's id ("" when Escape clears) and
     -- `on_activate` the double-clicked or Enter-activated node's id. `highlight` lists node ids (or binds a
-    -- list store of `{id}` records) drawn at full strength while the rest dims. `style` holds palette
+    -- list store of `{id}` records) drawn at full strength while the rest dims. `style.groups` lists one
+    -- colour (palette role) per node `group` (integer N uses entry N; no or unknown group uses `node`).
+    -- The camera frames all nodes on first data; bump `fit` (a number) to re-frame on demand. `style` holds palette
     -- roles (`node`, `edge`, `hover`, `selected`, `focus`, `label`) and numbers (`node_radius`,
     -- `label_size`, `label_zoom`, `max_labels`, `lod_zoom`, `far_edge_alpha`).
     function kit.GraphCanvas(p) return ui.Graph(props(p,{width="fill",height="fill",fill="surface",radius=tokens.radii.small})) end

@@ -18,7 +18,10 @@ pub struct GraphGeometry {
     pub edges: Arc<[[u32; 2]]>,
     /// Per-node highlight mask; empty means no highlight set, so nothing is dimmed.
     pub highlight: Arc<[bool]>,
+    /// Per-node colour from the node's group; empty means every node uses `style.node`.
+    pub colors: Arc<[[u8; 4]]>,
 }
+pub const MAX_GROUPS: usize = 16;
 /// Alpha of nodes and edges outside a non-empty highlight set.
 pub const DIM_ALPHA: u8 = 70;
 /// `screen = rect.center + (world - center) * zoom`, in logical pixels.
@@ -59,6 +62,9 @@ pub struct GraphStyle {
     /// Ring of the keyboard-focused node.
     pub focus: [u8; 4],
     pub label: [u8; 4],
+    /// Colours of node groups 1..=`group_count`; other nodes use `node`.
+    pub groups: [[u8; 4]; MAX_GROUPS],
+    pub group_count: u8,
     pub label_size: f32,
     /// From this zoom on, visible nodes get labels by weight until `max_labels`.
     pub label_zoom: f32,
@@ -78,6 +84,8 @@ impl Default for GraphStyle {
             selected: [255, 255, 255, 255],
             focus: [120, 190, 255, 255],
             label: [220, 220, 220, 255],
+            groups: [[0; 4]; MAX_GROUPS],
+            group_count: 0,
             label_size: 13.,
             label_zoom: 1.2,
             max_labels: 32,
@@ -424,7 +432,8 @@ pub fn paint(
         } else if Some(i as u32) == focus {
             canvas.disc(p, ring, style.focus);
         }
-        canvas.disc(p, r, dim(style.node, focused(i)));
+        let color = geometry.colors.get(i).copied().unwrap_or(style.node);
+        canvas.disc(p, r, dim(color, focused(i)));
     }
 }
 

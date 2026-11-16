@@ -486,3 +486,19 @@ strength, the rest dimmed, labels above), Escape (`cleared`) and double-clicked 
 
 Lines (product / tests, against the previous main): bead-ui +249/−17 / +194/−4, bead-render
 +183/−56 / +140/−15, bead-kit +6/−4 (comment), bead +1.
+
+## Groups and fit (B0302)
+
+- Node `group` is an integer index (1-based, `0` or absent means none); `GraphNode.group` is parsed in
+  `ui.graph`, a non-integer is rejected. `style.groups` lists up to 16 colours (palette roles or colour
+  expressions); node group N takes entry N, no or out-of-range group keeps `style.node`. The resolved colours
+  sit in `GraphStyle.groups`; the canvas builds `GraphGeometry.colors` (per node, empty without groups) only
+  when the topology or the node/group style changes, so frames allocate nothing per node; CPU painter and GPU
+  node attributes read it. String group keys stay out: map them to indices in Luau.
+- Fit: the camera frames every node plus its radius, a 16 px margin and a label allowance right of the
+  nodes (200 px, at most a quarter of the width) on the first frame and again once the first layout settles
+  (unless the user moved the camera); that part already existed, now with the margins. New `fit = <number>`
+  prop (`kit.GraphCanvas`): changing the number re-frames once; data deltas never do, so pan and zoom survive.
+- Tests (ui): `a_group_maps_to_its_role_colour_and_a_missing_group_falls_back`,
+  `the_fit_camera_frames_every_node_with_its_label_margin`,
+  `the_camera_fits_on_first_data_and_on_an_explicit_fit_only`.

@@ -17,6 +17,8 @@ pub struct GraphNode {
     pub id: Box<str>,
     pub label: Box<str>,
     pub weight: f32,
+    /// 1-based group index; 0 means none.
+    pub group: u16,
 }
 /// One graph's topology and node attributes; shared by the view node and its canvas.
 #[derive(Debug, Default, PartialEq)]
@@ -72,10 +74,20 @@ impl GraphResource {
                     "GraphCanvas node {id} needs a finite weight >= 0"
                 )));
             }
+            let group = match item.raw_get::<LuaValue>("group")? {
+                LuaValue::Nil => 0,
+                LuaValue::Integer(i) if (0..=i64::from(u16::MAX)).contains(&i) => i as u16,
+                _ => {
+                    return Err(mlua::Error::runtime(format!(
+                        "GraphCanvas node {id} needs an integer group >= 0"
+                    )));
+                }
+            };
             out.nodes.push(GraphNode {
                 id,
                 label,
                 weight: weight as f32,
+                group,
             });
         }
         let nodes = &out.nodes;

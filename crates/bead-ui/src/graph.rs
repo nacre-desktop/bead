@@ -12,7 +12,7 @@ use bead_core::{
 };
 use bead_render::{
     Palette, Primitive, Rect, Scene,
-    graph::{Camera, GraphGeometry, GraphStyle},
+    graph::{Camera, GraphGeometry, GraphStyle, MAX_GROUPS},
 };
 use serde_json::{Map, Value as Json};
 use std::collections::BTreeMap;
@@ -39,6 +39,8 @@ pub struct GraphData {
     pub style: Map<String, Json>,
     /// Node ids drawn at full strength while everything else dims; empty means no dimming.
     pub highlight: Vec<String>,
+    /// Revision counter: a change re-frames the camera on all nodes (spec 0232).
+    pub fit: u64,
     pub on_hover: Option<String>,
     pub on_select: Option<String>,
     pub on_activate: Option<String>,
@@ -77,11 +79,18 @@ impl GraphData {
                 .collect::<Result<_, _>>()?,
             Some(_) => return Err(source.error("highlight must list node ids")),
         };
+        let fit = match p("fit") {
+            None | Some(Json::Null) => 0,
+            Some(v) => v
+                .as_u64()
+                .ok_or_else(|| source.error("fit must be a revision number"))?,
+        };
         let name = |property: &str| Ok::<_, Diagnostic>(action(property)?.map(|(name, _)| name));
         Ok(Self {
             topology,
             style,
             highlight,
+            fit,
             on_hover: name("on_hover")?,
             on_select: name("on_select")?,
             on_activate: name("on_activate")?,
@@ -118,7 +127,25 @@ impl GraphData {
                     ))
                 }),
         };
+        let mut groups = d.groups;
+        let mut group_count = 0;
+        match self.style.get("groups") {
+            None => {}
+            Some(Json::Array(list)) if list.len() <= MAX_GROUPS => {
+                for (slot, role) in groups.iter_mut().zip(list) {
+                    *slot = crate::layout::color(Some(role), d.node, palette, source)?;
+                }
+                group_count = list.len() as u8;
+            }
+            Some(_) => {
+                return Err(source.error(format!(
+                    "style.groups must list at most {MAX_GROUPS} colours"
+                )));
+            }
+        }
         Ok(GraphStyle {
+            groups,
+            group_count,
             node: slot("node", "primary", d.node, 255)?,
             edge: slot("edge", "outlineVariant", d.edge, 150)?,
             hover: slot("hover", "secondary", d.hover, 255)?,
@@ -154,6 +181,7 @@ pub(crate) struct Canvas {
     geometry: Arc<GraphGeometry>,
     geometry_dirty: bool,
     radii_dirty: bool,
+    colors_dirty: bool,
     hit_grid: Grid,
     hit_grid_dirty: bool,
     hit_max_radius: f32,
@@ -175,6 +203,28 @@ pub(crate) struct Canvas {
     /// Camera centre glide towards an off-screen focused node.
     pan: Option<([f32; 2], [f32; 2], Instant)>,
     press: Option<Press>,
+}
+/// Screen padding around a fitted graph, plus room right of the nodes for their labels.
+const FIT_MARGIN: f32 = 16.;
+/// The camera that frames all nodes with `FIT_MARGIN` and a label allowance on the right.
+fn fit_camera(rect: Rect, positions: &[Point], radii: &[f32]) -> Camera {
+    let (mut min, mut max) = ([f32::MAX; 2], [f32::MIN; 2]);
+    for (i, p) in positions.iter().enumerate() {
+        let r = radii.get(i).copied().unwrap_or(3.);
+        for axis in 0..2 {
+            min[axis] = min[axis].min(p[axis] - r);
+            max[axis] = max[axis].max(p[axis] + r);
+        }
+    }
+    let label = LABEL_WIDTH.min(rect.w * 0.25);
+    let (w, h) = ((max[0] - min[0]).max(1.), (max[1] - min[1]).max(1.));
+    let zoom = ((rect.w - 2. * FIT_MARGIN - label).max(1.) / w)
+        .min((rect.h - 2. * FIT_MARGIN).max(1.) / h)
+        .clamp(0.05, 8.);
+    Camera {
+        center: [(min[0] + max[0]) * 0.5 + label / (2. * zoom), (min[1] + max[1]) * 0.5],
+        zoom,
+    }
 }
 fn seed_position(i: usize, n: usize) -> Point {
     // A deterministic scatter sized to the node count, so a fresh graph starts spread out.
@@ -210,6 +260,7 @@ impl Canvas {
             geometry: Arc::default(),
             geometry_dirty: true,
             radii_dirty: true,
+            colors_dirty: true,
             hit_grid: Grid::default(),
             hit_grid_dirty: true,
             hit_max_radius: 0.,
@@ -235,12 +286,20 @@ impl Canvas {
     /// a placed neighbour and settle locally, renames and style changes never reach the worker.
     fn reconcile(&mut self, data: &Arc<GraphData>, style: GraphStyle) {
         let (old, new) = (&self.data.topology, &data.topology);
+        let old_fit = self.data.fit;
         let same_ids = || {
             old.nodes.len() == new.nodes.len()
                 && old.nodes.iter().zip(&new.nodes).all(|(a, b)| a.id == b.id)
         };
         // Weights may change radii; labels are read per frame.
         self.radii_dirty |= !Arc::ptr_eq(old, new);
+        self.colors_dirty |= !Arc::ptr_eq(old, new)
+            || (style.groups, style.group_count, style.node)
+                != (self.style.groups, self.style.group_count, self.style.node);
+        if data.fit != old_fit {
+            // An explicit re-frame: the next frame fits again, even after the user moved.
+            (self.fitted, self.user_moved, self.pan) = (false, false, None);
+        }
         if !Arc::ptr_eq(old, new) && (old.edges != new.edges || !same_ids()) {
             let remap = |i: Option<u32>| i.and_then(|i| new.index(&old.nodes[i as usize].id));
             self.hover = remap(self.hover);
@@ -304,7 +363,7 @@ impl Canvas {
         }
         self.radii_dirty |= style.node_radius != self.style.node_radius;
         self.hit_grid_dirty |= self.radii_dirty;
-        self.geometry_dirty |= self.radii_dirty || style != self.style;
+        self.geometry_dirty |= self.radii_dirty || self.colors_dirty || style != self.style;
         self.style = style;
         self.data = data.clone();
     }
@@ -330,29 +389,29 @@ impl Canvas {
         }
         true
     }
+    /// Frame every node, its radius and the label margin; call after `geometry()`.
     fn fit(&mut self) {
         if self.fitted || self.positions.is_empty() || self.rect.w <= 0. || self.rect.h <= 0. {
             return;
         }
-        let (min, max) =
-            self.positions
-                .iter()
-                .fold(([f32::MAX; 2], [f32::MIN; 2]), |(mut min, mut max), p| {
-                    for axis in 0..2 {
-                        min[axis] = min[axis].min(p[axis]);
-                        max[axis] = max[axis].max(p[axis]);
-                    }
-                    (min, max)
-                });
-        let (w, h) = ((max[0] - min[0]).max(1.), (max[1] - min[1]).max(1.));
-        self.camera = Camera {
-            center: [(min[0] + max[0]) * 0.5, (min[1] + max[1]) * 0.5],
-            zoom: ((self.rect.w / w).min(self.rect.h / h) * 0.9).clamp(0.05, 8.),
-        };
+        self.camera = fit_camera(self.rect, &self.positions, &self.geometry.radii);
         self.fitted = true;
     }
     fn geometry(&mut self) -> Arc<GraphGeometry> {
         if self.geometry_dirty {
+            let colors = if !self.colors_dirty {
+                self.geometry.colors.clone()
+            } else if self.style.group_count == 0 {
+                Arc::default()
+            } else {
+                let style = &self.style;
+                let color = |group: u16| match usize::from(group) {
+                    g @ 1.. if g <= usize::from(style.group_count) => style.groups[g - 1],
+                    _ => style.node,
+                };
+                let nodes = &self.data.topology.nodes;
+                nodes.iter().map(|node| color(node.group)).collect()
+            };
             let radii = if self.radii_dirty {
                 let r = self.style.node_radius;
                 let nodes = &self.data.topology.nodes;
@@ -369,9 +428,11 @@ impl Canvas {
                 radii,
                 edges: self.data.topology.edges.clone(),
                 highlight: self.highlight.clone(),
+                colors,
             });
             self.geometry_dirty = false;
             self.radii_dirty = false;
+            self.colors_dirty = false;
         }
         self.geometry.clone()
     }
@@ -583,8 +644,8 @@ impl Session {
                 .count(),
         );
         for (id, canvas) in &mut self.graphs {
-            canvas.fit();
             let geometry = canvas.geometry();
+            canvas.fit();
             let Some(index) = graph_primitive(scene, id) else {
                 continue;
             };
@@ -1126,6 +1187,81 @@ return ui.Column{{id="root",width=400,height=300,
         assert_eq!(answer.command_revision, c.command_revision);
         assert!(answer.settled, "the settle restarted");
         assert_eq!(&*answer.positions, &*c.positions);
+    }
+
+    #[test]
+    fn a_group_maps_to_its_role_colour_and_a_missing_group_falls_back() {
+        let palette = Palette::parse(
+            br##"{"formatVersion":1,"colours":{"primary":"102030","tertiary":"405060"}}"##,
+        )
+        .unwrap();
+        let source = Source {
+            file: "graph".into(),
+            line: 1,
+        };
+        let mut d = data("{{id='a',group=1},{id='b',group=2},{id='c'},{id='d',group=9}}", "{}");
+        Arc::get_mut(&mut d).unwrap().style = serde_json::from_str(
+            r#"{"groups":["primary","tertiary"],"node":{"role":"primary","alpha":0.5}}"#,
+        )
+        .unwrap();
+        let style = d.style(&palette, &source).unwrap();
+        let mut c = canvas("{}", "{}");
+        c.reconcile(&d, style);
+        let colors = c.geometry().colors.clone();
+        assert_eq!(
+            *colors,
+            [[16, 32, 48, 255], [64, 80, 96, 255], style.node, style.node]
+        );
+        assert_ne!(style.node, [16, 32, 48, 255]);
+        // An unchanged style keeps the same colour array: no per-frame rebuild.
+        assert!(Arc::ptr_eq(&colors, &c.geometry().colors));
+        let bad = GraphData {
+            style: serde_json::from_str(r#"{"groups":"primary"}"#).unwrap(),
+            ..Default::default()
+        };
+        assert!(bad.style(&palette, &source).is_err());
+    }
+
+    #[test]
+    fn the_fit_camera_frames_every_node_with_its_label_margin() {
+        let rect = Rect::new(0., 0., 400., 300.);
+        let positions = [[-500., -80.], [700., 40.], [100., 250.], [0., -300.]];
+        let radii = [3., 12., 3., 3.];
+        let camera = fit_camera(rect, &positions, &radii);
+        let label = LABEL_WIDTH.min(rect.w * 0.25);
+        for (p, r) in positions.iter().zip(radii) {
+            let s = camera.to_screen(rect, *p);
+            let r = r * camera.zoom;
+            assert!(s[0] - r >= FIT_MARGIN - 0.01 && s[0] + r + label <= rect.w - FIT_MARGIN + 0.01);
+            assert!(s[1] - r >= FIT_MARGIN - 0.01 && s[1] + r <= rect.h - FIT_MARGIN + 0.01);
+        }
+    }
+
+    #[test]
+    fn the_camera_fits_on_first_data_and_on_an_explicit_fit_only() {
+        let mut c = canvas("{{id='a'},{id='b'}}", "{{from='a',to='b'}}");
+        c.geometry();
+        c.fit();
+        let first = c.camera;
+        assert!(c.fitted && first != Camera::default());
+        // A data delta, even a new node, keeps the camera the user has.
+        c.camera.zoom = 3.;
+        let style = c.style;
+        c.reconcile(&data("{{id='a'},{id='b'},{id='c'}}", "{{from='a',to='b'}}"), style);
+        c.geometry();
+        c.fit();
+        assert_eq!(c.camera.zoom, 3.);
+        // Bumping `fit` re-frames once.
+        let mut d = data("{{id='a'},{id='b'},{id='c'}}", "{{from='a',to='b'}}");
+        Arc::get_mut(&mut d).unwrap().fit = 1;
+        c.reconcile(&d, style);
+        c.geometry();
+        c.fit();
+        assert_ne!(c.camera.zoom, 3.);
+        c.camera.zoom = 3.;
+        c.reconcile(&d, style);
+        c.fit();
+        assert_eq!(c.camera.zoom, 3.);
     }
 
     #[test]

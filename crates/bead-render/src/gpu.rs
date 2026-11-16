@@ -245,7 +245,7 @@ impl GraphSlot {
             (0..geometry.positions.len())
                 .map(|i| graph_gpu::Node {
                     radius: geometry.radii.get(i).copied().unwrap_or(3.),
-                    color: style.node,
+                    color: geometry.colors.get(i).copied().unwrap_or(style.node),
                     flags: u32::from(geometry.highlight.get(i) == Some(&true))
                         * graph_gpu::HIGHLIGHTED,
                 })
@@ -263,6 +263,7 @@ impl GraphSlot {
                 }
                 if !Arc::ptr_eq(&old.radii, &geometry.radii)
                     || !Arc::ptr_eq(&old.highlight, &geometry.highlight)
+                    || !Arc::ptr_eq(&old.colors, &geometry.colors)
                     || self.style.node != style.node
                 {
                     self.gpu.set_nodes(queue, 0, &nodes());

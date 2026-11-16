@@ -186,6 +186,7 @@ pub const PROPERTIES: &[&str] = &[
     "graph",
     "style",
     "highlight",
+    "fit",
     "on_hover",
     "on_select",
 ];

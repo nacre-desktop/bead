@@ -6,6 +6,7 @@ return {
         hovered = "",
         event = "hover a node, click selects, double-click or Enter activates, arrows walk, Esc clears",
         highlight = {},
+        fit = 0,
     },
     actions = {
         hover = function(s, id) s.hovered = id end,
@@ -13,6 +14,7 @@ return {
             s.event = id == "" and "cleared" or "selected " .. id
             if id == "" then s.highlight = {} end
         end,
+        refit = function(s) s.fit = s.fit + 1 end,
         -- Activation highlights the node with the forty hubs; everything else dims.
         activate = function(s, id)
             local set = { { id = id } }
