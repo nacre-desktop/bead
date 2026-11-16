@@ -3588,15 +3588,21 @@ impl SlideContent {
             })
             .collect()
     }
-    /// The close slide of a reveal panel resting open: the whole scene is content.
+    /// The close slide of a reveal panel resting open: the whole scene is the content of a slid panel,
+    /// the content above the body (as an open's) for a plain reveal that closes in place (B0312).
     fn closing_from_rest(scene: &Scene, frame: &Frame) -> Option<Self> {
-        scene
+        let motion = scene
             .motion
             .as_ref()
-            .filter(|m| m.reveal && m.open && m.slide_distance.is_some() && m.progress >= 1.)?;
-        let posed_start = frame.items.len().checked_sub(scene.primitives.len())?;
-        (posed_start < frame.items.len()).then_some(Self {
-            scene_start: 0,
+            .filter(|m| m.reveal && m.open && m.progress >= 1.)?;
+        let scene_start = if motion.slide_distance.is_some() {
+            0
+        } else {
+            motion.parts.iter().map(|(index, _)| index + 1).max()?
+        };
+        let posed_start = scene_start + frame.items.len().checked_sub(scene.primitives.len())?;
+        (scene_start < scene.primitives.len() && posed_start < frame.items.len()).then_some(Self {
+            scene_start,
             posed_start,
             offset: (0., 0.),
             window: None,
@@ -3990,30 +3996,15 @@ impl TreeCpuRenderer {
         self.settled_repairs += 1;
         true
     }
-    /// B0185: one slide frame: the body below the content as primitives, then the content layer
-    /// (flattened on the first frame of the slide) at its pose, inside the reveal window.
-    fn paint_slide(
+    /// The slide's content layer for this key: kept, adopted from the idle build, repaired or flattened.
+    fn ensure_slide_layer(
         &mut self,
         scene: &Scene,
         frame: &Frame,
         slide: &SlideContent,
-        target: ShmTarget<'_>,
-        damage: Damage,
+        scale: f32,
+        format: PixelFormat,
     ) -> Result<()> {
-        let ShmTarget {
-            bytes,
-            width,
-            height,
-            scale,
-            format,
-        } = target;
-        // Not on the frame that flattens the layer: the settled paint starts once the slide runs.
-        if scene.motion.as_ref().is_some_and(|m| m.open)
-            && self.slide_layer.is_some()
-            && let Some(settled) = scene.prepared.get(&scale.to_bits())
-        {
-            self.prepare_settled(settled, scene.offset, (width, height), scale, format);
-        }
         let key = slide.key(scene, frame, scale, format);
         if self
             .slide_layer
@@ -4099,6 +4090,33 @@ impl TreeCpuRenderer {
                 self.slide_damage = Some((shape, damage));
             }
         }
+        Ok(())
+    }
+    /// B0185: one slide frame: the body below the content as primitives, then the content layer
+    /// (flattened on the first frame of the slide) at its pose, inside the reveal window.
+    fn paint_slide(
+        &mut self,
+        scene: &Scene,
+        frame: &Frame,
+        slide: &SlideContent,
+        target: ShmTarget<'_>,
+        damage: Damage,
+    ) -> Result<()> {
+        let ShmTarget {
+            bytes,
+            width,
+            height,
+            scale,
+            format,
+        } = target;
+        // Not on the frame that flattens the layer: the settled paint starts once the slide runs.
+        if scene.motion.as_ref().is_some_and(|m| m.open)
+            && self.slide_layer.is_some()
+            && let Some(settled) = scene.prepared.get(&scale.to_bits())
+        {
+            self.prepare_settled(settled, scene.offset, (width, height), scale, format);
+        }
+        self.ensure_slide_layer(scene, frame, slide, scale, format)?;
         paint_items(
             &frame.items[..slide.posed_start],
             scene.offset,
@@ -4453,6 +4471,13 @@ impl Renderer for TreeCpuRenderer {
             if !frozen_snapshot && scene.motion.as_ref().is_some_and(|m| m.fade && m.open) {
                 // The held first pose of an opening: flatten now so the first moving frame only blits.
                 self.cache_content(scene)?;
+            } else if let Some(frame) = frame.cloned()
+                && scene.motion.as_ref().is_some_and(|m| m.open && !m.fade)
+                && let Some(slide) = SlideContent::of(scene, &frame)
+            {
+                // A plain reveal's held first pose (B0312): flatten the content layer now, not on frame 1.
+                let (scale, format) = (target.scale, target.format);
+                self.ensure_slide_layer(scene, &frame, &slide, scale, format)?;
             } else if !self.keep_hidden_group {
                 self.flattened = None;
                 self.group_charge = None;
@@ -6328,6 +6353,98 @@ mod tests {
             "the close slide never flattens on the UI thread"
         );
         assert_eq!(fresh.slide_layer_builds, 1);
+    }
+    /// A plain reveal: a slid panel's scene without `slide_distance`, so the body reshapes both ways.
+    fn plain_reveal(open: bool, progress: f32) -> Scene {
+        let mut scene = sliding_panel(open, progress);
+        scene.motion.as_mut().unwrap().slide_distance = None;
+        scene
+    }
+    fn draw_plain(renderer: &mut TreeCpuRenderer, scene: &Scene) -> Vec<u8> {
+        let (w, h) = (396u32, 246 + 120);
+        let mut bytes = vec![7u8; (w * h * 4) as usize];
+        renderer.prepare_on_ui(scene, 1.5).unwrap();
+        let target = ShmTarget {
+            bytes: &mut bytes,
+            width: w,
+            height: h,
+            scale: 1.5,
+            format: PixelFormat::Rgba,
+        };
+        renderer.render(scene, target, Damage::full(w, h)).unwrap();
+        bytes
+    }
+    #[test]
+    fn a_plain_reveals_layer_is_built_in_the_hold() {
+        let mut renderer = TreeCpuRenderer::default();
+        let mut hold = plain_reveal(true, 0.);
+        hold.opacity = 0.;
+        draw_plain(&mut renderer, &hold);
+        assert_eq!(renderer.slide_layer_builds, 1, "the held first pose builds");
+        let first = draw_plain(&mut renderer, &plain_reveal(true, 0.25));
+        assert_eq!(renderer.slide_layer_builds, 1, "frame 1 only poses it");
+        assert_eq!(renderer.slide_layer_repairs, 0);
+        let mut fresh = TreeCpuRenderer::default();
+        let expected = draw_plain(&mut fresh, &plain_reveal(true, 0.25));
+        assert_eq!(fresh.slide_layer_builds, 1);
+        assert!(
+            first == expected,
+            "frame 1 differs from a layer built on it"
+        );
+    }
+    #[test]
+    fn a_plain_reveals_close_from_rest_reuses_the_idle_built_layer() {
+        let mut renderer = TreeCpuRenderer::default();
+        draw_plain(&mut renderer, &plain_reveal(true, 1.));
+        std::thread::sleep(CLOSE_LAYER_QUIET);
+        let rest = plain_reveal(true, 1.);
+        renderer.idle_work(&rest);
+        assert_eq!(renderer.background_layer_builds, 1);
+        while !renderer
+            .background_layer
+            .as_ref()
+            .is_some_and(|layer| layer.job.is_finished())
+        {
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        let mut fresh = TreeCpuRenderer::default();
+        for progress in [0.75, 0.5] {
+            let scene = plain_reveal(false, progress);
+            let adopted = draw_plain(&mut renderer, &scene);
+            assert!(
+                adopted == draw_plain(&mut fresh, &scene),
+                "progress {progress}"
+            );
+        }
+        assert_eq!(renderer.background_layer_adoptions, 1);
+        assert_eq!(
+            renderer.slide_layer_builds, 0,
+            "close frame 1 never flattens"
+        );
+        assert_eq!(fresh.slide_layer_builds, 1);
+        // Changed content is not served stale: the key differs, so the layer is flattened afresh.
+        let edited = Primitive::Rounded {
+            rect: Rect::new(30., 30., 90., 40.),
+            radius: 6.,
+            fill: [20, 160, 90, 255],
+            border: None,
+        };
+        let mut stale = TreeCpuRenderer::default();
+        draw_plain(&mut stale, &rest);
+        std::thread::sleep(CLOSE_LAYER_QUIET);
+        stale.idle_work(&rest);
+        while !stale
+            .background_layer
+            .as_ref()
+            .is_some_and(|layer| layer.job.is_finished())
+        {
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        let mut closing = plain_reveal(false, 0.75);
+        closing.primitives[3] = edited;
+        let pixels = draw_plain(&mut stale, &closing);
+        assert_eq!(stale.background_layer_adoptions, 0);
+        assert!(pixels == draw_plain(&mut TreeCpuRenderer::default(), &closing));
     }
     #[test]
     fn a_scene_changing_mid_slide_repairs_only_its_changed_content_in_the_layer() {
