@@ -81,8 +81,11 @@ impl GraphData {
         };
         let fit = match p("fit") {
             None | Some(Json::Null) => 0,
+            // Luau numbers arrive as floats.
             Some(v) => v
-                .as_u64()
+                .as_f64()
+                .filter(|n| *n >= 0.)
+                .map(|n| n as u64)
                 .ok_or_else(|| source.error("fit must be a revision number"))?,
         };
         let name = |property: &str| Ok::<_, Diagnostic>(action(property)?.map(|(name, _)| name));
@@ -222,7 +225,10 @@ fn fit_camera(rect: Rect, positions: &[Point], radii: &[f32]) -> Camera {
         .min((rect.h - 2. * FIT_MARGIN).max(1.) / h)
         .clamp(0.05, 8.);
     Camera {
-        center: [(min[0] + max[0]) * 0.5 + label / (2. * zoom), (min[1] + max[1]) * 0.5],
+        center: [
+            (min[0] + max[0]) * 0.5 + label / (2. * zoom),
+            (min[1] + max[1]) * 0.5,
+        ],
         zoom,
     }
 }
@@ -1200,7 +1206,10 @@ return ui.Column{{id="root",width=400,height=300,
             file: "graph".into(),
             line: 1,
         };
-        let mut d = data("{{id='a',group=1},{id='b',group=2},{id='c'},{id='d',group=9}}", "{}");
+        let mut d = data(
+            "{{id='a',group=1},{id='b',group=2},{id='c'},{id='d',group=9}}",
+            "{}",
+        );
         Arc::get_mut(&mut d).unwrap().style = serde_json::from_str(
             r#"{"groups":["primary","tertiary"],"node":{"role":"primary","alpha":0.5}}"#,
         )
@@ -1211,7 +1220,12 @@ return ui.Column{{id="root",width=400,height=300,
         let colors = c.geometry().colors.clone();
         assert_eq!(
             *colors,
-            [[16, 32, 48, 255], [64, 80, 96, 255], style.node, [16, 32, 48, 255]]
+            [
+                [16, 32, 48, 255],
+                [64, 80, 96, 255],
+                style.node,
+                [16, 32, 48, 255]
+            ]
         );
         assert_ne!(style.node, [16, 32, 48, 255]);
         // An unchanged style keeps the same colour array: no per-frame rebuild.
@@ -1233,7 +1247,9 @@ return ui.Column{{id="root",width=400,height=300,
         for (p, r) in positions.iter().zip(radii) {
             let s = camera.to_screen(rect, *p);
             let r = r * camera.zoom;
-            assert!(s[0] - r >= FIT_MARGIN - 0.01 && s[0] + r + label <= rect.w - FIT_MARGIN + 0.01);
+            assert!(
+                s[0] - r >= FIT_MARGIN - 0.01 && s[0] + r + label <= rect.w - FIT_MARGIN + 0.01
+            );
             assert!(s[1] - r >= FIT_MARGIN - 0.01 && s[1] + r <= rect.h - FIT_MARGIN + 0.01);
         }
     }
@@ -1248,7 +1264,10 @@ return ui.Column{{id="root",width=400,height=300,
         // A data delta, even a new node, keeps the camera the user has.
         c.camera.zoom = 3.;
         let style = c.style;
-        c.reconcile(&data("{{id='a'},{id='b'},{id='c'}}", "{{from='a',to='b'}}"), style);
+        c.reconcile(
+            &data("{{id='a'},{id='b'},{id='c'}}", "{{from='a',to='b'}}"),
+            style,
+        );
         c.geometry();
         c.fit();
         assert_eq!(c.camera.zoom, 3.);
