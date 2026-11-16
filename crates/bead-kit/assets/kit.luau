@@ -474,7 +474,7 @@ return function(ui, tokens)
     -- node id ("" when nothing is hovered), `on_select` the clicked node's id ("" when Escape clears) and
     -- `on_activate` the double-clicked or Enter-activated node's id. `highlight` lists node ids (or binds a
     -- list store of `{id}` records) drawn at full strength while the rest dims. `style.groups` lists one
-    -- colour (palette role) per node `group` (integer N uses entry N; no or unknown group uses `node`).
+    -- colour (palette role) per node `group` (integer N uses entry (N-1) % #groups + 1, so it wraps; 0 or no group uses `node`).
     -- The camera frames all nodes on first data; bump `fit` (a number) to re-frame on demand. `style` holds palette
     -- roles (`node`, `edge`, `hover`, `selected`, `focus`, `label`) and numbers (`node_radius`,
     -- `label_size`, `label_zoom`, `max_labels`, `lod_zoom`, `far_edge_alpha`).

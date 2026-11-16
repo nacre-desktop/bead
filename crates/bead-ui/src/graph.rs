@@ -405,9 +405,10 @@ impl Canvas {
                 Arc::default()
             } else {
                 let style = &self.style;
+                // Group n takes entry (n - 1) % count, so a short list wraps.
                 let color = |group: u16| match usize::from(group) {
-                    g @ 1.. if g <= usize::from(style.group_count) => style.groups[g - 1],
-                    _ => style.node,
+                    0 => style.node,
+                    g => style.groups[(g - 1) % usize::from(style.group_count)],
                 };
                 let nodes = &self.data.topology.nodes;
                 nodes.iter().map(|node| color(node.group)).collect()
@@ -1190,7 +1191,7 @@ return ui.Column{{id="root",width=400,height=300,
     }
 
     #[test]
-    fn a_group_maps_to_its_role_colour_and_a_missing_group_falls_back() {
+    fn a_group_maps_to_its_role_colour_wraps_and_a_missing_group_falls_back() {
         let palette = Palette::parse(
             br##"{"formatVersion":1,"colours":{"primary":"102030","tertiary":"405060"}}"##,
         )
@@ -1210,7 +1211,7 @@ return ui.Column{{id="root",width=400,height=300,
         let colors = c.geometry().colors.clone();
         assert_eq!(
             *colors,
-            [[16, 32, 48, 255], [64, 80, 96, 255], style.node, style.node]
+            [[16, 32, 48, 255], [64, 80, 96, 255], style.node, [16, 32, 48, 255]]
         );
         assert_ne!(style.node, [16, 32, 48, 255]);
         // An unchanged style keeps the same colour array: no per-frame rebuild.
