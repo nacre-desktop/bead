@@ -329,10 +329,15 @@ impl Animations {
         } else {
             self.value(id, now).map_or(target, |v| v.0)
         };
-        if self.states.get(id).is_some_and(|m| m.to == target) {
+        let duration = duration.max(0.001);
+        if let Some(m) = self.states.get_mut(id).filter(|m| m.to == target) {
+            // A pose not yet shown takes the scene's timing over a host fallback seeded before it
+            // (B0307); a running motion keeps its own.
+            if m.held {
+                (m.duration, m.curve) = (duration, curve);
+            }
             return;
         }
-        let duration = duration.max(0.001);
         self.states.insert(
             id.into(),
             Motion {
@@ -381,6 +386,19 @@ mod tests {
         assert_eq!(panel_open_duration(100.), PANEL.open_min, "short travel");
         assert!((panel_open_duration(400.) - 0.25).abs() < 1e-9, "in range");
         assert_eq!(panel_open_duration(4000.), PANEL.open_max, "long travel");
+    }
+    #[test]
+    fn a_held_motion_adopts_a_new_duration_and_curve_but_a_running_one_keeps_its_own() {
+        let mut a = Animations::default();
+        a.open_to("p", true, 1., 0.4, Curve::EaseInOut);
+        a.open_to("p", true, 1.05, 0.24, Curve::EaseOut);
+        a.committed("p", 1.1, 1.1);
+        // Held until committed, then the adopted .24 s EaseOut plays from 1.1.
+        assert_eq!(a.value("p", 1.1 + 0.24), Some((1., false)));
+        let mid = a.value("p", 1.1 + 0.12).unwrap().0;
+        assert!((mid - Curve::EaseOut.ease(0.5)).abs() < 1e-6);
+        a.open_to("p", true, 1.2, 0.5, Curve::Spring);
+        assert_eq!(a.value("p", 1.1 + 0.24), Some((1., false)), "running keeps .24 s");
     }
     #[test]
     fn a_held_motion_starts_at_its_first_committed_frame() {
