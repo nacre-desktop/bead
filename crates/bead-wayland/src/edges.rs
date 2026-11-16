@@ -399,6 +399,12 @@ fn present_art(
     surface.commit();
     Some(buffer)
 }
+/// The free lip rests (no pill) while its panel is open, while its own tab is attached (until the
+/// panel's close ends), or while another process's tab for it is still docked, even though that
+/// panel already reported closed at the start of its close (B0309): the pill is never in two places.
+fn lip_docked(active: bool, attached: bool, docked_elsewhere: bool) -> bool {
+    active || attached || docked_elsewhere
+}
 /// The free lip's art. While its panel is open (it rides it as the tab, or another process draws
 /// the tab), its rest box is drawn as an active lip
 /// at rest (`attach` 0, never hovered or charging): the host's frame material, no pill, so a hole
@@ -1110,6 +1116,9 @@ impl App {
         let role = subcompositor.get_subsurface(&surface, parent, &self.qh, ());
         role.set_desync();
         let viewport = viewporter.get_viewport(&surface, &self.qh, ());
+        if let Some(control) = &self.options.control {
+            control.lip_tab_docked(&lip.id, &self.output_id(&output), true);
+        }
         self.edge.tab = Some(LipTab {
             key,
             rest: lip.rect((size.0 as f32, size.1 as f32)),
@@ -1147,6 +1156,11 @@ impl App {
         if let Some(tab) = self.edge.tab.take() {
             let key = tab.key.clone();
             drop(tab);
+            if let (Some(control), Some((output, id))) =
+                (&self.options.control, key.split_once('/'))
+            {
+                control.lip_tab_docked(id, output, false);
+            }
             // The tab's surface is gone, so its Leave never comes: hover it held ends here.
             if self.edge.hovered.as_deref() == Some(key.as_str()) {
                 self.edge.hovered = None;
@@ -1333,7 +1347,11 @@ impl App {
                     opened = true;
                 }
                 free_lip_art(
-                    state.active || self.edge.attached(&k),
+                    lip_docked(
+                        state.active,
+                        self.edge.attached(&k),
+                        self.docked_elsewhere(&k),
+                    ),
                     self.options.edge_art.as_ref(),
                     &lip,
                     size,
@@ -1469,7 +1487,11 @@ impl App {
         let state = self.free_lip_state(&a.output, &a.key, &a.lip);
         let size = (a.rect.w as u32, a.rect.h as u32);
         let svg = free_lip_art(
-            state.active || self.edge.attached(&a.key),
+            lip_docked(
+                state.active,
+                self.edge.attached(&a.key),
+                self.docked_elsewhere(&a.key),
+            ),
             self.options.edge_art.as_ref(),
             &a.lip,
             size,
@@ -1521,6 +1543,12 @@ impl App {
             self.edge.gate.dismiss(&k);
         }
         self.edge.external_open = now.filter(|(_, open)| *open).map(|(k, _)| k.to_owned());
+    }
+    /// Another process's tab for this lip (`output/id`) is still docked on its panel.
+    fn docked_elsewhere(&self, k: &str) -> bool {
+        k.split_once('/')
+            .zip(self.options.control.as_ref())
+            .is_some_and(|((output, id), control)| control.external_tab_docked(id, output))
     }
     fn lip_allowed(&self, lip: &Lip) -> bool {
         let Some(control) = &self.options.control else {
@@ -2499,6 +2527,43 @@ mod tests {
         assert_eq!((r.x - o.0, r.y - o.1), (856., 0.));
         assert_eq!(bar_origin(Edge::Bottom, output, 40.), (0., 1040.));
         assert_eq!(bar_origin(Edge::Right, output, 40.), (1880., 0.));
+    }
+    /// Rapid open/close sequences across two processes, one 8 ms frame at a time: the parent's free
+    /// pill and the child's docked tab are never both visible once the tab has left the lip.
+    #[test]
+    fn rapid_toggles_never_show_the_parent_pill_beside_the_child_tab() {
+        const FRAME: u32 = 8;
+        const IPC: u32 = 3; // child -> parent report latency, under one frame
+        const CLOSE: u32 = 180;
+        // (open at, close at, reopen at): Esc right away, mid-open, at rest; reopen mid-close.
+        for (open, close, reopen) in [
+            (0, 0, None),
+            (0, 50, None),
+            (0, 150, None),
+            (0, 300, None),
+            (0, 100, Some(160)),
+        ] {
+            // The child: visible from the open request until its close starts; its tab attaches on
+            // its first panel frame and goes when a close runs to its end without a reopen.
+            let child_open = |t: u32| t >= open && (t < close || reopen.is_some_and(|r| t >= r));
+            let tab = |t: u32| {
+                t >= open + FRAME && (reopen.is_some() || t < close.max(open + FRAME) + CLOSE)
+            };
+            for t in (0..close + CLOSE + 100).step_by(FRAME as usize) {
+                // The parent sees each child report IPC ms late; it attaches no tab of its own.
+                let seen = t.saturating_sub(IPC);
+                let pill = !lip_docked(child_open(seen) && t >= IPC, false, tab(seen) && t >= IPC);
+                // The tab's first frame sits on the lip itself (the hand-over), so one place.
+                let tab_away = tab(t) && t > open + FRAME;
+                assert!(
+                    !(pill && tab_away),
+                    "open {open} close {close} reopen {reopen:?}: two pills at {t} ms"
+                );
+            }
+        }
+        // A local panel: its own attached tab keeps the free lip at rest, open or closing.
+        assert!(lip_docked(false, true, false));
+        assert!(!lip_docked(false, false, false));
     }
     #[test]
     fn an_external_panel_closing_under_its_hovered_lip_gates_the_dwell() {

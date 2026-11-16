@@ -248,6 +248,14 @@ pub trait ShellControl: Send + Sync {
     fn external_panel_request(&self, _view: &str, _output: &str, _toggle: bool) {}
     /// The lip participates in its external panel's hover region during grace.
     fn external_panel_hover(&self, _view: &str, _output: &str, _inside: bool) {}
+    /// This process's docked tab for lip `lip` (its id) attached (`true`) or is gone (`false`, after
+    /// its panel's close). A host whose lip another process draws at the edge forwards it there.
+    fn lip_tab_docked(&self, _lip: &str, _output: &str, _docked: bool) {}
+    /// Another process's tab for lip `lip` is docked on its panel, which may already be closing:
+    /// the free lip stays at rest (no pill) until that tab is gone.
+    fn external_tab_docked(&self, _lip: &str, _output: &str) -> bool {
+        false
+    }
     /// Whether hovering may open a lip's panel now; `open_panel` is the open panel's name.
     fn edge_hover_allowed(&self, _open_panel: Option<&str>) -> bool {
         true
