@@ -1213,9 +1213,26 @@ impl TreeCache {
             template.pixels.width()
         } as i64;
         let start = template.start + shift;
-        if start < 0 || start + band > spec.extent as i64 {
+        // The band's empty margin may overhang the raster at rest or just after leaving it: trim it.
+        let (lo, hi) = ((-start).max(0), band.min(spec.extent as i64 - start));
+        if hi - lo < 4 {
             return Ok(None);
         }
+        let trimmed = lo > 0 || hi < band;
+        let (start, band) = (start + lo, hi - lo);
+        let pixels = if trimmed {
+            let cut = if vertical {
+                tiny_skia::IntRect::from_xywh(0, lo as i32, template.pixels.width(), band as u32)
+            } else {
+                tiny_skia::IntRect::from_xywh(lo as i32, 0, band as u32, template.pixels.height())
+            };
+            Arc::new(
+                cut.and_then(|cut| template.pixels.clone_rect(cut))
+                    .ok_or("edge band trim")?,
+            )
+        } else {
+            template.pixels.clone()
+        };
         const M: f32 = 4096.;
         let (cut_start, cut_end) = (start as f32 / scale, (start + band) as f32 / scale);
         let clip = match (vertical, far) {
@@ -1239,15 +1256,15 @@ impl TreeCache {
         let mut clipped = item.clone();
         clipped.clip = Some(clip);
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        (template.key, start).hash(&mut hasher);
-        let (w, h) = (template.pixels.width(), template.pixels.height());
+        (template.key, start, band).hash(&mut hasher);
+        let (w, h) = (pixels.width(), pixels.height());
         let piece = Item {
             image: None,
             id: format!("{}/edge", item.id),
             primitive: item.primitive.clone(),
             clip: None,
             raster: Some(Arc::new(Raster {
-                pixels: template.pixels.clone(),
+                pixels,
                 origin: if vertical {
                     (0, start as u32)
                 } else {
@@ -1430,37 +1447,28 @@ impl TreeCache {
                 (low..=high).contains(&i32::from(template[c]))
             })
         };
-        let matches = shift + last < extent as i64
-            && first + shift >= 1
-            && if vertical {
-                (0..h).all(|y| {
-                    (0..w).step_by(3).all(|x| {
-                        let row = (i64::from(y) + first + shift) as u32;
-                        within(
-                            at(&pixels, x, y),
-                            [
-                                at(&base.pixels, x, row - 1),
-                                at(&base.pixels, x, row),
-                                at(&base.pixels, x, row + 1),
-                            ],
-                        )
-                    })
-                })
-            } else {
-                (0..w).all(|x| {
-                    (0..h).step_by(3).all(|y| {
-                        let column = (i64::from(x) + first + shift) as u32;
-                        within(
-                            at(&pixels, x, y),
-                            [
-                                at(&base.pixels, column - 1, y),
-                                at(&base.pixels, column, y),
-                                at(&base.pixels, column + 1, y),
-                            ],
-                        )
-                    })
-                })
-            };
+        // Band lines the open-state raster lacks (before its first or past its last line) must be empty:
+        // `edge_items` trims them, so a panel at rest or just starting to move still slides the band.
+        let (lines, across) = if vertical { (h, w) } else { (w, h) };
+        let matches = (0..lines).all(|i| {
+            let line = i64::from(i) + first + shift;
+            (0..across).step_by(3).all(|k| {
+                let (x, y) = if vertical { (k, i) } else { (i, k) };
+                if line < 0 || line >= extent as i64 {
+                    return at(&pixels, x, y)[3] == 0;
+                }
+                if line == 0 || line + 1 >= extent as i64 {
+                    return true;
+                }
+                let line = line as u32;
+                let around = if vertical {
+                    [-1, 0, 1].map(|d| at(&base.pixels, k, (line as i32 + d) as u32))
+                } else {
+                    [-1, 0, 1].map(|d| at(&base.pixels, (line as i32 + d) as u32, k))
+                };
+                within(at(&pixels, x, y), around)
+            })
+        });
         if !uniform || !matches {
             bead_core::vprintln!(
                 "REVEAL_EDGE unusable uniform={uniform} matches={matches} band={first}..{last} shift={shift} extent={extent} ghost={ghost}"
@@ -5799,6 +5807,70 @@ mod tests {
         assert_eq!(renderer.cache.frame.as_ref().unwrap().key, expected_key);
     }
 
+    #[test]
+    fn a_revealing_far_edge_shadow_slides_its_band_up_to_rest() {
+        let mut scene = Scene {
+            opacity: 1.,
+            motion: None,
+            resource_revision: 1,
+            asset_data: BTreeMap::new(),
+            clips: BTreeMap::new(),
+            layers: vec![],
+            prepared: Default::default(),
+            font_files: vec![],
+            width: 1000.,
+            slide: None,
+            primitives: vec![
+                Primitive::Shadow {
+                    rect: Rect::new(-30., -30., 1060., 860.),
+                    radius: 12.,
+                    blur: 10.,
+                },
+                Primitive::Rounded {
+                    rect: Rect::new(0., 0., 1000., 800.),
+                    radius: 12.,
+                    fill: [30, 30, 40, 255],
+                    border: None,
+                },
+            ],
+            offset: (32., 32.),
+            bounds: Rect::new(-32., -32., 1064., 864.),
+        };
+        scene.motion = Some(crate::Motion {
+            id: "edge-test".into(),
+            open: false,
+            duration: 0.2,
+            return_duration: None,
+            return_curve: None,
+            spring: false,
+            curve: None,
+            edge: bead_core::Edge::Top,
+            slide_distance: None,
+            fade: false,
+            reveal: true,
+            progress: 1.,
+            parts: vec![],
+            art: None,
+            body: None,
+        });
+        scene.reveal(1.);
+        let mut worker = TreeCache::default();
+        worker.prepare(&scene, 1.5).unwrap();
+        scene
+            .prepared
+            .insert(1.5f32.to_bits(), worker.frame.clone().unwrap());
+        for progress in [0.2, 0.5, 0.9, 0.97, 0.99, 0.995, 0.999] {
+            let mut cache = TreeCache::default();
+            scene.motion.as_mut().unwrap().progress = progress;
+            scene.reveal(progress);
+            cache.prepare(&scene, 1.5).unwrap();
+            let items = &cache.frame.as_ref().unwrap().items;
+            assert!(
+                items.iter().any(|item| item.id.ends_with("/edge")),
+                "progress {progress} draws the shadow the slow way"
+            );
+        }
+    }
     #[test]
     fn ui_cpu_prepare_reuses_content_across_reveal_progress() {
         let mut scene = scene();

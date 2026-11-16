@@ -188,3 +188,8 @@ The always-on `PANEL_SLIDE` line appends `gap_at` (commit index that ended the w
 ## Slide edge frames (B0301)
 
 A fading panel's opacity group (the body flattened once) used to be built on its first visible frame and, on the GL renderer, the settle frame repainted the whole body instead of reusing it: both 4-6 ms against ~1 ms for a mid-slide frame. An opening fade now builds the group on the hidden held first pose (CPU: `flattened`; GL: the opacity image), and the GL settle frame composites the current group at whole pixels while the content key is unchanged; changed content or a closed panel still paints directly.
+
+## Dashboard close and mid-open frames (B0305)
+
+A revealing panel's far-edge shadow (and art) slides a pre-rasterised band instead of re-rastering per pose, but the band carries an empty margin past the raster's edge. That margin made the template unusable (`matches` failed at build) or rejected it within ~8 px of rest (`start + band > extent`), so a close's first frames and every pose of a bottom/right-growing shadow rastered the whole shadow (about 7 ms at dashboard size) and uploaded it. The margin is now required to be empty at build and trimmed from the band at use, so these poses slide the band like a mid-slide frame.
+Open frames below `EDGE_MIN_REVEALED` (84 px revealed) still raster a thin shadow whose Gaussian template depends on the current height; that cost is not changed here.
