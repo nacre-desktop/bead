@@ -75,6 +75,9 @@ pub struct EdgeChrome {
     /// Exclusive zones in pixels as `[top, right, bottom, left]`; 0 creates no surface.
     pub reserved: [u32; 4],
     pub lips: Vec<Lip>,
+    /// Lips another process (a child app's parent shell) draws at the edge. Here they only attach as
+    /// the docked tab on this process's own panel named `opens`: no free surface, no input strip, no dwell.
+    pub tab_lips: Vec<Lip>,
     /// Hover rest time before a lip opens its panel.
     pub hover_delay_ms: u32,
     /// Open on click only (`clickEdgeMenus`).
@@ -102,6 +105,13 @@ impl EdgeChrome {
             Edge::Left => Rect::new(0., 0., depth, length),
             Edge::Right => Rect::new(thickness - depth, 0., depth, length),
         }
+    }
+    /// The lip that docks as the tab of the local panel `name` on `edge`: ours or another process's.
+    fn tab_lip_for(&self, name: &str, edge: Edge) -> Option<&Lip> {
+        self.lips
+            .iter()
+            .chain(&self.tab_lips)
+            .find(|lip| lip.opens == name && lip.edge == edge)
     }
     fn maps_lip_surfaces(&self) -> bool {
         !self.external_source || self.click_to_open
@@ -987,9 +997,7 @@ impl App {
         let lip = self
             .edge
             .chrome
-            .lips
-            .iter()
-            .find(|lip| lip.opens == name && lip.edge == edge)
+            .tab_lip_for(name, edge)
             .ok_or("no_lip_for_panel_edge")?
             .clone();
         Ok((output, lip))
@@ -1668,6 +1676,7 @@ impl App {
     /// surface. The tab is the lip: hovering it holds the panel open, clicking it closes it.
     pub(super) fn edge_pointer(&mut self, event: &PointerEvent) -> bool {
         let mut on_tab = false;
+        let mut anchor = None;
         let (lip, output, wl_output) = if let Some(tab) = self
             .edge
             .tab
@@ -1675,7 +1684,9 @@ impl App {
             .filter(|tab| tab.surface == event.surface)
         {
             on_tab = true;
+            let was = tab.hovered;
             tab.hovered = tab_hovered(tab.hovered, &event.kind);
+            anchor = (was != tab.hovered).then_some(tab.hovered);
 
             let (lip, wl_output) = (tab.lip.clone(), tab.output.clone());
             (lip, self.output_id(&wl_output), wl_output)
@@ -1697,6 +1708,14 @@ impl App {
             };
             (lip, output, wl_output)
         };
+        // The tab is part of the panel's hover region: a panel session that closes on leave (a child
+        // process's hover-opened panel, whose lip lives in another process) sees the anchor held.
+        if let Some(anchor) = anchor {
+            self.panel_ui(UiEvent::PanelHover {
+                opened: None,
+                anchor,
+            });
+        }
         let button = lip_button(on_tab, self.lip_active(&wl_output, &lip));
         match event.kind {
             PointerEventKind::Enter { serial } => {
@@ -2234,6 +2253,32 @@ mod tests {
         assert!(lip_button(true, true) && lip_button(true, false));
         assert_eq!(lip_shape(false), wp_cursor_shape_device_v1::Shape::Default);
         assert_eq!(lip_shape(true), wp_cursor_shape_device_v1::Shape::Pointer);
+    }
+    #[test]
+    fn tab_lips_dock_but_never_get_a_surface_or_input() {
+        let lip = |id: &str, edge| Lip {
+            id: id.into(),
+            edge,
+            length: 144.,
+            thickness: 10.,
+            opens: "chat".into(),
+        };
+        let chrome = EdgeChrome {
+            tab_lips: vec![lip("assistant", Edge::Left)],
+            ..Default::default()
+        };
+        assert!(chrome.input_regions((1920, 1080)).is_empty());
+        assert_eq!(
+            chrome.tab_lip_for("chat", Edge::Left).unwrap().id,
+            "assistant"
+        );
+        assert!(chrome.tab_lip_for("chat", Edge::Right).is_none());
+        assert!(chrome.tab_lip_for("other", Edge::Left).is_none());
+        let own = EdgeChrome {
+            lips: vec![lip("own", Edge::Left)],
+            ..chrome
+        };
+        assert_eq!(own.tab_lip_for("chat", Edge::Left).unwrap().id, "own");
     }
     #[test]
     fn tab_glow_follows_only_the_tab_surface_pointer() {
