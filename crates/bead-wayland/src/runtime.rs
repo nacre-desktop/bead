@@ -119,11 +119,16 @@ pub(super) struct App {
     pub(super) wallpaper_palette_outputs: Option<PendingPalette>,
     pub(super) wallpaper_pending_frames: Vec<WallpaperFrame>,
     pub(super) wallpaper_unconfirmed: Vec<crate::WallpaperFrameConfirmation>,
+    #[cfg_attr(not(feature = "native-gl"), allow(dead_code))]
     pub(super) fade_animations: bead_core::animation::Animations,
+    #[cfg_attr(not(feature = "native-gl"), allow(dead_code))]
     pub(super) wallpaper_gl_failed: bool,
+    #[cfg_attr(not(feature = "native-gl"), allow(dead_code))]
     pub(super) palette_tween: Option<crate::wallpaper_fade::PaletteTween>,
+    #[cfg_attr(not(feature = "native-gl"), allow(dead_code))]
     pub(super) palette_tween_generation: u64,
     /// Final palette of a change whose fade has not started yet (set by `complete_wallpaper_inner`).
+    #[cfg_attr(not(feature = "native-gl"), allow(dead_code))]
     pub(super) pending_palette_target: Option<std::collections::BTreeMap<String, [u8; 4]>>,
     /// Until this clock time, a settle of an older tween step is stale, not a rollback.
     pub(super) palette_tween_until: f64,

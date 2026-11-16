@@ -5,6 +5,8 @@
 //! shared EGL transport: both images are uploaded first, a held first pose is committed (that
 //! commit starts the clock, B0170), every frame callback draws the next blend, and the final
 //! SHM buffer is attached before the EGL surface and transport are released again.
+// Without a GL renderer there is no fade: its state and helpers stay unused.
+#![cfg_attr(not(feature = "native-gl"), allow(dead_code, unused_imports))]
 use super::*;
 use crate::runtime::{WallpaperBufferTarget, attach_wallpaper_buffer};
 use bead_core::animation::Curve;
