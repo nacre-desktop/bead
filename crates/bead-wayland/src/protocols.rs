@@ -783,6 +783,8 @@ impl OutputHandler for App {
             .map(|s| s.name.clone())
             .collect();
         self.wallpaper_surfaces.retain(|s| s.output != output);
+        #[cfg(feature = "native-gl")]
+        self.release_wallpaper_gl();
         if let Some(provider) = &self.options.wallpaper {
             for name in &removed {
                 provider.output_removed(name);
@@ -1923,6 +1925,14 @@ impl Dispatch<wayland_client::protocol::wl_callback::WlCallback, FrameData> for 
         ) && state.canvas_surface(&data.surface)
         {
             state.canvas_frame(&data.surface, data.epoch, data.source_epoch);
+            return;
+        }
+        #[cfg(feature = "native-gl")]
+        if matches!(
+            &event,
+            wayland_client::protocol::wl_callback::Event::Done { .. }
+        ) && state.wallpaper_fade_frame(&data.surface, data.generation)
+        {
             return;
         }
         if let wayland_client::protocol::wl_callback::Event::Done { callback_data } = &event {

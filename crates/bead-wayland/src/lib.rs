@@ -37,6 +37,8 @@ mod overlay;
 mod policy;
 mod protocols;
 mod rendering;
+mod wallpaper_fade;
+pub use wallpaper_fade::{WallpaperFade, WallpaperFadeKind};
 mod report;
 mod runtime;
 use layer_motion::LayerMotionController;
@@ -178,6 +180,11 @@ pub trait WallpaperProvider: Send + Sync {
         Ok(Some(self.prepare(output, width, height)?))
     }
     fn prepare_transition(&self, _output: &str, _width: u32, _height: u32) -> Option<Vec<u8>> {
+        None
+    }
+    /// Kind, duration and curve for the change to this output's next wallpaper;
+    /// `None` uses `Options::wallpaper_fade`.
+    fn fade(&self, _output: &str) -> Option<WallpaperFade> {
         None
     }
     fn is_current(&self, frame: &WallpaperFrame) -> bool;
@@ -813,6 +820,9 @@ pub struct Options {
     pub report: Option<std::path::PathBuf>,
     pub command_socket: Option<std::path::PathBuf>,
     pub animate: bool,
+    /// GPU crossfade of wallpaper changes (needs a hardware GL driver and the previous image,
+    /// from the attached buffer or `prepare_transition`); `None` keeps today's cut.
+    pub wallpaper_fade: Option<WallpaperFade>,
     pub debug_continuous: bool,
     pub debug_progress: bool,
     pub debug_luau_stall_ms: Option<u64>,
@@ -890,6 +900,7 @@ impl Default for Options {
             command_socket: None,
             report: None,
             animate: false,
+            wallpaper_fade: None,
             debug_continuous: false,
             debug_progress: false,
             debug_luau_stall_ms: None,
@@ -1087,6 +1098,10 @@ struct WallpaperSurface {
     release_wait_ms: u32,
     release_timer_pending: bool,
     scale_factor: i32,
+    #[cfg(feature = "native-gl")]
+    fade: Option<wallpaper_fade::FadeRun>,
+    /// Index of the buffer the compositor shows, while it is still retained.
+    attached: Option<usize>,
     layer: LayerSurface,
     pool: SlotPool,
     buffers: Vec<Buffer>,
@@ -1095,6 +1110,14 @@ struct WallpaperSurface {
     viewport_destination: Option<(i32, i32)>,
     pixels: Option<Vec<u8>>,
     transition: Option<WallpaperTransition>,
+}
+impl WallpaperSurface {
+    fn fade_running(&self) -> bool {
+        #[cfg(feature = "native-gl")]
+        return self.fade.is_some();
+        #[cfg(not(feature = "native-gl"))]
+        false
+    }
 }
 struct StagedWallpaperBuffer {
     revision: u64,

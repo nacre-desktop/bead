@@ -119,6 +119,8 @@ pub(super) struct App {
     pub(super) wallpaper_palette_outputs: Option<PendingPalette>,
     pub(super) wallpaper_pending_frames: Vec<WallpaperFrame>,
     pub(super) wallpaper_unconfirmed: Vec<crate::WallpaperFrameConfirmation>,
+    pub(super) fade_animations: bead_core::animation::Animations,
+    pub(super) wallpaper_gl_failed: bool,
     pub(super) report_surfaces: Vec<serde_json::Value>,
     pub(super) options: Options,
     pub(super) signal: LoopSignal,
@@ -470,6 +472,8 @@ pub fn run_runtime(
         wallpaper_palette_outputs: None,
         wallpaper_pending_frames: Vec::new(),
         wallpaper_unconfirmed: Vec::new(),
+        fade_animations: Default::default(),
+        wallpaper_gl_failed: false,
         report_surfaces: Vec::new(),
         options,
         signal: loop_.get_signal(),
@@ -949,7 +953,10 @@ impl App {
             surface.pixels = None;
             surface.transition = None;
             surface.buffers.clear();
+            surface.attached = None;
             surface.staged = None;
+            #[cfg(feature = "native-gl")]
+            let faded = surface.fade.take().is_some();
             if let Ok(pool) = SlotPool::new(4096, &self.shm) {
                 surface.pool = pool;
             } else {
@@ -958,6 +965,10 @@ impl App {
             surface.release_wait_ms = 0;
             surface.release_timer_pending = false;
             let _ = surface;
+            #[cfg(feature = "native-gl")]
+            if faded {
+                self.release_wallpaper_gl();
+            }
             self.prepare_wallpaper(provider, name, width as u32, height as u32);
             return;
         }
@@ -991,6 +1002,9 @@ impl App {
                 release_wait_ms: 0,
                 release_timer_pending: false,
                 scale_factor: info.scale_factor.max(1),
+                #[cfg(feature = "native-gl")]
+                fade: None,
+                attached: None,
                 layer,
                 pool: SlotPool::new(4096, &self.shm)?,
                 buffers: Vec::with_capacity(2),
@@ -1035,12 +1049,22 @@ impl App {
         let failed_name = name.clone();
         // A previous raster is needed only after idle released it. During rapid
         // navigation the surface already owns the transition pixels.
-        let animate = self.options.animate
+        #[cfg(feature = "native-gl")]
+        let fade = self.fade_wanted();
+        #[cfg(not(feature = "native-gl"))]
+        let fade = false;
+        let animate = (self.options.animate || fade)
             && self
                 .wallpaper_surfaces
                 .iter()
                 .find(|surface| surface.name == name)
-                .is_none_or(|surface| surface.pixels.is_none() && surface.transition.is_none());
+                .is_none_or(|surface| {
+                    surface.pixels.is_none()
+                        && surface.transition.is_none()
+                        // A fade reads the shown image from the retained buffer when it can.
+                        && !(fade && surface.attached.is_some())
+                        && !surface.fade_running()
+                });
         let confirmed_prepare = self.options.primary_factory.is_some() && !animate;
         std::thread::spawn(move || {
             if confirmed_prepare {
@@ -1776,6 +1800,11 @@ impl App {
         {
             return;
         }
+        #[cfg(feature = "native-gl")]
+        let frame = match self.start_wallpaper_fade(index, frame) {
+            Ok(()) => return,
+            Err(frame) => frame,
+        };
         let output = self.wallpaper_surfaces[index].output.clone();
         let logical = self.output.info(&output).and_then(|info| info.logical_size);
         let surface = &mut self.wallpaper_surfaces[index];
@@ -1822,7 +1851,7 @@ impl App {
             });
             surface.pixels = None;
         } else {
-            if attach_wallpaper_buffer(
+            let attached = attach_wallpaper_buffer(
                 WallpaperBufferTarget {
                     pool: &mut surface.pool,
                     layer: &surface.layer,
@@ -1845,9 +1874,8 @@ impl App {
                         provider.uploaded(&upload_output, upload_revision, &upload_token);
                     }
                 },
-            )
-            .is_err()
-            {
+            );
+            let Ok(selected) = attached else {
                 // The accepted pair must survive buffer backpressure. Reuse the
                 // transition retry slot without a second raster or a fade.
                 surface.transition = Some(WallpaperTransition {
@@ -1862,7 +1890,8 @@ impl App {
                 surface.release_wait_ms = 0;
                 self.schedule_wallpaper_tick(frame.output);
                 return;
-            }
+            };
+            surface.attached = Some(selected);
             if staged_matches {
                 surface.staged = None;
             }
@@ -1882,7 +1911,7 @@ impl App {
         }
     }
 
-    fn wallpaper_committed(
+    pub(super) fn wallpaper_committed(
         &self,
         output: &str,
         revision: u64,
@@ -1951,7 +1980,7 @@ impl App {
                     transition.pixels.copy_from_slice(target);
                 }
             }
-            if attach_wallpaper_buffer(
+            let attached = attach_wallpaper_buffer(
                 WallpaperBufferTarget {
                     pool: &mut surface.pool,
                     layer: &surface.layer,
@@ -1978,9 +2007,11 @@ impl App {
                         provider.uploaded(output, *revision, token);
                     }
                 },
-            )
-            .is_err()
-            {
+            );
+            if let Ok(selected) = attached {
+                surface.attached = Some(selected);
+            }
+            if attached.is_err() {
                 (false, None)
             } else {
                 transition.uploaded = true;
@@ -2013,7 +2044,7 @@ impl App {
         self.schedule_wallpaper_release_poll(output.to_owned());
     }
 
-    fn schedule_wallpaper_tick(&self, output: String) {
+    pub(super) fn schedule_wallpaper_tick(&self, output: String) {
         let handle = self.loop_handle.clone();
         if handle
             .insert_source(
@@ -2029,7 +2060,7 @@ impl App {
         }
     }
 
-    fn schedule_wallpaper_release_poll(&mut self, output: String) {
+    pub(super) fn schedule_wallpaper_release_poll(&mut self, output: String) {
         let Some(surface) = self
             .wallpaper_surfaces
             .iter_mut()
@@ -2102,6 +2133,7 @@ impl App {
         let surface = &mut self.wallpaper_surfaces[index];
         if released {
             surface.buffers.clear();
+            surface.attached = None;
             surface.staged = None;
             surface.pixels = None;
             if let Some(pool) = replacement_pool {
@@ -2535,18 +2567,18 @@ impl App {
     }
 }
 
-struct WallpaperBufferTarget<'a> {
-    pool: &'a mut SlotPool,
-    layer: &'a LayerSurface,
-    buffers: &'a mut Vec<smithay_client_toolkit::shm::slot::Buffer>,
-    viewport: Option<&'a WpViewport>,
-    scale_factor: i32,
-    width: u32,
-    height: u32,
-    logical: Option<(i32, i32)>,
-    reserved_buffer: Option<usize>,
-    prepared_buffer: Option<usize>,
-    feedback: Option<(&'a WpPresentation, &'a QueueHandle<App>, u64)>,
+pub(super) struct WallpaperBufferTarget<'a> {
+    pub(super) pool: &'a mut SlotPool,
+    pub(super) layer: &'a LayerSurface,
+    pub(super) buffers: &'a mut Vec<smithay_client_toolkit::shm::slot::Buffer>,
+    pub(super) viewport: Option<&'a WpViewport>,
+    pub(super) scale_factor: i32,
+    pub(super) width: u32,
+    pub(super) height: u32,
+    pub(super) logical: Option<(i32, i32)>,
+    pub(super) reserved_buffer: Option<usize>,
+    pub(super) prepared_buffer: Option<usize>,
+    pub(super) feedback: Option<(&'a WpPresentation, &'a QueueHandle<App>, u64)>,
 }
 
 fn prepare_wallpaper_buffer(
@@ -2598,11 +2630,11 @@ fn prepare_wallpaper_buffer(
     Err("wallpaper buffers busy".into())
 }
 
-fn attach_wallpaper_buffer(
+pub(super) fn attach_wallpaper_buffer(
     target: WallpaperBufferTarget<'_>,
     rgba: &[u8],
     on_upload: impl FnOnce(),
-) -> Result<(), String> {
+) -> Result<usize, String> {
     let WallpaperBufferTarget {
         pool,
         layer,
@@ -2666,7 +2698,7 @@ fn attach_wallpaper_buffer(
         i32::try_from(height).map_err(|_| "wallpaper height overflow")?,
     );
     layer.commit();
-    Ok(())
+    Ok(selected)
 }
 
 /// Whether a new layer surface starts with an empty input region. Only the bar and a

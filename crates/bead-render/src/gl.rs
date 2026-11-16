@@ -339,9 +339,11 @@ impl Transport {
         // SAFETY: validated GL string above remains alive in the current context.
         let name = unsafe { std::ffi::CStr::from_ptr(renderer) }.to_string_lossy();
         println!("GPU_INFO api=OpenGL renderer={name}");
-        if ["llvmpipe", "softpipe", "software"]
-            .iter()
-            .any(|marker| name.to_lowercase().contains(marker))
+        // BEAD_GL_ALLOW_SOFTWARE is the private-host test knob; production keeps the CPU path.
+        if std::env::var_os("BEAD_GL_ALLOW_SOFTWARE").is_none()
+            && ["llvmpipe", "softpipe", "software"]
+                .iter()
+                .any(|marker| name.to_lowercase().contains(marker))
         {
             return Err("software GL adapter; use tiny-skia fallback".into());
         }
@@ -419,6 +421,127 @@ impl Transport {
             return Err("EGL damage swap failed".into());
         }
         Ok(())
+    }
+}
+/// How a wallpaper fader reveals its target image.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum WallpaperBlend {
+    Fade,
+    /// A soft-edged disc growing from `origin` (0..1 of the output) until it covers it.
+    Grow {
+        origin: (f32, f32),
+    },
+}
+/// Two output-sized textures blended on the GPU, only for the length of a wallpaper change.
+pub struct WallpaperFader {
+    canvas: femtovg::Canvas<femtovg::renderer::OpenGl>,
+    from: femtovg::ImageId,
+    to: femtovg::ImageId,
+    size: (u32, u32),
+    last: (f32, WallpaperBlend),
+}
+impl WallpaperFader {
+    /// The EGL context must be current (`Transport::activate`). Both uploads happen here, so the
+    /// first moving frame costs like the others.
+    pub fn new(display: &Display, size: (u32, u32), from: &[u8], to: &[u8]) -> Result<Self> {
+        // SAFETY: the caller made the transport's context current on this thread.
+        let renderer = unsafe {
+            femtovg::renderer::OpenGl::new_from_function_cstr(|name| {
+                display.get_proc_address(name).cast()
+            })
+        }?;
+        let mut canvas = femtovg::Canvas::new(renderer)?;
+        let from = Self::upload(&mut canvas, size, from)?;
+        let to = Self::upload(&mut canvas, size, to)?;
+        Ok(Self {
+            canvas,
+            from,
+            to,
+            size,
+            last: (0., WallpaperBlend::Fade),
+        })
+    }
+    fn upload(
+        canvas: &mut femtovg::Canvas<femtovg::renderer::OpenGl>,
+        (w, h): (u32, u32),
+        rgba: &[u8],
+    ) -> Result<femtovg::ImageId> {
+        if rgba.len() != w as usize * h as usize * 4 {
+            return Err("wallpaper texture size mismatch".into());
+        }
+        Ok(canvas.create_image(
+            femtovg::ImageSource::Rgba(imgref::Img::new(rgba.as_rgba(), w as usize, h as usize)),
+            femtovg::ImageFlags::empty(),
+        )?)
+    }
+    fn paint(&mut self, blend: f32, mode: WallpaperBlend) {
+        let (w, h) = (self.size.0 as f32, self.size.1 as f32);
+        let canvas = &mut self.canvas;
+        let mut full = femtovg::Path::new();
+        full.rect(0., 0., w, h);
+        let layer = |image, alpha| {
+            let mut paint = femtovg::Paint::image(image, 0., 0., w, h, 0., alpha);
+            paint.set_anti_alias(false);
+            paint
+        };
+        canvas.fill_path(&full, &layer(self.from, 1.));
+        match mode {
+            WallpaperBlend::Fade => canvas.fill_path(&full, &layer(self.to, blend)),
+            WallpaperBlend::Grow { origin } => {
+                let (cx, cy) = (origin.0 * w, origin.1 * h);
+                let far = [(0., 0.), (w, 0.), (0., h), (w, h)]
+                    .iter()
+                    .map(|(x, y)| (x - cx).hypot(y - cy))
+                    .fold(0., f32::max);
+                let feather = far * 0.15;
+                let radius = blend * (far + feather);
+                // Stacked translucent discs approximate a soft edge; the last one is opaque.
+                for (step, alpha) in [(0., 0.3), (1., 0.3), (2., 0.3), (3., 1.)] {
+                    let r = radius - feather * step / 3.;
+                    if r > 0. {
+                        let mut disc = femtovg::Path::new();
+                        disc.circle(cx, cy, r);
+                        canvas.fill_path(&disc, &layer(self.to, alpha));
+                    }
+                }
+            }
+        }
+    }
+    /// Draw the blend to the current EGL surface; the caller presents it.
+    pub fn draw(&mut self, blend: f32, mode: WallpaperBlend) {
+        self.last = (blend, mode);
+        self.canvas.set_size(self.size.0, self.size.1, 1.);
+        self.canvas.set_render_target(femtovg::RenderTarget::Screen);
+        self.paint(blend, mode);
+        self.canvas.flush();
+    }
+    /// Make the last drawn blend the new `from` and upload `to`: a retarget with no jump.
+    pub fn retarget(&mut self, to: &[u8]) -> Result<()> {
+        let (w, h) = self.size;
+        let baked = self.canvas.create_image_empty(
+            w as usize,
+            h as usize,
+            femtovg::PixelFormat::Rgba8,
+            femtovg::ImageFlags::PREMULTIPLIED | femtovg::ImageFlags::FLIP_Y,
+        )?;
+        self.canvas
+            .set_render_target(femtovg::RenderTarget::Image(baked));
+        let (blend, mode) = self.last;
+        self.paint(blend, mode);
+        self.canvas.flush();
+        self.canvas.set_render_target(femtovg::RenderTarget::Screen);
+        let to = Self::upload(&mut self.canvas, self.size, to)?;
+        self.canvas.delete_image(self.from);
+        self.canvas.delete_image(self.to);
+        (self.from, self.to) = (baked, to);
+        Ok(())
+    }
+}
+impl Drop for WallpaperFader {
+    fn drop(&mut self) {
+        self.canvas.delete_image(self.from);
+        self.canvas.delete_image(self.to);
+        self.canvas.flush();
     }
 }
 struct Texture {
