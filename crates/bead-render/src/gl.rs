@@ -1006,13 +1006,18 @@ impl Renderer for GlRenderer {
             target.height,
             femtovg::Color::rgba(0, 0, 0, 0),
         );
-        if scene.opacity >= 1. {
-            Self::paint(canvas, frame, &self.images, scene.offset)?;
-        } else if scene.opacity > 0. {
-            let (w, h) = (
-                (scene.bounds.w * frame.scale).ceil() as u32,
-                (scene.bounds.h * frame.scale).ceil() as u32,
-            );
+        let fade = scene.motion.as_ref().is_some_and(|motion| motion.fade);
+        let opening = fade && scene.motion.as_ref().is_some_and(|motion| motion.open);
+        let group_current = self
+            .group
+            .is_some_and(|(_, w, h, key)| key == frame.key && (w, h) == group_size(scene, frame));
+        let (build_group, composite_group) = group_use(scene.opacity, fade, opening, group_current);
+        if !build_group && !composite_group {
+            if scene.opacity >= 1. {
+                Self::paint(canvas, frame, &self.images, scene.offset)?;
+            }
+        } else {
+            let (w, h) = group_size(scene, frame);
             if u64::from(w) * u64::from(h) * 4 > 64 * 1024 * 1024 {
                 return Err("GL opacity group exceeds budget".into());
             }
@@ -1055,16 +1060,19 @@ impl Renderer for GlRenderer {
                 *key = frame.key;
             }
             canvas.set_render_target(femtovg::RenderTarget::Screen);
-            let (x, y) = (
-                (scene.offset.0 + scene.bounds.x) * frame.scale,
-                (scene.offset.1 + scene.bounds.y) * frame.scale,
-            );
-            let mut path = femtovg::Path::new();
-            path.rect(x, y, w as f32, h as f32);
-            canvas.fill_path(
-                &path,
-                &femtovg::Paint::image(*image, x, y, w as f32, h as f32, 0., scene.opacity),
-            );
+            if composite_group {
+                // Whole pixels, so the settle frame matches a direct paint.
+                let (x, y) = (
+                    ((scene.offset.0 + scene.bounds.x) * frame.scale).round(),
+                    ((scene.offset.1 + scene.bounds.y) * frame.scale).round(),
+                );
+                let mut path = femtovg::Path::new();
+                path.rect(x, y, w as f32, h as f32);
+                canvas.fill_path(
+                    &path,
+                    &femtovg::Paint::image(*image, x, y, w as f32, h as f32, 0., scene.opacity),
+                );
+            }
         }
         canvas.flush();
         // A non-fading motion never samples an opacity group. A renderer reused
@@ -1076,5 +1084,51 @@ impl Renderer for GlRenderer {
             self.group_charge = None;
         }
         Ok(())
+    }
+}
+
+fn group_size(scene: &Scene, frame: &crate::tree::Frame) -> (u32, u32) {
+    (
+        (scene.bounds.w * frame.scale).ceil() as u32,
+        (scene.bounds.h * frame.scale).ceil() as u32,
+    )
+}
+
+/// (build, composite) the opacity group. An opening fade builds it while still hidden (the held
+/// first pose) so its first visible frame only composites, and its settle frame composites the
+/// group it already has instead of painting the whole body again.
+fn group_use(opacity: f32, fade: bool, opening: bool, group_current: bool) -> (bool, bool) {
+    let build = opacity < 1. && (opacity > 0. || opening);
+    (
+        build,
+        opacity > 0. && (opacity < 1. || (fade && group_current)),
+    )
+}
+
+#[cfg(test)]
+mod group_tests {
+    use super::group_use;
+
+    #[test]
+    fn a_fade_builds_hidden_and_settles_from_its_group() {
+        let hidden = (0., true, true);
+        let closed = (0., true, false);
+        let mid = (0.4, true, true);
+        let settle = (1., true, true);
+        for ((opacity, fade, opening), current, want) in [
+            (hidden, false, (true, false)),
+            (closed, false, (false, false)),
+            (mid, true, (true, true)),
+            (settle, true, (false, true)),
+            (settle, false, (false, false)),
+            ((1., false, false), true, (false, false)),
+            ((0.5, false, false), false, (true, true)),
+        ] {
+            assert_eq!(
+                group_use(opacity, fade, opening, current),
+                want,
+                "{opacity} {fade} {opening} {current}"
+            );
+        }
     }
 }

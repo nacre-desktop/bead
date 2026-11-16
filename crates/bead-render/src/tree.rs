@@ -4431,7 +4431,10 @@ impl Renderer for TreeCpuRenderer {
         self.slide_damage = None;
         self.close_due = None;
         if scene.opacity <= 0. {
-            if !self.keep_hidden_group {
+            if !frozen_snapshot && scene.motion.as_ref().is_some_and(|m| m.fade && m.open) {
+                // The held first pose of an opening: flatten now so the first moving frame only blits.
+                self.cache_content(scene)?;
+            } else if !self.keep_hidden_group {
                 self.flattened = None;
                 self.group_charge = None;
             }
@@ -5948,6 +5951,36 @@ mod tests {
         let (_, dy) = scene.panel_offset(progress, open);
         scene.offset.1 += dy;
         scene
+    }
+    #[test]
+    fn an_opening_fade_flattens_its_group_on_the_hidden_first_pose() {
+        let (w, h) = (396u32, 246 + 120);
+        let mut renderer = TreeCpuRenderer::default();
+        let mut bytes = vec![0u8; (w * h * 4) as usize];
+        let mut draw = |renderer: &mut TreeCpuRenderer, open: bool, opacity: f32| {
+            let mut scene = sliding_panel(open, 0.5);
+            let motion = scene.motion.as_mut().unwrap();
+            (motion.fade, motion.open, motion.reveal) = (true, open, false);
+            scene.opacity = opacity;
+            renderer.prepare_on_ui(&scene, 1.5).unwrap();
+            let target = ShmTarget {
+                bytes: &mut bytes,
+                width: w,
+                height: h,
+                scale: 1.5,
+                format: PixelFormat::Rgba,
+            };
+            renderer.render(&scene, target, Damage::full(w, h)).unwrap();
+        };
+        draw(&mut renderer, false, 0.);
+        assert_eq!(
+            renderer.opacity_builds, 0,
+            "a closed panel flattens nothing"
+        );
+        draw(&mut renderer, true, 0.);
+        assert_eq!(renderer.opacity_builds, 1, "held first pose flattens");
+        draw(&mut renderer, true, 0.3);
+        assert_eq!(renderer.opacity_builds, 1, "first moving frame only blits");
     }
     #[test]
     fn slide_frames_composite_one_content_layer_matching_primitive_paint() {

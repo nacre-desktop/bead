@@ -184,3 +184,7 @@ niri sends a layer surface its frame callback only after drawing the surface its
 ## Slide gap attribution (B0295)
 
 The always-on `PANEL_SLIDE` line appends `gap_at` (commit index that ended the worst gap), `gap_wait_ms` (previous commit to the frame callback that drew it, 0 if none), `gap_queue_ms` (callback or previous commit to draw start) and `gap_render_ms` (draw start to commit); the three sum to `max_gap_ms`. Earlier fields keep their order. Presentation-feedback gaps are not included: feedback arrives after the slide line is written.
+
+## Slide edge frames (B0301)
+
+A fading panel's opacity group (the body flattened once) used to be built on its first visible frame and, on the GL renderer, the settle frame repainted the whole body instead of reusing it: both 4-6 ms against ~1 ms for a mid-slide frame. An opening fade now builds the group on the hidden held first pose (CPU: `flattened`; GL: the opacity image), and the GL settle frame composites the current group at whole pixels while the content key is unchanged; changed content or a closed panel still paints directly.
