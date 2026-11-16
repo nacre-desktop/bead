@@ -357,17 +357,18 @@ fn present_art(
     surface.commit();
     Some(buffer)
 }
-/// The free lip's art. While it rides its panel as the tab, its rest box is drawn as an active lip
+/// The free lip's art. While its panel is open (it rides it as the tab, or another process draws
+/// the tab), its rest box is drawn as an active lip
 /// at rest (`attach` 0, never hovered or charging): the host's frame material, no pill, so a hole
 /// the open panel leaves for the lip stays filled and only the tab glows.
 fn free_lip_art(
-    attached: bool,
+    docked: bool,
     art: Option<&EdgeArt>,
     lip: &Lip,
     size: (u32, u32),
     state: LipState,
 ) -> Option<Arc<[u8]>> {
-    let state = if attached {
+    let state = if docked {
         LipState {
             progress: 0.,
             active: true,
@@ -414,6 +415,8 @@ pub(super) struct EdgeState {
     opening_epoch: u64,
     /// The lip attached to the open panel as its tab.
     pub(super) tab: Option<LipTab>,
+    /// The cursor last sent for a lip surface: pointer (a button) or the default arrow.
+    strip_button: bool,
     /// The last `LIP_TAB` outcome printed, so the line appears only when it changes.
     tab_outcome: String,
 }
@@ -518,6 +521,18 @@ fn cancel_for_external_source(edge: &mut EdgeState) -> Option<String> {
     edge.cue_fade = 0.;
     edge.external = ExternalCueTracker::default();
     edge.hovered.take()
+}
+/// Cursor and press meaning on a lip surface. The tab is always a button; the free strip is one
+/// only while its panel is closed (open: default arrow, and a press neither closes nor reopens).
+fn lip_button(on_tab: bool, active: bool) -> bool {
+    on_tab || !active
+}
+fn lip_shape(button: bool) -> wp_cursor_shape_device_v1::Shape {
+    if button {
+        wp_cursor_shape_device_v1::Shape::Pointer
+    } else {
+        wp_cursor_shape_device_v1::Shape::Default
+    }
 }
 /// The tab glows only while the pointer is on the tab surface itself.
 fn tab_hovered(current: bool, kind: &PointerEventKind) -> bool {
@@ -1257,7 +1272,7 @@ impl App {
                     opened = true;
                 }
                 free_lip_art(
-                    self.edge.attached(&k),
+                    state.active || self.edge.attached(&k),
                     self.options.edge_art.as_ref(),
                     &lip,
                     size,
@@ -1287,6 +1302,7 @@ impl App {
         s.drawn = Some((stamp, size, scale120));
     }
     fn redraw_lips(&mut self) {
+        self.refresh_strip_cursor();
         for i in 0..self.edge_surfaces.len() {
             if matches!(self.edge_surfaces[i].kind, Kind::Lip(_)) {
                 self.draw_edge(i);
@@ -1481,6 +1497,7 @@ impl App {
         }
     }
     fn redraw_lip(&mut self, k: &str) {
+        self.refresh_strip_cursor();
         self.publish_cue(k);
         if self.edge.attached(k) {
             self.edge.draw_tab(self.options.edge_art.as_ref());
@@ -1650,13 +1667,16 @@ impl App {
     /// Pointer events on a lip strip surface or on the panel's tab. Returns false for any other
     /// surface. The tab is the lip: hovering it holds the panel open, clicking it closes it.
     pub(super) fn edge_pointer(&mut self, event: &PointerEvent) -> bool {
+        let mut on_tab = false;
         let (lip, output, wl_output) = if let Some(tab) = self
             .edge
             .tab
             .as_mut()
             .filter(|tab| tab.surface == event.surface)
         {
+            on_tab = true;
             tab.hovered = tab_hovered(tab.hovered, &event.kind);
+
             let (lip, wl_output) = (tab.lip.clone(), tab.output.clone());
             (lip, self.output_id(&wl_output), wl_output)
         } else {
@@ -1677,11 +1697,13 @@ impl App {
             };
             (lip, output, wl_output)
         };
+        let button = lip_button(on_tab, self.lip_active(&wl_output, &lip));
         match event.kind {
             PointerEventKind::Enter { serial } => {
                 self.cursor_enter_serial = serial;
                 if let Some(device) = &self.cursor_device {
-                    device.set_shape(serial, wp_cursor_shape_device_v1::Shape::Pointer);
+                    device.set_shape(serial, lip_shape(button));
+                    self.edge.strip_button = button;
                 }
                 self.lip_approach(&output, &lip, Some(&wl_output));
             }
@@ -1689,11 +1711,61 @@ impl App {
                 self.lip_approach(&output, &lip, Some(&wl_output));
             }
             PointerEventKind::Leave { .. } => self.lip_leave(&output, &lip),
-            PointerEventKind::Press { button: 0x110, .. } => {
+            PointerEventKind::Press { button: 0x110, .. } if button => {
                 self.lip_click(&output, &lip, &wl_output)
             }
             _ => {}
         }
+        true
+    }
+    /// A free strip's cursor follows its panel opening or closing under a resting pointer.
+    /// Sent only when the wanted shape changes, so per-frame redraws cost nothing.
+    fn refresh_strip_cursor(&mut self) {
+        let (Some(device), Some(k)) = (&self.cursor_device, self.edge.hovered.as_deref()) else {
+            return;
+        };
+        let Some((output, id)) = k.split_once('/') else {
+            return;
+        };
+        let (Some(lip), Some(wl_output)) = (
+            self.lip_named(id),
+            self.edge_surfaces
+                .iter()
+                .find(|s| s.output_name == output && s.kind == Kind::Lip(id.to_owned()))
+                .map(|s| s.output.clone()),
+        ) else {
+            return;
+        };
+        let on_tab = self.edge.tab.as_ref().is_some_and(|t| t.hovered);
+        let button = lip_button(on_tab, self.lip_active(&wl_output, &lip));
+        if self.cursor_enter_serial != 0 && button != self.edge.strip_button {
+            device.set_shape(self.cursor_enter_serial, lip_shape(button));
+            self.edge.strip_button = button;
+        }
+    }
+    /// A press on a dismiss catcher that lies over an open panel's free strip (the catcher's holes
+    /// are skipped when the host disallows edge hover): not a button, so it neither closes nor
+    /// lets the resting pointer's dwell reopen the panel.
+    pub(super) fn dismiss_press_on_open_strip(&mut self, position: (f64, f64)) -> bool {
+        let Some(dismiss) = self.dismiss.as_ref() else {
+            return false;
+        };
+        let wl_output = dismiss.output.clone();
+        let output = self.output_id(&wl_output);
+        let Some((w, h)) = self.output.info(&wl_output).and_then(|i| i.logical_size) else {
+            return false;
+        };
+        let hit = self.edge.chrome.lips.iter().find(|l| {
+            !self.bar_hosts(l)
+                && l.contains((w as f32, h as f32), position.0 as f32, position.1 as f32)
+        });
+        let Some(lip) = hit.cloned() else {
+            return false;
+        };
+        if !self.lip_active(&wl_output, &lip) {
+            return false;
+        }
+        self.edge.gate.dismiss(&key(&output, &lip.id));
         true
     }
     /// Pointer events on the bar surface: a bar-hosted lip counts only where the bar has
@@ -2156,6 +2228,14 @@ mod tests {
     }
 
     #[test]
+    fn free_strip_is_a_button_only_while_its_panel_is_closed() {
+        assert!(lip_button(false, false));
+        assert!(!lip_button(false, true));
+        assert!(lip_button(true, true) && lip_button(true, false));
+        assert_eq!(lip_shape(false), wp_cursor_shape_device_v1::Shape::Default);
+        assert_eq!(lip_shape(true), wp_cursor_shape_device_v1::Shape::Pointer);
+    }
+    #[test]
     fn tab_glow_follows_only_the_tab_surface_pointer() {
         let (enter, leave) = (
             PointerEventKind::Enter { serial: 0 },
@@ -2348,7 +2428,7 @@ mod tests {
     }
 
     #[test]
-    fn attached_free_lip_draws_its_rest_box_active_and_never_hovered() {
+    fn docked_free_lip_draws_its_rest_box_active_and_never_hovered() {
         let lip = Lip {
             id: "right".into(),
             edge: Edge::Right,

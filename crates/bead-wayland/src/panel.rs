@@ -1493,7 +1493,7 @@ impl App {
 
 pub(super) struct Dismiss {
     pub(super) enabled: bool,
-    output: wl_output::WlOutput,
+    pub(super) output: wl_output::WlOutput,
     pub(super) size: Option<(i32, i32)>,
     bounds: Option<[i32; 4]>,
     holes: Vec<[i32; 4]>,

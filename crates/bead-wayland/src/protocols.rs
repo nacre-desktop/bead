@@ -1427,6 +1427,9 @@ impl App {
                 if self.options.trace_state {
                     println!("DISMISS_INPUT press=true");
                 }
+                if self.dismiss_press_on_open_strip(event.position) {
+                    return;
+                }
                 if self
                     .panel_runtime
                     .as_ref()
