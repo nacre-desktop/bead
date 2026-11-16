@@ -76,3 +76,7 @@ folder host reads `[lips.<id>] edge, opens, length (144), thickness (10)` from b
 swelling bar as art, 350 ms dwell; a lip-opened panel docks flush with its own edge, centred);
 `examples/bar-with-panels` has left and right lips opening side docks and a top lip (inside the bar)
 opening the status peek. Headless 120 Hz capture strips: pending (see the unit handoff).
+
+## Pearl slots keep the resident tab (B0297)
+The tab belongs to its panel group: `swap_group` swaps `edge.tab` with the slot's group, so a pearl or guide draw (whose `lip_tab_prepare` skips with `pearl`) sees no tab and detaches, poses or redraws nothing.
+Before, each pearl draw (about 1/s) dropped the resident's tab and redrew the free pill at the screen edge; the next resident draw re-attached it. The slot's own detach sites (close, unmap) are covered the same way. `edges_panel_changed` returns early inside a slot (like `edge_panel_hover`): a pearl or guide starting there would otherwise redraw the lips without seeing the resident tab and show its free pill beside it.

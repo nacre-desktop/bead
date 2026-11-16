@@ -273,6 +273,8 @@ pub(crate) struct Group {
     reserved_pearl_id: Option<u32>,
     prewarm_attempted: bool,
     promotion_pending: bool,
+    /// The panel's lip tab: a subsurface of this group's panel, so it travels with it.
+    tab: Option<edges::LipTab>,
     surfaces: Vec<Surface>,
 }
 impl Group {
@@ -304,6 +306,7 @@ impl Group {
             reserved_pearl_id: None,
             prewarm_attempted: false,
             promotion_pending: false,
+            tab: None,
             surfaces: Vec::new(),
         }
     }
@@ -425,6 +428,7 @@ impl App {
         swap(&mut self.reserved_pearl_id, &mut g.reserved_pearl_id);
         swap(&mut self.prewarm_attempted, &mut g.prewarm_attempted);
         swap(&mut self.promotion_pending, &mut g.promotion_pending);
+        swap(&mut self.edge.tab, &mut g.tab);
         let mine: Vec<Surface> = {
             let mut kept = Vec::new();
             let mut out = Vec::new();

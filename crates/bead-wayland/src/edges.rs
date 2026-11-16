@@ -1609,7 +1609,9 @@ impl App {
     /// A panel opened or closed: lips redraw their active state; a panel dismissed under a
     /// resting pointer must not reopen until the pointer leaves.
     pub(super) fn edges_panel_changed(&mut self, closed: bool) {
-        if self.options.control.is_none() {
+        // A pearl or guide starting in its slot sees no resident tab: redrawing lips there would
+        // show the resident's free pill beside its attached tab.
+        if self.options.control.is_none() || self.pearl.is_some() {
             return;
         }
         if closed {
