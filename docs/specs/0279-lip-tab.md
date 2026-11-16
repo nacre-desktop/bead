@@ -85,3 +85,10 @@ Before, each pearl draw (about 1/s) dropped the resident's tab and redrew the fr
 
 - A layer surface takes input only where something visible is interactive. The bar and a panel-mode primary set their hit area as they draw; a primary that is neither (a panels-only app's `(0, 32)` strip under the bar's exclusive zone) starts with an empty input region (`starts_input_less`), so it never swallows clicks meant for windows.
 - Reserved frame strips are always input-less; a lip's input is its own rect (see the top-tab rule above).
+
+## Lip state while attached (B0300)
+- The tab glows only for the pointer on the tab surface (`LipTab::hovered`, set in `edge_pointer`'s tab branch from Enter/Motion/Leave by `tab_hovered`). The free strip keeps setting `edge.hovered`, which holds a hover-opened panel open (the pointer overshooting onto the screen edge must not close it) but never reaches the art of the tab. Before, `draw_tab` read `edge.hovered == key`, so the strip at the far screen edge made the attached tab glow, until the pointer left it.
+- Detaching the tab clears `edge.hovered` for its key: the destroyed surface sends no Leave, and a stale hover would block the exit grace.
+- A pending external open (`opening`) always redraws when it expires, so a lip whose host reported active without any redraw shows the active state instead of the held dwell look.
+- A button-opened panel draws the same states as a lip-opened one except `hovered` (false) and no dwell: free lip `active, attach 0`, then the tab at `attach` 0 rising with the pose (body width 0 and opacity 0 on a reveal's first frame).
+- Top lip probe (bar 40 + frame 10, top lip 208 x 50 at rest, scale 1 and 1.5, x = centre +-0/60/100/120, y 36..70): the bar surface takes the pointer to y 48; nothing below y 50 at any x. A top tab starts `active, hovered false` and glows only while the pointer is on it.

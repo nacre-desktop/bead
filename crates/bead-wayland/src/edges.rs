@@ -224,6 +224,8 @@ pub(super) struct LipTab {
     scale120: u32,
     /// The edge lip clears right after the panel's first tab frame commits (never before).
     handover: bool,
+    /// The pointer is on the tab surface itself; the free strip's hover (which holds the panel) never glows it.
+    hovered: bool,
 }
 impl Drop for LipTab {
     fn drop(&mut self) {
@@ -461,7 +463,7 @@ impl EdgeState {
             progress: self.progress(&tab.key),
             active: tab.active,
             attach: tab.attach,
-            hovered: self.hovered.as_deref() == Some(tab.key.as_str()),
+            hovered: tab.hovered,
         };
         let size = (
             tab.rest.w.round().max(1.) as u32,
@@ -491,10 +493,11 @@ fn drawn_progress(opening: Option<&str>, key: &str, raw: f32) -> f32 {
 /// How long a fired open may stay pending: a host that never reports active (child down or
 /// slow) must not leave the lip swollen. Not cleared on pointer leave: it often moves to the panel.
 const OPENING_EXPIRY: Duration = Duration::from_secs(1);
-/// The expiry timer fired: `None` = stale, ignore; `Some(redraw)` = clear the mark, and redraw
-/// only when the lip is still inactive so it falls back to rest.
-fn opening_expired(epoch: u64, fired: u64, pending: bool, active: bool) -> Option<bool> {
-    (pending && epoch == fired).then_some(!active)
+/// The expiry timer fired for the pending open: false = stale, ignore; true = clear the mark and
+/// redraw, so the lip falls back to rest, or shows the active state an external host reported
+/// (nothing redraws on that report, so the held look would stay).
+fn opening_expired(epoch: u64, fired: u64, pending: bool) -> bool {
+    pending && epoch == fired
 }
 fn cancel_for_external_source(edge: &mut EdgeState) -> Option<String> {
     edge.dwelling = None;
@@ -504,6 +507,14 @@ fn cancel_for_external_source(edge: &mut EdgeState) -> Option<String> {
     edge.cue_fade = 0.;
     edge.external = ExternalCueTracker::default();
     edge.hovered.take()
+}
+/// The tab glows only while the pointer is on the tab surface itself.
+fn tab_hovered(current: bool, kind: &PointerEventKind) -> bool {
+    match kind {
+        PointerEventKind::Enter { .. } | PointerEventKind::Motion { .. } => true,
+        PointerEventKind::Leave { .. } => false,
+        _ => current,
+    }
 }
 /// The bar-hosted cue shows while the dwell fills or an open is pending, never while the lip is
 /// the panel's tab: the cue and the tab would be two pills (a pending open holds progress at 1).
@@ -1022,6 +1033,7 @@ impl App {
             active: true,
             scale120: 120,
             handover: true,
+            hovered: false,
         });
     }
     /// After the panel frame committed: the edge lip clears, so a refresh that catches only one of
@@ -1043,6 +1055,10 @@ impl App {
         if let Some(tab) = self.edge.tab.take() {
             let key = tab.key.clone();
             drop(tab);
+            // The tab's surface is gone, so its Leave never comes: hover it held ends here.
+            if self.edge.hovered.as_deref() == Some(key.as_str()) {
+                self.edge.hovered = None;
+            }
             self.redraw_lip(&key);
         }
     }
@@ -1171,16 +1187,9 @@ impl App {
             move |_, _, app| {
                 let k = key(&out, &id);
                 let pending = app.edge.opening.as_deref() == Some(&k);
-                let active = app
-                    .lip_named(&id)
-                    .is_some_and(|lip| app.lip_active_on(&out, &lip));
-                if let Some(redraw) =
-                    opening_expired(epoch, app.edge.opening_epoch, pending, active)
-                {
+                if opening_expired(epoch, app.edge.opening_epoch, pending) {
                     app.edge.opening = None;
-                    if redraw {
-                        app.redraw_lips();
-                    }
+                    app.redraw_lips();
                 }
                 TimeoutAction::Drop
             },
@@ -1633,9 +1642,10 @@ impl App {
         let (lip, output, wl_output) = if let Some(tab) = self
             .edge
             .tab
-            .as_ref()
+            .as_mut()
             .filter(|tab| tab.surface == event.surface)
         {
+            tab.hovered = tab_hovered(tab.hovered, &event.kind);
             let (lip, wl_output) = (tab.lip.clone(), tab.output.clone());
             (lip, self.output_id(&wl_output), wl_output)
         } else {
@@ -2135,11 +2145,28 @@ mod tests {
     }
 
     #[test]
-    fn opening_expiry_rests_inactive_ignores_stale_and_just_clears_active() {
-        assert_eq!(opening_expired(3, 3, true, false), Some(true), "rest");
-        assert_eq!(opening_expired(2, 3, true, false), None, "stale epoch");
-        assert_eq!(opening_expired(3, 3, false, false), None, "already cleared");
-        assert_eq!(opening_expired(3, 3, true, true), Some(false), "active");
+    fn tab_glow_follows_only_the_tab_surface_pointer() {
+        let (enter, leave) = (
+            PointerEventKind::Enter { serial: 0 },
+            PointerEventKind::Leave { serial: 0 },
+        );
+        assert!(tab_hovered(false, &enter));
+        assert!(tab_hovered(false, &PointerEventKind::Motion { time: 0 }));
+        assert!(!tab_hovered(true, &leave));
+        let press = PointerEventKind::Press {
+            time: 0,
+            button: 0x110,
+            serial: 0,
+        };
+        assert!(tab_hovered(true, &press) && !tab_hovered(false, &press));
+        // The strip's hover (`edge.hovered`) never reaches `draw_tab`: it reads `tab.hovered` only.
+    }
+
+    #[test]
+    fn opening_expiry_redraws_a_pending_open_and_ignores_stale() {
+        assert!(opening_expired(3, 3, true), "pending");
+        assert!(!opening_expired(2, 3, true), "stale epoch");
+        assert!(!opening_expired(3, 3, false), "already cleared");
     }
 
     /// B0279: the tab sits flush against the posed body's inner edge, at the lip's place along the
