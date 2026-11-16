@@ -3535,7 +3535,7 @@ mod tests {
         assert_eq!(curve, bead_core::animation::Curve::EmphasizedAccelerate);
         animations.open_to("panel", false, 0.3, duration, curve);
         let mut last_positions = Vec::new();
-        for frame in 0..=26 {
+        for frame in 0..=22 {
             let now = 0.3 + frame as f64 / 120.;
             let progress = animations.value("panel", now).unwrap().0;
             let (dx, dy) = scene.panel_offset(progress, false);
@@ -3567,15 +3567,15 @@ mod tests {
                     && ((posed.y + scene.offset.1) - (base.y + 32. + dy)).abs() < 0.01
             }));
             animations.committed("panel", now, now);
-            if frame == 26 {
+            if frame == 22 {
                 assert_eq!(progress, 0.);
                 assert_eq!(scene.motion.as_ref().unwrap().opacity(progress), 0.);
             } else {
                 assert!(scene.motion.as_ref().unwrap().opacity(progress) > 0.);
             }
         }
-        let travel = (last_positions[0] - last_positions[26]).abs();
-        let final_three = (last_positions[23] - last_positions[26]).abs();
+        let travel = (last_positions[0] - last_positions[22]).abs();
+        let final_three = (last_positions[19] - last_positions[22]).abs();
         assert!(
             final_three >= travel * 0.25,
             "last three 120 Hz frames moved {final_three}/{travel}"
@@ -4418,7 +4418,10 @@ mod motion_transition_tests {
     #[test]
     fn return_curve_is_honoured_and_defaults_to_the_accelerating_exit() {
         use bead_core::animation::Curve;
-        assert_eq!(motion(0.2, None).transition(false).1, Curve::EmphasizedAccelerate);
+        assert_eq!(
+            motion(0.2, None).transition(false).1,
+            Curve::EmphasizedAccelerate
+        );
         let mut m = motion(0.2, None);
         m.return_curve = Some(Curve::EaseInOut);
         assert_eq!(m.transition(false).1, Curve::EaseInOut);
@@ -4439,12 +4442,27 @@ mod motion_transition_tests {
     #[test]
     fn an_unauthored_open_duration_follows_the_travel() {
         use bead_core::Edge::*;
-        assert_eq!(settled(Left, Some(100.), true), 0.18, "short travel clamps up");
+        assert_eq!(
+            settled(Left, Some(100.), true),
+            0.18,
+            "short travel clamps up"
+        );
         assert!((settled(Left, Some(400.), true) - 0.25).abs() < 1e-9);
-        assert_eq!(settled(Left, Some(2000.), true), 0.32, "long travel clamps down");
-        assert!((settled(Right, None, true) - 0.25).abs() < 1e-9, "width 400");
+        assert_eq!(
+            settled(Left, Some(2000.), true),
+            0.32,
+            "long travel clamps down"
+        );
+        assert!(
+            (settled(Right, None, true) - 0.25).abs() < 1e-9,
+            "width 400"
+        );
         assert_eq!(settled(Top, None, true), 0.32, "height 800 clamps");
         assert!((settled(Left, Some(400.), true) - settled(Bottom, Some(400.), true)).abs() < 1e-9);
-        assert_eq!(settled(Left, Some(400.), false), 0.2, "an authored duration wins");
+        assert_eq!(
+            settled(Left, Some(400.), false),
+            0.2,
+            "an authored duration wins"
+        );
     }
 }

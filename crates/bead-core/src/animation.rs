@@ -398,7 +398,11 @@ mod tests {
         let mid = a.value("p", 1.1 + 0.12).unwrap().0;
         assert!((mid - Curve::EaseOut.ease(0.5)).abs() < 1e-6);
         a.open_to("p", true, 1.2, 0.5, Curve::Spring);
-        assert_eq!(a.value("p", 1.1 + 0.24), Some((1., false)), "running keeps .24 s");
+        assert_eq!(
+            a.value("p", 1.1 + 0.24),
+            Some((1., false)),
+            "running keeps .24 s"
+        );
     }
     #[test]
     fn a_held_motion_starts_at_its_first_committed_frame() {

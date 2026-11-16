@@ -1070,7 +1070,8 @@ mod tests {
             id: "osd".into(),
             open: true,
             duration: 0.150,
-            return_duration: None,
+            // Authored like the OSD's: the profile's default close (.18 s) is longer than this open.
+            return_duration: Some(0.105),
             return_curve: None,
             auto_open: false,
             spring: false,

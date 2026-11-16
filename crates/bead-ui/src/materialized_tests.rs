@@ -844,7 +844,9 @@ return ui.Column{id='root',width=300,height=300,fill='surface',padding=40,gap=40
 #[test]
 fn close_on_leave_defaults_to_the_profile_delay_and_an_authored_one_wins() {
     let delay = |stores: &str| {
-        let behavior = format!("return {{stores={{[\"panel.close_on_leave\"]=true,{stores}}},actions={{}},computed={{}}}}");
+        let behavior = format!(
+            "return {{stores={{[\"panel.close_on_leave\"]=true,{stores}}},actions={{}},computed={{}}}}"
+        );
         let (_fixture, mut session) = interaction_fixture(
             "local ui=require('bead.ui')\nreturn ui.Panel{id='root',width=100,height=60}",
             &behavior,
@@ -858,5 +860,8 @@ fn close_on_leave_defaults_to_the_profile_delay_and_an_authored_one_wins() {
     let default = delay("");
     assert!(default >= profile && default < profile * 2, "{default:?}");
     let authored = delay("[\"panel.leave_delay\"]=1");
-    assert!(authored >= std::time::Duration::from_secs(1), "{authored:?}");
+    assert!(
+        authored >= std::time::Duration::from_secs(1),
+        "{authored:?}"
+    );
 }

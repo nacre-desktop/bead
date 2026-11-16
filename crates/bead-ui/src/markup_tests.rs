@@ -1684,21 +1684,46 @@ fn the_luau_panel_profile_mirrors_the_rust_token_and_defaults_the_durations() {
         session(&f)
     };
     // Each token read from Luau lands in a prop the scene reports back.
-    let s = panel("width=p.leave_ms,height=60,duration=p.open_min,return_duration=p.close,slide_distance=p.speed/4");
+    let s = panel(
+        "width=p.leave_ms,height=60,duration=p.open_min,return_duration=p.close,slide_distance=p.speed/4",
+    );
     let m = s.current.motion.as_ref().unwrap();
     assert_eq!(s.current.width, PANEL.leave_ms as f32);
-    assert_eq!((m.duration, m.return_duration), (PANEL.open_min, Some(PANEL.close)));
+    // Authored numbers pass through f32.
+    assert!((m.duration - PANEL.open_min).abs() < 1e-6);
+    assert!((m.return_duration.unwrap() - PANEL.close).abs() < 1e-6);
     assert_eq!(f64::from(m.slide_distance.unwrap()), PANEL.speed / 4.);
-    assert_eq!(panel("width=10,height=60,duration=p.open_max").current.motion.as_ref().unwrap().duration, PANEL.open_max);
+    let m = panel("width=10,height=60,duration=p.open_max")
+        .current
+        .motion
+        .clone()
+        .unwrap();
+    assert!((m.duration - PANEL.open_max).abs() < 1e-6);
     // Unauthored: the travel sets the open duration and the close is the profile's.
-    let m = panel("edge='left',width=400,height=900").current.motion.clone().unwrap();
+    let m = panel("edge='left',width=400,height=900")
+        .current
+        .motion
+        .clone()
+        .unwrap();
     assert_eq!((m.duration, m.close_duration()), (0.25, PANEL.close));
-    let m = panel("edge='top',width=400,height=900").current.motion.clone().unwrap();
+    let m = panel("edge='top',width=400,height=900")
+        .current
+        .motion
+        .clone()
+        .unwrap();
     assert_eq!(m.duration, PANEL.open_max);
-    let m = panel("edge='left',width=400,height=900,slide_distance=100").current.motion.clone().unwrap();
+    let m = panel("edge='left',width=400,height=900,slide_distance=100")
+        .current
+        .motion
+        .clone()
+        .unwrap();
     assert_eq!(m.duration, PANEL.open_min);
-    let m = panel("edge='left',width=400,height=900,duration=.5,return_duration=.1").current.motion.clone().unwrap();
-    assert_eq!((m.duration, m.close_duration()), (0.5, 0.1));
+    let m = panel("edge='left',width=400,height=900,duration=.5,return_duration=.1")
+        .current
+        .motion
+        .clone()
+        .unwrap();
+    assert!((m.duration - 0.5).abs() < 1e-6 && (m.close_duration() - 0.1).abs() < 1e-6);
 }
 
 #[test]

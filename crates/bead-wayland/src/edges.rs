@@ -2794,13 +2794,8 @@ mod tests {
             exit_epoch: 4,
             ..Default::default()
         };
-        edge.exit.update(
-            true,
-            (false, false),
-            false,
-            Instant::now(),
-            exit_grace(),
-        );
+        edge.exit
+            .update(true, (false, false), false, Instant::now(), exit_grace());
         assert!(edge.exit.deadline().is_some());
         pin(&mut edge);
         assert_eq!(
