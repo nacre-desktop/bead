@@ -5870,6 +5870,51 @@ mod tests {
                 "progress {progress} draws the shadow the slow way"
             );
         }
+        // The trimmed band composes to what a direct paint of the reshaped scene gives.
+        let (w, h) = (1600u32, 1320u32);
+        let compose = |scene: &Scene| {
+            let mut cache = TreeCache::default();
+            cache.prepare(scene, 1.5).unwrap();
+            let mut bytes = vec![0u8; (w * h * 4) as usize];
+            paint(
+                cache.frame.as_ref().unwrap(),
+                scene.offset,
+                ShmTarget {
+                    bytes: &mut bytes,
+                    width: w,
+                    height: h,
+                    scale: 1.5,
+                    format: PixelFormat::Rgba,
+                },
+                Damage::full(w, h),
+            )
+            .unwrap();
+            bytes
+        };
+        for progress in [0.1, 0.3, 0.5, 0.7, 0.9, 0.97, 0.99, 0.995, 0.998, 0.999] {
+            scene.motion.as_mut().unwrap().progress = progress;
+            scene.reveal(progress);
+            let band = compose(&scene);
+            let mut direct = scene.clone();
+            direct.prepared.clear();
+            let direct = compose(&direct);
+            let worst = band.iter().zip(&direct).map(|(a, b)| a.abs_diff(*b)).max();
+            let bad: Vec<usize> = band
+                .iter()
+                .zip(&direct)
+                .enumerate()
+                .filter(|(_, (a, b))| a.abs_diff(**b) > 2)
+                .map(|(i, _)| i / 4 / w as usize)
+                .collect();
+            // Within 1 px of rest the band's whole-pixel slide leaves one seam row of corner pixels off by
+            // up to 34; every other pose is exact.
+            let seam = progress >= 0.999;
+            assert!(
+                bad.is_empty() || (seam && bad.first() == bad.last() && worst.unwrap() <= 40),
+                "progress {progress}: {} pixels differ, worst {worst:?}",
+                bad.len()
+            );
+        }
     }
     #[test]
     fn ui_cpu_prepare_reuses_content_across_reveal_progress() {

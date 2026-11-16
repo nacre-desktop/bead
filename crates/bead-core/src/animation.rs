@@ -146,6 +146,8 @@ struct Motion {
     max_gap: f64,
     /// The worst gap's commit index and its split (wait, queue, render), seconds (B0295).
     worst: (u32, [f64; 3]),
+    /// The three costliest frame renders (commit index, seconds), costliest first (B0305).
+    top: [(u32, f64); 3],
 }
 /// One finished motion as the user saw it: request to first frame, then frames until the final pose.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -161,13 +163,15 @@ pub struct Slide {
     pub gap_wait_ms: f64,
     pub gap_queue_ms: f64,
     pub gap_render_ms: f64,
+    /// The three costliest frame renders (commit index, ms), costliest first; unused slots are 0.
+    pub render_top: [(u32, f64); 3],
 }
 impl std::fmt::Display for Slide {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
             "dir={} first_frame_ms={:.1} frames={} duration_ms={:.1} max_gap_ms={:.1} \
-             gap_at={} gap_wait_ms={:.1} gap_queue_ms={:.1} gap_render_ms={:.1}",
+             gap_at={} gap_wait_ms={:.1} gap_queue_ms={:.1} gap_render_ms={:.1} render_top=",
             if self.opening { "open" } else { "close" },
             self.first_frame_ms,
             self.frames,
@@ -177,7 +181,16 @@ impl std::fmt::Display for Slide {
             self.gap_wait_ms,
             self.gap_queue_ms,
             self.gap_render_ms
-        )
+        )?;
+        for (n, (at, ms)) in self
+            .render_top
+            .iter()
+            .filter(|(_, ms)| *ms > 0.)
+            .enumerate()
+        {
+            write!(f, "{}{at}:{ms:.1}", if n > 0 { "," } else { "" })?;
+        }
+        Ok(())
     }
 }
 #[derive(Default)]
@@ -208,6 +221,7 @@ impl Animations {
                     last_frame: now,
                     max_gap: 0.,
                     worst: (0, [0.; 3]),
+                    top: [(0, 0.); 3],
                 },
             );
         }
@@ -254,6 +268,11 @@ impl Animations {
                 motion.worst = (motion.frames, [wait, queue, now - start]);
             }
         }
+        let render = now - draw_start.clamp(motion.last_frame, now);
+        if render > motion.top[2].1 {
+            motion.top[2] = (motion.frames, render);
+            motion.top.sort_by(|a, b| b.1.total_cmp(&a.1));
+        }
         motion.frames += 1;
         motion.last_frame = now;
         if !finished {
@@ -269,6 +288,7 @@ impl Animations {
             gap_wait_ms: motion.worst.1[0] * 1000.,
             gap_queue_ms: motion.worst.1[1] * 1000.,
             gap_render_ms: motion.worst.1[2] * 1000.,
+            render_top: motion.top.map(|(at, s)| (at, s * 1000.)),
         };
         motion.frames = u32::MAX;
         Some(slide)
@@ -308,6 +328,7 @@ impl Animations {
                 last_frame: now,
                 max_gap: 0.,
                 worst: (0, [0.; 3]),
+                top: [(0, 0.); 3],
             },
         );
     }
@@ -423,6 +444,9 @@ mod tests {
         let text = slide.to_string();
         assert!(text.starts_with("dir=open first_frame_ms=0.0 frames=4 duration_ms="));
         assert!(text.contains(" max_gap_ms=1000.0 gap_at=3 gap_wait_ms=50.0"));
+        // The three costliest renders by commit index, costliest first (the last render is 50 ms).
+        assert!(text.contains(" render_top=3:50.0,"), "{text}");
+        assert_eq!(text.matches(':').count(), 3, "{text}");
     }
     #[test]
     fn cubic_in_out_has_symmetric_endpoints_midpoint_and_quarters() {
