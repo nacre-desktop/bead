@@ -1,0 +1,13 @@
+id = "org.bead.Example.Showcase"
+title = "Showcase"
+
+[layer]
+edge = "top"
+size = 40
+
+[services]
+desktop = ["clock"]
+
+[panels.dashboard]
+view = "view/dashboard.luau"
+size = [704, 602]

@@ -1,0 +1,21 @@
+{
+ "formatVersion": 1,
+ "mode": "dark",
+ "colours": {
+  "surface": "0e1a1a",
+  "surfaceContainer": "182929",
+  "surfaceContainerHigh": "223636",
+  "surfaceContainerHighest": "2d4242",
+  "onSurface": "e1f0f0",
+  "onSurfaceVariant": "abc7c7",
+  "outline": "748a8a",
+  "outlineVariant": "445757",
+  "primary": "8ea9f5",
+  "onPrimary": "060f29",
+  "primaryContainer": "273457",
+  "onPrimaryContainer": "c5d0f0",
+  "secondary": "b09adb",
+  "error": "f2b8b5",
+  "onError": "601410"
+ }
+}
