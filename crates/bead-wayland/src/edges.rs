@@ -244,6 +244,38 @@ impl Drop for LipTab {
         self.surface.destroy();
     }
 }
+/// The host art of a bar-hosted lip (B0304): a subsurface of that output's bar surface at the lip's
+/// box, input-less (the bar keeps the pointer), so it stacks above the bar and moves with it.
+pub(super) struct BarArt {
+    key: String,
+    lip: Lip,
+    output: wl_output::WlOutput,
+    parent: wl_surface::WlSurface,
+    /// The lip's box in bar-surface coordinates.
+    rect: Rect,
+    surface: wl_surface::WlSurface,
+    role: WlSubsurface,
+    viewport: WpViewport,
+    pool: SlotPool,
+    buffer: Option<Buffer>,
+    drawn: Option<(u32, u32)>,
+    scale120: u32,
+}
+impl Drop for BarArt {
+    fn drop(&mut self) {
+        self.viewport.destroy();
+        self.role.destroy();
+        self.surface.destroy();
+    }
+}
+/// The bar surface's top-left on the output, from the bar's edge and thickness.
+fn bar_origin(edge: Edge, output: (i32, i32), thickness: f32) -> (f32, f32) {
+    match edge {
+        Edge::Top | Edge::Left => (0., 0.),
+        Edge::Bottom => (0., output.1 as f32 - thickness),
+        Edge::Right => (output.0 as f32 - thickness, 0.),
+    }
+}
 /// Where the tab sits in panel-surface coordinates: flush against the posed body's inner edge, where
 /// the lip rests along the edge (`rest` on the output, `origin` = the surface's output position).
 /// A body inset from the screen edge would make the tab step at hand-over, so the tab starts at the
@@ -425,6 +457,8 @@ pub(super) struct EdgeState {
     opening_epoch: u64,
     /// The lip attached to the open panel as its tab.
     pub(super) tab: Option<LipTab>,
+    /// Host art of the bar-hosted lips, one per output.
+    bar_arts: Vec<BarArt>,
     /// The cursor last sent for a lip surface: pointer (a button) or the default arrow.
     strip_button: bool,
     /// The last `LIP_TAB` outcome printed, so the line appears only when it changes.
@@ -767,6 +801,7 @@ impl App {
         }
         if self.hidden {
             self.edge_surfaces.clear();
+            self.edge.bar_arts.clear();
             return;
         }
         let chrome = self.edge.chrome.clone();
@@ -846,6 +881,7 @@ impl App {
                 },
             }
         }
+        self.sync_bar_arts();
         self.redraw_lips();
     }
     fn create_edge(
@@ -923,6 +959,13 @@ impl App {
         before != self.edge_surfaces.len()
     }
     pub(super) fn edge_scale(&mut self, surface: &wl_surface::WlSurface, scale120: u32) -> bool {
+        // A bar's own scale handler still runs (false below); its lip art follows the new scale.
+        for i in 0..self.edge.bar_arts.len() {
+            if self.edge.bar_arts[i].parent == *surface {
+                self.edge.bar_arts[i].scale120 = scale120.max(1);
+                self.draw_bar_art(i);
+            }
+        }
         let Some(i) = self
             .edge_surfaces
             .iter()
@@ -953,6 +996,7 @@ impl App {
             }
         }
         self.edge_surfaces.retain(|s| s.output != *output);
+        self.edge.bar_arts.retain(|a| a.output != *output);
     }
     fn lip_named(&self, id: &str) -> Option<Lip> {
         self.edge.chrome.lips.iter().find(|l| l.id == id).cloned()
@@ -1270,12 +1314,7 @@ impl App {
             Kind::Reserved(_) => None,
             Kind::Lip(id) => self.lip_named(id).and_then(|lip| {
                 let k = key(&s.output_name, id);
-                let state = LipState {
-                    progress: self.lip_progress(&k),
-                    active: self.lip_active(&s.output, &lip),
-                    attach: 0.,
-                    hovered: self.edge.hovered.as_deref() == Some(k.as_str()),
-                };
+                let state = self.free_lip_state(&s.output, &k, &lip);
                 if state.active && self.edge.opening.as_deref() == Some(k.as_str()) {
                     opened = true;
                 }
@@ -1309,7 +1348,138 @@ impl App {
         s.buffer = Some(buffer);
         s.drawn = Some((stamp, size, scale120));
     }
+    fn free_lip_state(&self, output: &wl_output::WlOutput, k: &str, lip: &Lip) -> LipState {
+        LipState {
+            progress: self.lip_progress(k),
+            active: self.lip_active(output, lip),
+            attach: 0.,
+            hovered: self.edge.hovered.as_deref() == Some(k),
+        }
+    }
+    /// Keep one art subsurface per output for each bar-hosted lip, on the current bar surface: a
+    /// rebuilt bar (bar toggled, hotplug) has a new surface, so the old art goes with it.
+    fn sync_bar_arts(&mut self) {
+        let mut wanted = Vec::new();
+        if self.options.edge_art.is_some() && !self.hidden {
+            let thickness = self.bar_thickness() as f32;
+            for output in self.output.outputs() {
+                let Some((w, h)) = self
+                    .output
+                    .info(&output)
+                    .and_then(|i| i.logical_size)
+                    .filter(|(w, h)| *w > 0 && *h > 0)
+                else {
+                    continue;
+                };
+                let Some(bar) = self
+                    .surfaces
+                    .iter()
+                    .find(|s| !s.companion && s.output == output)
+                else {
+                    continue;
+                };
+                let (parent, scale120) = (bar.wl_surface().clone(), bar.scale120.max(1));
+                let origin = bar_origin(self.options.edge, (w, h), thickness);
+                for lip in self.edge.chrome.lips.iter().filter(|l| self.bar_hosts(l)) {
+                    let r = lip.rect((w as f32, h as f32));
+                    let rect = Rect::new(
+                        r.x - origin.0,
+                        r.y - origin.1,
+                        r.w.round().max(1.),
+                        r.h.round().max(1.),
+                    );
+                    wanted.push((
+                        key(&self.output_id(&output), &lip.id),
+                        lip.clone(),
+                        output.clone(),
+                        parent.clone(),
+                        rect,
+                        scale120,
+                    ));
+                }
+            }
+        }
+        self.edge.bar_arts.retain(|a| {
+            wanted
+                .iter()
+                .any(|(k, _, _, p, _, _)| *k == a.key && *p == a.parent)
+        });
+        for (k, lip, output, parent, rect, scale120) in wanted {
+            if let Some(a) = self.edge.bar_arts.iter_mut().find(|a| a.key == k) {
+                if a.rect != rect || a.lip != lip {
+                    a.role
+                        .set_position(rect.x.round() as i32, rect.y.round() as i32);
+                    a.rect = rect;
+                    a.lip = lip;
+                    a.drawn = None;
+                    a.parent.commit();
+                }
+                continue;
+            }
+            let (Some(subcompositor), Some(viewporter), Ok(pool), Ok(empty)) = (
+                self.subcompositor.as_ref(),
+                self.viewporter.as_ref(),
+                SlotPool::new(4096, &self.shm),
+                Region::new(&self.compositor),
+            ) else {
+                continue;
+            };
+            let surface = self.compositor.create_surface(&self.qh);
+            surface.set_input_region(Some(empty.wl_region()));
+            let role = subcompositor.get_subsurface(&surface, &parent, &self.qh, ());
+            role.set_desync();
+            role.set_position(rect.x.round() as i32, rect.y.round() as i32);
+            let viewport = viewporter.get_viewport(&surface, &self.qh, ());
+            self.edge.bar_arts.push(BarArt {
+                key: k,
+                lip,
+                output,
+                parent,
+                rect,
+                surface,
+                role,
+                viewport,
+                pool,
+                buffer: None,
+                drawn: None,
+                scale120,
+            });
+            // The position applies with the bar's next commit.
+            if let Some(a) = self.edge.bar_arts.last() {
+                a.parent.commit();
+            }
+        }
+    }
+    fn draw_bar_art(&mut self, index: usize) {
+        let a = &self.edge.bar_arts[index];
+        let state = self.free_lip_state(&a.output, &a.key, &a.lip);
+        let size = (a.rect.w as u32, a.rect.h as u32);
+        let svg = free_lip_art(
+            state.active || self.edge.attached(&a.key),
+            self.options.edge_art.as_ref(),
+            &a.lip,
+            size,
+            state,
+        );
+        let stamp = (art_stamp(svg.as_ref()), a.scale120);
+        let a = &mut self.edge.bar_arts[index];
+        if a.drawn == Some(stamp) {
+            return;
+        }
+        a.buffer = present_art(
+            &a.surface,
+            &a.viewport,
+            &mut a.pool,
+            svg.as_deref(),
+            size,
+            a.scale120,
+        );
+        a.drawn = Some(stamp);
+    }
     fn redraw_lips(&mut self) {
+        for i in 0..self.edge.bar_arts.len() {
+            self.draw_bar_art(i);
+        }
         self.refresh_strip_cursor();
         for i in 0..self.edge_surfaces.len() {
             if matches!(self.edge_surfaces[i].kind, Kind::Lip(_)) {
@@ -1513,6 +1683,9 @@ impl App {
         let Some((output, id)) = k.split_once('/') else {
             return;
         };
+        if let Some(i) = self.edge.bar_arts.iter().position(|a| a.key == k) {
+            self.draw_bar_art(i);
+        }
         if let Some(i) = self
             .edge_surfaces
             .iter()
@@ -2279,6 +2452,22 @@ mod tests {
             ..chrome
         };
         assert_eq!(own.tab_lip_for("chat", Edge::Left).unwrap().id, "own");
+    }
+    #[test]
+    fn bar_art_origin_places_the_lip_box_inside_the_bar_surface() {
+        let output = (1920, 1080);
+        let top = Lip {
+            id: "top".into(),
+            edge: Edge::Top,
+            length: 208.,
+            thickness: 50.,
+            opens: "peek".into(),
+        };
+        let r = top.rect((1920., 1080.));
+        let o = bar_origin(Edge::Top, output, 40.);
+        assert_eq!((r.x - o.0, r.y - o.1), (856., 0.));
+        assert_eq!(bar_origin(Edge::Bottom, output, 40.), (0., 1040.));
+        assert_eq!(bar_origin(Edge::Right, output, 40.), (1880., 0.));
     }
     #[test]
     fn tab_glow_follows_only_the_tab_surface_pointer() {

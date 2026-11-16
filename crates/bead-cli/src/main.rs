@@ -577,7 +577,14 @@ impl App {
             }
             if let Some(chrome) = self.edge_chrome() {
                 options.control = Some(Arc::new(Lips(chrome)));
-                options.edge_art = Some(Arc::new(lip_art));
+                // A lip on the bar's own edge is bar-hosted: its host art is called with attach 0 over
+                // the bar, where the stock pill would change the example. Its tab (attach > 0) keeps it.
+                let bar_edge: bead::core::Edge = l.edge.into();
+                options.edge_art = Some(Arc::new(move |lip, size, state| {
+                    (lip.edge != bar_edge || state.attach > 0.)
+                        .then(|| lip_art(lip, size, state))
+                        .flatten()
+                }));
             }
             options.primary_factory = Some(self.primary_factory(runtime.clone()));
             options.bar = true;
