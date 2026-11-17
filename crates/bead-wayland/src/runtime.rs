@@ -732,8 +732,6 @@ pub fn run_runtime(
         }
     });
     drop(watchdog);
-    #[cfg(feature = "native-gl")]
-    app.set_wallpaper_warm(false);
     if let Some(error) = conn.backend().last_error() {
         // Nothing can be released through a dead connection, and every request
         // would log the error again: skip teardown and let the service manager
@@ -741,6 +739,9 @@ pub fn run_runtime(
         std::mem::forget(app);
         return Err(format!("wayland connection lost: {error}").into());
     }
+    // The connection lives: release the warm run (final attach, GL objects, upload thread).
+    #[cfg(feature = "native-gl")]
+    app.set_wallpaper_warm(false);
     for s in &app.surfaces {
         println!(
             "ACQUIRE p50_ms={:.3} p99_ms={:.3}",

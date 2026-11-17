@@ -3867,6 +3867,7 @@ impl App {
                 }
                 #[cfg(feature = "native-gl")]
                 {
+                    self.release_all_wallpaper_runs();
                     self.gl = None;
                 }
                 #[cfg(feature = "wgpu")]

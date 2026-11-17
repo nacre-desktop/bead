@@ -385,11 +385,16 @@ impl App {
     }
     #[cfg(feature = "native-gl")]
     pub(super) fn has_gl_surfaces(&self) -> bool {
-        self.retained_surfaces().any(|s| {
-            s.gl.is_some()
-                || s.handoff.as_ref().is_some_and(|h| h.gl.is_some())
-                || s.prepared_native.as_ref().is_some_and(|p| p.gl.is_some())
-        })
+        // B0317: a wallpaper fade run (also a resident one) owns an EGL surface and textures on
+        // the shared transport, so no other owner may shut it down.
+        crate::wallpaper_fade::gl_surfaces_present(
+            self.retained_surfaces().any(|s| {
+                s.gl.is_some()
+                    || s.handoff.as_ref().is_some_and(|h| h.gl.is_some())
+                    || s.prepared_native.as_ref().is_some_and(|p| p.gl.is_some())
+            }),
+            self.wallpaper_surfaces.iter().any(|s| s.fade.is_some()),
+        )
     }
     #[cfg(feature = "wgpu")]
     pub(super) fn has_gpu_surfaces(&self) -> bool {

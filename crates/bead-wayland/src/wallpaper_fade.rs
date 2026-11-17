@@ -326,7 +326,7 @@ pub(crate) enum FadeEnd {
     Release,
 }
 pub(crate) fn fade_end(warm: bool, gl_failed: bool, upload_pending: bool) -> FadeEnd {
-    if upload_pending || (warm && !gl_failed) {
+    if !gl_failed && (upload_pending || warm) {
         FadeEnd::Rest
     } else {
         FadeEnd::Release
@@ -341,6 +341,11 @@ pub(crate) fn release_idle(
     upload_pending: bool,
 ) -> bool {
     (!warm || gl_failed) && resting && !upload_pending
+}
+/// B0317: GL surfaces on the shared transport: panels, bars and companions, or a wallpaper fade
+/// run (also one at rest). Every owner that would shut the transport down asks this.
+pub(crate) fn gl_surfaces_present(other_surfaces: bool, wallpaper_runs: bool) -> bool {
+    other_surfaces || wallpaper_runs
 }
 /// Warm mode may use the upload thread.
 pub(crate) fn worker_wanted(warm: bool, gl_failed: bool, worker_failed: bool) -> bool {
@@ -753,15 +758,29 @@ impl App {
             return Err(frame);
         };
         let upload = std::time::Instant::now();
+        let adopted = std::cell::Cell::new(false);
         let result = (|| -> Result<(), Box<dyn Error>> {
+            if run.size != size {
+                return Err("frame size differs from the run".into());
+            }
             let transport = self.gl.as_ref().ok_or("GL transport missing")?;
             transport.activate(&run.gl, size.0, size.1)?;
+            if let (Some(texture), Some(thread)) = (launch.texture, &self.warm.upload) {
+                // From here the fader owns the texture and deletes it.
+                thread.uploader.adopt(texture);
+                adopted.set(true);
+            }
             run.fader.retarget(match launch.texture {
                 Some(texture) => bead_render::gl::Pixels::Texture(texture),
                 None => bead_render::gl::Pixels::Rgba(&frame.rgba),
             })
         })();
         if result.is_err() {
+            if let (Some(texture), false, Some(thread)) =
+                (launch.texture, adopted.get(), &self.warm.upload)
+            {
+                thread.uploader.discard(texture);
+            }
             if let Some(run) = self.wallpaper_surfaces[index].fade.take() {
                 self.drop_fade_run(run);
             }
@@ -944,18 +963,10 @@ impl App {
             return;
         };
         frame.rgba = done.rgba;
-        let texture = match (done.texture, &self.warm.upload) {
-            (Ok(texture), Some(thread)) => {
-                // From here the fader owns the texture and deletes it.
-                thread.uploader.adopt(texture);
-                Some(texture)
-            }
-            (Ok(texture), None) => {
-                // Unreachable while the source is registered: the thread is gone with it.
-                let _ = texture;
-                None
-            }
-            (Err(reason), _) => {
+        let texture = match done.texture {
+            // `launch_on_run` adopts it once the run can take it.
+            Ok(texture) => Some(texture),
+            Err(reason) => {
                 self.warm_upload_failed(&frame.output, reason);
                 None
             }
@@ -1481,6 +1492,15 @@ impl App {
         true
     }
 
+    /// The shared transport is about to be dropped by another owner (GL failure, switch to the CPU
+    /// renderer): end every wallpaper run first (final attach as a cut, GL objects, upload thread).
+    pub(super) fn release_all_wallpaper_runs(&mut self) {
+        for index in 0..self.wallpaper_surfaces.len() {
+            self.release_run_objects(index);
+        }
+        self.stop_upload_thread();
+    }
+
     /// The host's warm switch changed (or was read for the first time).
     pub(super) fn set_wallpaper_warm(&mut self, on: bool) {
         if self.warm.on == on {
@@ -1488,6 +1508,7 @@ impl App {
         }
         self.warm.on = on;
         self.warm.failed = false;
+        self.warm.releasing = false;
         if on {
             self.report_warm(true);
             return;
@@ -1623,6 +1644,11 @@ mod tests {
             FadeEnd::Rest,
             "a frame waiting for its upload still gets its fade"
         );
+        assert_eq!(
+            fade_end(true, true, true),
+            FadeEnd::Release,
+            "no fade starts after a GL failure"
+        );
     }
     #[test]
     fn warm_off_releases_runs_at_rest_at_once_and_running_ones_when_they_end() {
@@ -1649,6 +1675,12 @@ mod tests {
         );
         // The running fade then ends through `fade_end`, with warm off: released.
         assert_eq!(fade_end(false, false, false), FadeEnd::Release);
+    }
+    #[test]
+    fn a_wallpaper_run_keeps_the_shared_transport_alive_for_every_owner() {
+        assert!(!gl_surfaces_present(false, false));
+        assert!(gl_surfaces_present(false, true), "a resting run counts");
+        assert!(gl_surfaces_present(true, false));
     }
     #[test]
     fn warm_mode_reports_its_state_in_one_line() {
