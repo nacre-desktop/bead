@@ -571,7 +571,7 @@ impl App {
                 return Err(frame);
             };
             read_ms = ms_since(began);
-            match self.create_fade_run(index, &frame, &old, spec) {
+            match self.create_fade_run(index, &mut frame, &old, spec) {
                 Ok(run) => self.wallpaper_surfaces[index].fade = Some(run),
                 Err(error) => {
                     self.wallpaper_gl_failed = true;
@@ -631,7 +631,7 @@ impl App {
     fn create_fade_run(
         &mut self,
         index: usize,
-        frame: &WallpaperFrame,
+        frame: &mut WallpaperFrame,
         old: &[u8],
         spec: WallpaperFade,
     ) -> Result<FadeRun, Box<dyn Error>> {
@@ -687,7 +687,8 @@ impl App {
             gl,
             size: (width, height),
             spec,
-            target: frame.rgba.clone(),
+            // The fade owns the final pixels; the frame is not read for them again.
+            target: std::mem::take(&mut frame.rgba),
             commit: Some((frame.revision, frame.commit_token.clone())),
             palette: frame.palette.clone(),
             generation: 1,
