@@ -2,7 +2,7 @@
 //! Private-compositor proof host for the wallpaper crossfade: a generated wallpaper that changes
 //! every `BEAD_FADE_INTERVAL_MS` (default 3000) with alternating palettes; `BEAD_FADE_KIND=grow`
 //! grows the new image from the output centre. `BEAD_FADE_WARM=<n>` runs warm mode (B0317) for n
-//! changes between `BEAD_FADE_COLD` (default 3) cold ones, `BEAD_FADE_CYCLES` (default 1) times,
+//! changes (`BEAD_FADE_RETARGET_MS=<ms>` adds a second change that long after each warm one) between `BEAD_FADE_COLD` (default 3) cold ones, `BEAD_FADE_CYCLES` (default 1) times,
 //! and prints `PROOF_MEM` (RSS and anonymous memory) before every change and after each switch.
 use bead_wayland::{
     Options, ShellControl, WallpaperFade, WallpaperFadeKind, WallpaperFrame, WallpaperProvider, run,
@@ -143,6 +143,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             if let Some(changed) = &*ticker.changed.lock().unwrap() {
                 changed();
+                // B0325: a second frame mid-fade, a retarget of the run the first one started.
+                let retarget = env_number("BEAD_FADE_RETARGET_MS", 0);
+                if want && retarget > 0 {
+                    std::thread::sleep(std::time::Duration::from_millis(retarget as u64));
+                    changed();
+                }
             }
         }
     });

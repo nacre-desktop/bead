@@ -323,6 +323,31 @@ impl Transport {
         let context = unsafe { self.display.create_context(&self.config, &attrs) }?;
         Uploader::spawn(self.display.clone(), context, Box::new(done))
     }
+    /// B0325: make the shared context before any window surface exists, so the upload thread can
+    /// share it while the first run is still being primed.
+    pub fn ensure_context(&mut self) -> Result<()> {
+        if self.context.is_some() {
+            return Ok(());
+        }
+        if !self.surfaceless {
+            return Err("EGL_KHR_surfaceless_context missing".into());
+        }
+        let attrs = ContextAttributesBuilder::new()
+            .with_context_api(ContextApi::OpenGl(Some(Version::new(3, 3))))
+            .build(None);
+        // SAFETY: config belongs to this retained display.
+        let context = unsafe { self.display.create_context(&self.config, &attrs) }?;
+        #[allow(unreachable_patterns)]
+        match context {
+            NotCurrentContext::Egl(context) => {
+                self.context = Some(PossiblyCurrentContext::Egl(
+                    context.make_current_surfaceless()?,
+                ));
+            }
+            _ => return Err("surfaceless context requires EGL".into()),
+        }
+        Ok(())
+    }
     /// # Safety
     /// Window must outlive the returned surface, and belong to this display.
     pub unsafe fn create_surface(
@@ -503,6 +528,22 @@ impl WallpaperFader {
     /// first moving frame costs like the others.
     pub fn new(display: &Display, size: (u32, u32), from: &[u8], to: &[u8]) -> Result<Self> {
         let began = std::time::Instant::now();
+        let mut fader = Self::bare(display, size)?;
+        let canvas_ms = fader.setup_ms.0;
+        // An error drops the fader, whose Drop frees whichever image exists by then.
+        fader.from = Some(fader.make(Pixels::Rgba(from))?);
+        fader.to = Some(fader.make(Pixels::Rgba(to))?);
+        fader.setup_ms = (canvas_ms, began.elapsed().as_secs_f64() * 1e3 - canvas_ms);
+        Ok(fader)
+    }
+    /// B0325: a fader at rest, as `settle` leaves one: only the shown image (`from`), no fade yet.
+    pub fn at_rest(display: &Display, size: (u32, u32), shown: Pixels) -> Result<Self> {
+        let mut fader = Self::bare(display, size)?;
+        fader.from = Some(fader.make(shown)?);
+        Ok(fader)
+    }
+    fn bare(display: &Display, size: (u32, u32)) -> Result<Self> {
+        let began = std::time::Instant::now();
         // SAFETY: the caller made the transport's context current on this thread.
         let renderer = unsafe {
             femtovg::renderer::OpenGl::new_from_function_cstr(|name| {
@@ -510,21 +551,15 @@ impl WallpaperFader {
             })
         }?;
         let canvas = femtovg::Canvas::new(renderer)?;
-        let canvas_ms = began.elapsed().as_secs_f64() * 1e3;
-        let mut fader = Self {
+        Ok(Self {
             canvas,
             from: None,
             to: None,
             size,
             last: (0., WallpaperBlend::Fade),
             delete: gl_proc(display, c"glDeleteTextures")?,
-            setup_ms: (0., 0.),
-        };
-        // An error drops the fader, whose Drop frees whichever image exists by then.
-        fader.from = Some(fader.make(Pixels::Rgba(from))?);
-        fader.to = Some(fader.make(Pixels::Rgba(to))?);
-        fader.setup_ms = (canvas_ms, began.elapsed().as_secs_f64() * 1e3 - canvas_ms);
-        Ok(fader)
+            setup_ms: (began.elapsed().as_secs_f64() * 1e3, 0.),
+        })
     }
     fn make(&mut self, pixels: Pixels) -> Result<Img> {
         let (w, h) = self.size;
