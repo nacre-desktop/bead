@@ -1080,6 +1080,7 @@ mod tests {
             curve: None,
             edge: bead_core::Edge::Bottom,
             slide_distance: Some(4.),
+            scale_from: None,
             fade: true,
             reveal: false,
             progress: 0.,

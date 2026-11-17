@@ -99,6 +99,7 @@ mod layer_motion_renderer_tests {
             curve: None,
             edge: bead_core::Edge::Bottom,
             slide_distance: None,
+            scale_from: None,
             fade: false,
             reveal: true,
             progress: 0.,
@@ -2146,6 +2147,8 @@ impl App {
                 ));
                 scene.opacity = motion.opacity(progress);
                 let (reveal, edge) = (motion.reveal, motion.edge);
+                // shortcut: `motion.scale_from` is ignored on this client-frame path (fade and slide only), upgrade
+                // when a panel needs scale without the layer-motion protocol.
                 let (dx, dy) = scene.panel_offset(progress, open);
                 layer_motion_pose = (dx, dy);
                 opaque_motion = active && (dx != 0. || dy != 0. || reveal);
@@ -4384,6 +4387,7 @@ mod input_tests {
             curve: None,
             edge: bead_core::Edge::Top,
             slide_distance: None,
+            scale_from: None,
             fade: true,
             reveal: false,
             progress: 1.,

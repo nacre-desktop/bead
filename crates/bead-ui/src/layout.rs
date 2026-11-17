@@ -153,6 +153,7 @@ pub const PROPERTIES: &[&str] = &[
     "key_repeat",
     "return_transition",
     "slide_distance",
+    "scale_from",
     "fade",
     "reveal",
     "edge",
@@ -1152,6 +1153,18 @@ impl ViewSpec {
                                 return Err(
                                     source.error("slide_distance needs 0..4000 logical pixels")
                                 );
+                            }
+                            Some(value)
+                        } else {
+                            None
+                        },
+                        scale_from: if p.contains_key("scale_from") {
+                            let value = number(p, "scale_from", 1., source)?;
+                            if !(0.5..=1.).contains(&value) {
+                                return Err(source.error("scale_from needs 0.5..1"));
+                            }
+                            if boolean(p, "reveal", false, source)? {
+                                return Err(source.error("scale_from cannot combine with reveal"));
                             }
                             Some(value)
                         } else {

@@ -930,8 +930,33 @@ impl LayerMotionPlan {
             clip: source,
             opacity: 1.,
         };
+        // B0324: the closed pose is the resting rect scaled about the panel's own centre (the named body,
+        // else the scene bounds, in surface coordinates), then slid. A centre inside `source` keeps the
+        // scaled rect within `source` (s <= 1), so `translation_preserves_clip` above still bounds the
+        // pixels the closed pose can reveal: a shrunk rect never exposes more than the unscaled slide.
+        let closed_rect = match motion.scale_from {
+            None => source,
+            Some(s) => {
+                let centre = motion
+                    .body
+                    .unwrap_or(scene.bounds)
+                    .translated(scene.offset.0, scene.offset.1);
+                let (cx, cy) = (centre.x + centre.w / 2., centre.y + centre.h / 2.);
+                if !(source.x..=source.x + source.w).contains(&cx)
+                    || !(source.y..=source.y + source.h).contains(&cy)
+                {
+                    return Ok(None);
+                }
+                Rect::new(
+                    cx + (source.x - cx) * s,
+                    cy + (source.y - cy) * s,
+                    source.w * s,
+                    source.h * s,
+                )
+            }
+        };
         let closed = PlaneState {
-            destination: source.translated(closed_offset.0, closed_offset.1),
+            destination: closed_rect.translated(closed_offset.0, closed_offset.1),
             clip: source,
             opacity: 0.,
         };
@@ -1015,6 +1040,7 @@ mod tests {
                 curve: None,
                 edge: bead_core::Edge::Bottom,
                 slide_distance: Some(32.),
+                scale_from: None,
                 fade,
                 reveal,
                 progress: 1.,
@@ -1041,6 +1067,103 @@ mod tests {
             input_islands: None,
             key_repeat: None,
         }
+    }
+
+    /// B0324: the plane states of a 96x72 slid-from-bottom panel with `scale_from` and an optional body.
+    fn scaled_plane(
+        scale: Option<f32>,
+        slide: Option<f32>,
+        body: Option<Rect>,
+    ) -> Result<(Rect, Rect, f32, f32)> {
+        let mut scene = scene(false, true);
+        let motion = scene.motion.as_mut().unwrap();
+        (motion.scale_from, motion.slide_distance, motion.body) = (scale, slide, body);
+        let plan = LayerMotionPlan::for_slide(
+            &scene,
+            true,
+            96,
+            72,
+            1.,
+            PixelFormat::Rgba,
+            &mut TreeCpuRenderer::default(),
+        )?
+        .expect("representable slide");
+        let plane = &plan.planes[0];
+        Ok((
+            plane.from.destination,
+            plane.to.destination,
+            plane.from.opacity,
+            plane.to.opacity,
+        ))
+    }
+
+    #[test]
+    fn scale_from_scales_the_closed_destination_about_the_scene_centre() -> Result<()> {
+        // Unscaled slide (today): the closed pose is the source moved by the slide distance.
+        let (from, to, ..) = scaled_plane(None, Some(32.), None)?;
+        assert_eq!(from, Rect::new(0., 32., 96., 72.));
+        assert_eq!(to, Rect::new(0., 0., 96., 72.));
+        // Scale only: centre (48, 36), s = .5 -> (24, 18, 48, 36); resting is the source, opacity 0 -> 1.
+        let (from, to, o0, o1) = scaled_plane(Some(0.5), Some(0.), None)?;
+        assert_eq!((to, o0, o1), (Rect::new(0., 0., 96., 72.), 0., 1.));
+        assert_eq!(from, Rect::new(24., 18., 48., 36.));
+        // Scale plus slide: the scaled rect translated by the closed offset (bottom edge: +32 in y).
+        let (from, ..) = scaled_plane(Some(0.5), Some(32.), None)?;
+        assert_eq!(from, Rect::new(24., 50., 48., 36.));
+        // 1.0 is exactly the unscaled plan.
+        assert_eq!(
+            scaled_plane(Some(1.), Some(32.), None)?,
+            scaled_plane(None, Some(32.), None)?
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn scale_from_uses_the_body_centre_and_refuses_one_outside_the_surface() -> Result<()> {
+        // Body (8, 8, 40, 24): centre (28, 20); (rect - centre) * .5 + centre.
+        let (from, ..) = scaled_plane(Some(0.5), Some(0.), Some(Rect::new(8., 8., 40., 24.)))?;
+        assert_eq!(from, Rect::new(14., 10., 48., 36.));
+        // A non-zero scene offset moves the centre: bounds (0, 0, 96, 72) + (32, 32) -> centre (80, 68).
+        let mut offset_scene = scene(false, true);
+        offset_scene.offset = (32., 32.);
+        let motion = offset_scene.motion.as_mut().unwrap();
+        (motion.scale_from, motion.slide_distance) = (Some(0.5), Some(0.));
+        let plan = LayerMotionPlan::for_slide(
+            &offset_scene,
+            true,
+            96,
+            72,
+            1.,
+            PixelFormat::Rgba,
+            &mut TreeCpuRenderer::default(),
+        )?
+        .expect("representable offset scene");
+        assert_eq!(
+            plan.planes[0].from.destination,
+            Rect::new(40., 34., 48., 36.)
+        );
+        let mut scene = scene(false, true);
+        scene.motion.as_mut().unwrap().scale_from = Some(0.9);
+        scene.motion.as_mut().unwrap().body = Some(Rect::new(200., 200., 10., 10.));
+        let plan = LayerMotionPlan::for_slide(
+            &scene,
+            true,
+            96,
+            72,
+            1.,
+            PixelFormat::Rgba,
+            &mut TreeCpuRenderer::default(),
+        )?;
+        assert!(plan.is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn a_scaled_plan_passes_the_ink_preflight_an_unscaled_one_passes() {
+        let mut scene = scene(false, true);
+        assert!(motion_atlas_ink_is_safe(&scene, 96, 72, 1., (0., 0.)));
+        scene.motion.as_mut().unwrap().scale_from = Some(0.97);
+        assert!(motion_atlas_ink_is_safe(&scene, 96, 72, 1., (0., 0.)));
     }
 
     /// B0320: a table shadow (blur 2, spread 1, dy 1, alpha .5) reaches the compositor contour at its real extent.

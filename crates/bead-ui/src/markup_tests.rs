@@ -1833,6 +1833,32 @@ fn panel_return_duration_is_optional_and_bounded() {
 }
 
 #[test]
+fn panel_scale_from_is_optional_bounded_and_not_a_reveal() {
+    let f = fixture();
+    let mut s = session(&f);
+    let mut load = |props: &str| {
+        fs::write(
+            f.0.join("ui/main.luau"),
+            format!(
+                "local ui=require(\"bead.ui\"); return ui.Panel{{id=\"preview\",width=200,height=100,open=true{props}}}"
+            ),
+        )
+        .unwrap();
+        s.reload().map(|scene| scene.motion.unwrap().scale_from)
+    };
+    assert_eq!(load("").unwrap(), None);
+    assert_eq!(load(",scale_from=.97").unwrap(), Some(0.97));
+    assert_eq!(load(",scale_from=.5").unwrap(), Some(0.5));
+    assert_eq!(load(",scale_from=1").unwrap(), Some(1.));
+    for bad in ["0.49", "1.01"] {
+        let err = load(&format!(",scale_from={bad}")).err().unwrap();
+        assert!(err.message.contains("scale_from needs 0.5..1"));
+    }
+    let err = load(",scale_from=.9,reveal=true").err().unwrap();
+    assert!(err.message.contains("cannot combine with reveal"));
+}
+
+#[test]
 fn scalar_animation_wakeup_moves_painted_and_hit_node_geometry_together() {
     use std::{thread, time::Duration};
 
@@ -2758,6 +2784,7 @@ fn closed_error_overlay_replaces_retained_body_without_stale_layer_ranges() {
             curve: None,
             edge: bead_core::Edge::Right,
             slide_distance: None,
+            scale_from: None,
             fade: true,
             reveal: false,
             progress: 1.,
