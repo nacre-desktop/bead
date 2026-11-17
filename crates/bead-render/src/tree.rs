@@ -193,6 +193,7 @@ impl ImagePayload {
             path,
             fit,
             clip_polygon,
+            bake_size,
             radius,
             tint,
             ..
@@ -242,7 +243,8 @@ impl ImagePayload {
             crate::apply_polygon_clip(&mut pixels, points)?;
         }
         crate::apply_radius_clip(&mut pixels, *radius * self.scale)?;
-        let compact = if path.extension().is_some_and(|e| e == "svg") {
+        // A bake_size raster is scaled by the draw, which the compact atlas layout cannot express.
+        let compact = if path.extension().is_some_and(|e| e == "svg") && bake_size.is_none() {
             crate::compact::CompactRaster::from_pixmap(&pixels)
         } else {
             None
@@ -898,6 +900,7 @@ pub(crate) fn hash_primitive(primitive: &Primitive, at_origin: bool, hash: &mut 
             blur,
             fit,
             clip_polygon,
+            bake_size,
             radius,
             tint,
             opacity,
@@ -906,6 +909,9 @@ pub(crate) fn hash_primitive(primitive: &Primitive, at_origin: bool, hash: &mut 
         } => {
             rect(r, hash);
             (blur.to_bits(), radius.to_bits(), fit, path, tint).hash(hash);
+            bake_size
+                .map(|(w, h)| (w.to_bits(), h.to_bits()))
+                .hash(hash);
             if !at_origin {
                 opacity.to_bits().hash(hash);
             }
@@ -2173,6 +2179,7 @@ impl TreeCache {
             let reshaped_reveal = scene.motion.as_ref().is_some_and(|motion| {
                 motion.reveal && motion.parts.iter().any(|(part, _)| *part == index)
             });
+            // shortcut: Dense (CPU) ignores bake_size and rasters per rect, upgrade with a scaled CPU draw.
             let image = if self.image_policy != ImagePolicy::Dense
                 && !raster_hidden
                 && !reshaped_reveal
@@ -2184,10 +2191,25 @@ impl TreeCache {
                     clip_polygon,
                     radius,
                     tint,
+                    bake_size,
                     ..
                 } = primitive
                     && *blur == 0.
                 {
+                    // B0328: bake at bake_size, so the key and payload ignore the rect's size.
+                    let baked = bake_size.map(|(w, h)| {
+                        let mut baked = primitive.clone();
+                        if let Primitive::Image { rect, .. } = &mut baked {
+                            (rect.w, rect.h) = (w, h);
+                        }
+                        baked
+                    });
+                    let source = baked.as_ref().unwrap_or(primitive);
+                    let key = if baked.is_some() {
+                        signature(scene, source, scale, &mut asset_keys)
+                    } else {
+                        key
+                    };
                     if let Some(payload) = self.image_payloads.get(&key).and_then(Weak::upgrade) {
                         Some(payload)
                     } else {
@@ -2208,9 +2230,9 @@ impl TreeCache {
                                 .with_guessed_format()?
                                 .into_dimensions()?
                         } else {
-                            crate::dimensions(rect(primitive), scale)
+                            crate::dimensions(rect(source), scale)
                         };
-                        let target = crate::dimensions(rect(primitive), scale);
+                        let target = crate::dimensions(rect(source), scale);
                         let native_cover = native_cover
                             && u64::from(width) * u64::from(height)
                                 <= u64::from(target.0) * u64::from(target.1);
@@ -2242,7 +2264,7 @@ impl TreeCache {
                             width,
                             height,
                             native_cover,
-                            primitive: local(primitive),
+                            primitive: local(source),
                             encoded,
                             scale,
                             requested: Default::default(),
@@ -5706,6 +5728,7 @@ mod tests {
                 fit: crate::ImageFit::Cover,
                 blur: 0.,
                 clip_polygon: Some(vec![[0., 0.], [1., 0.], [1., 1.], [0., 1.]]),
+                bake_size: None,
                 radius: 0.,
                 tint: None,
             });
@@ -6756,6 +6779,7 @@ mod tests {
             blur: 0.,
             fit: crate::ImageFit::Fill,
             clip_polygon: None,
+            bake_size: None,
             radius: 0.,
             tint: None,
         };
@@ -6851,6 +6875,7 @@ mod tests {
             blur: 0.,
             fit: crate::ImageFit::Fill,
             clip_polygon: None,
+            bake_size: None,
             radius: 0.,
             tint: None,
         };
@@ -7287,6 +7312,7 @@ mod tests {
             blur: 0.,
             fit: crate::ImageFit::Fill,
             clip_polygon: None,
+            bake_size: None,
             radius: 0.,
             tint: None,
         };
@@ -7703,6 +7729,7 @@ mod tests {
                     blur: 0.,
                     fit: crate::ImageFit::Fill,
                     clip_polygon: None,
+                    bake_size: None,
                     radius: 0.,
                     tint: None,
                     rect: Rect::new(2., 2., 8., 8.),
@@ -7748,6 +7775,7 @@ mod tests {
                 fit: crate::ImageFit::Cover,
                 blur: 0.,
                 clip_polygon: None,
+                bake_size: None,
                 radius: 0.,
                 tint: None,
             });
@@ -7814,6 +7842,7 @@ mod tests {
                 blur: 0.,
                 fit: crate::ImageFit::Fill,
                 clip_polygon: None,
+                bake_size: None,
                 radius: 0.,
                 tint: None,
                 rect: Rect::new(x, 2., 512., 512.),
@@ -7966,6 +7995,7 @@ mod tests {
                 blur: 0.,
                 fit: crate::ImageFit::Fill,
                 clip_polygon: None,
+                bake_size: None,
                 radius: 0.,
                 tint: None,
                 rect: Rect::new(2., y, 12., 6.),
@@ -8008,6 +8038,51 @@ mod tests {
         )
         .unwrap();
         bytes
+    }
+    #[test]
+    fn bake_size_reuses_one_payload_while_only_the_rect_resizes() {
+        let sized = |w: f32, bake: Option<(f32, f32)>| {
+            let mut scene = scene();
+            scene.primitives.truncate(1);
+            if let Primitive::Image {
+                rect, bake_size, ..
+            } = &mut scene.primitives[0]
+            {
+                (rect.w, rect.h, *bake_size) = (w, w, bake);
+            }
+            scene
+        };
+        let payloads = |bake: Option<(f32, f32)>| {
+            let mut worker = TreeCache::default().with_image_policy(ImagePolicy::UploadOnly);
+            (8..12)
+                .map(|w| {
+                    worker.prepare(&sized(w as f32, bake), 1.5).unwrap();
+                    worker.frame.as_ref().unwrap().items[0]
+                        .image
+                        .clone()
+                        .unwrap()
+                })
+                .collect::<Vec<_>>()
+        };
+        let baked = payloads(Some((16., 16.)));
+        assert!(baked.iter().all(|p| p.key == baked[0].key));
+        assert!(baked.iter().all(|p| Arc::ptr_eq(p, &baked[0])), "one build");
+        assert_eq!(
+            (baked[0].width, baked[0].height),
+            (24, 24),
+            "bake_size x scale"
+        );
+        let plain = payloads(None);
+        let keys: std::collections::BTreeSet<_> = plain.iter().map(|p| p.key).collect();
+        assert!(keys.len() > 1, "without bake_size every size builds");
+        // The Dense (CPU) path ignores bake_size and stays exact per rect.
+        let mut dense = TreeCache::default();
+        dense.prepare(&sized(10., Some((16., 16.))), 1.).unwrap();
+        let raster = dense.frame.as_ref().unwrap().items[0]
+            .raster
+            .as_ref()
+            .unwrap();
+        assert_eq!((raster.pixels.width(), raster.pixels.height()), (10, 10));
     }
     #[test]
     fn image_opacity_scales_the_drawn_alpha_and_reuses_the_raster() {
@@ -8821,6 +8896,7 @@ mod tests {
             fit: crate::ImageFit::Fill,
             blur: 0.,
             clip_polygon: None,
+            bake_size: None,
             radius: 0.,
             tint: None,
         }];

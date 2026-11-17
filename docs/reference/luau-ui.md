@@ -54,6 +54,10 @@ ui.Image { id="image", path="logo.png", width=120, height=80 }
 -- radius=16 clips the image to an antialiased rounded rectangle (album art inside a rounded card).
 -- opacity=0.5 (0..1, default 1) multiplies the image's alpha when it is drawn; tint replaces the colour instead.
 -- The decoded raster is shared across opacities, and a hover-only child (`visible_on_hover`) fades it with the rest.
+-- bake_size={w=96,h=96} (logical px, 1..4096 each) bakes the raster once at that size and scales it to the
+-- rect when drawn on GL, so an image whose rect resizes every frame is not re-baked (bilinear; set it to the
+-- largest size the image reaches). radius and clip_polygon are baked in bake_size space and scale with the draw.
+-- The CPU path ignores it and rasters exactly per rect. Absent = bake at the rect size.
 ```
 ```luau
 ui.Arc { id="arc", width=40, height=40 }

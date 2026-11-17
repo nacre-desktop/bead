@@ -360,6 +360,7 @@ mod tests {
             blur: 0.,
             fit: crate::ImageFit::Fill,
             clip_polygon: None,
+            bake_size: None,
             radius: 0.,
             tint: None,
             path: path.clone(),

@@ -1486,6 +1486,7 @@ mod tests {
                 blur: 0.,
                 fit: bead_render::ImageFit::Fill,
                 clip_polygon: None,
+                bake_size: None,
                 radius: 0.,
                 tint: None,
             };
@@ -2054,6 +2055,7 @@ mod tests {
             blur: 0.,
             fit: bead_render::ImageFit::Fill,
             clip_polygon: None,
+            bake_size: None,
             radius: 0.,
             tint: None,
         };
@@ -2116,6 +2118,7 @@ mod tests {
             blur: 0.,
             fit: bead_render::ImageFit::Fill,
             clip_polygon: None,
+            bake_size: None,
             radius: 0.,
             tint: None,
         };

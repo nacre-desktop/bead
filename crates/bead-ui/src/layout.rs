@@ -171,6 +171,7 @@ pub const PROPERTIES: &[&str] = &[
     "round_caps",
     "image_fit",
     "clip_polygon",
+    "bake_size",
     "clip_children",
     "points",
     "closed",
@@ -267,6 +268,8 @@ pub struct ViewSpec {
     pub round_caps: bool,
     pub image_fit: bead_render::ImageFit,
     pub clip_polygon: Option<Vec<[f32; 2]>>,
+    /// `Image` only: bake the raster at this logical size and scale it to the rect.
+    pub bake_size: Option<(f32, f32)>,
     pub clip_children: bool,
     pub points: Vec<[f32; 2]>,
     pub closed: bool,
@@ -401,6 +404,17 @@ fn polygon(value: Option<&Json>, source: &Source) -> Result<Option<Vec<[f32; 2]>
         result.push([x, y]);
     }
     Ok(Some(result))
+}
+fn bake_size(value: Option<&Json>, source: &Source) -> Result<Option<(f32, f32)>, Diagnostic> {
+    let Some(value) = value else { return Ok(None) };
+    let side = |key| {
+        value
+            .get(key)
+            .and_then(Json::as_f64)
+            .filter(|v| (1.0..=4096.0).contains(v))
+            .ok_or_else(|| source.error("bake_size needs w and h within 1..4096"))
+    };
+    Ok(Some((side("w")? as f32, side("h")? as f32)))
 }
 fn text<'a>(
     p: &'a Props<'_>,
@@ -1127,6 +1141,7 @@ impl ViewSpec {
                     _ => return Err(source.error("image_fit must be fill or cover")),
                 },
                 clip_polygon: polygon(p.get("clip_polygon"), source)?,
+                bake_size: bake_size(p.get("bake_size"), source)?,
                 clip_children: boolean(p, "clip_children", false, source)?,
                 points,
                 closed,
@@ -1655,6 +1670,7 @@ pub fn layout(
                     blur: view.blur,
                     fit: view.image_fit,
                     clip_polygon: view.clip_polygon.clone(),
+                    bake_size: view.bake_size,
                     radius: view.radius,
                     tint: view
                         .tint

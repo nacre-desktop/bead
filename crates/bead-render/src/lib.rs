@@ -207,6 +207,11 @@ pub enum Primitive {
         fit: ImageFit,
         #[serde(default)]
         clip_polygon: Option<Vec<[f32; 2]>>,
+        /// Bake the raster at this logical size (B0328) and let the GL draw scale it to `rect`, so a
+        /// rect that changes size every frame reuses one raster. Radius and clip_polygon are baked in
+        /// this space. The CPU path ignores it.
+        #[serde(default)]
+        bake_size: Option<(f32, f32)>,
         /// Antialiased rounded-rect clip of the baked pixels, in logical px (0 = none).
         #[serde(default)]
         radius: f32,
@@ -281,6 +286,7 @@ impl Primitive {
             blur: 0.,
             fit: ImageFit::default(),
             clip_polygon: None,
+            bake_size: None,
             radius: 0.,
             tint: None,
             opacity: 1.,
@@ -4180,6 +4186,7 @@ mod tests {
                             blur: 0.,
                             fit: crate::ImageFit::Fill,
                             clip_polygon: None,
+                            bake_size: None,
                             radius: 0.,
                             tint: None,
                             rect: Rect::new(14., 8., 15., 15.),

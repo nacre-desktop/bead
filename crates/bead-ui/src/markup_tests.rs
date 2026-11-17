@@ -1111,6 +1111,31 @@ return ui.Panel{id="panel",width=120,height=120,ui.Button{id="hex",width=100,hei
     assert!(s.current.primitives.iter().any(|p| matches!(p,Primitive::Image{fit:bead_render::ImageFit::Cover,clip_polygon:Some(points),..} if points.len()==6)));
 }
 
+#[test]
+fn image_bake_size_parses_and_rejects_out_of_range() {
+    let image = |props: &str| {
+        let f = fixture();
+        fs::write(f.0.join("ui/main.luau"), format!("local ui=require('bead.ui')\nreturn ui.Image{{id='i',icon='bell',width=10,height=10{props}}}")).unwrap();
+        let mut session = f.session();
+        session.entry = "ui/main.luau".into();
+        session.reload()
+    };
+    let scene = image(",bake_size={w=64,h=32}").unwrap();
+    assert!(scene.primitives.iter().any(
+        |p| matches!(p, Primitive::Image { bake_size: Some((w, h)), .. } if (*w, *h) == (64., 32.))
+    ));
+    assert!(image("").unwrap().primitives.iter().any(|p| matches!(
+        p,
+        Primitive::Image {
+            bake_size: None,
+            ..
+        }
+    )));
+    for bad in ["{w=0,h=8}", "{w=8,h=4097}", "{w=8}", "8"] {
+        assert!(image(&format!(",bake_size={bad}")).is_err(), "{bad}");
+    }
+}
+
 fn deferred_fixture() -> (Fixture, Session) {
     let f = Fixture::new();
     fs::create_dir_all(f.0.join("ui")).unwrap();
