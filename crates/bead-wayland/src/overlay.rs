@@ -78,6 +78,9 @@ impl Overlay {
     pub(super) fn scroll_regions(&self) -> Vec<Rect> {
         self.source.scroll_regions()
     }
+    pub(super) fn scroll_step_regions(&self) -> Vec<StepRegion> {
+        self.source.scroll_step_regions()
+    }
     pub(super) fn epoch(&self) -> u64 {
         self.epoch
     }

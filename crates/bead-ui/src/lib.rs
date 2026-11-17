@@ -108,6 +108,9 @@ pub struct Node {
     pub icon: Option<String>,
     pub input: Option<String>,
     pub scroll: Option<String>,
+    /// B0329: deliver this node's scroll action whole +1/-1 steps.
+    #[serde(default)]
+    pub scroll_steps: Option<bead_render::ScrollSteps>,
     #[serde(default)]
     pub action_arg: Option<Value>,
     #[serde(default)]

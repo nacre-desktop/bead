@@ -26,6 +26,7 @@ struct Mirror {
     tracks_origin: bool,
     outside_dismiss: bool,
     scroll_regions: Vec<Rect>,
+    scroll_steps: Vec<crate::StepRegion>,
     regions: Vec<InputRegion>,
     surrounding: Option<(String, i32, i32)>,
     sensitive: bool,
@@ -66,6 +67,7 @@ impl Mirror {
             tracks_origin: source.tracks_origin(),
             outside_dismiss: source.outside_dismiss(),
             scroll_regions: source.scroll_regions(),
+            scroll_steps: source.scroll_step_regions(),
             regions: source.input_regions(),
             surrounding: source.surrounding_text(),
             sensitive: source.sensitive_input(),
@@ -1258,6 +1260,9 @@ impl SceneSource for Source {
     }
     fn scroll_regions(&self) -> Vec<Rect> {
         self.mirror.scroll_regions.clone()
+    }
+    fn scroll_step_regions(&self) -> Vec<crate::StepRegion> {
+        self.mirror.scroll_steps.clone()
     }
     fn outside_dismiss(&self) -> bool {
         self.mirror.outside_dismiss

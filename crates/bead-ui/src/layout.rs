@@ -125,6 +125,7 @@ pub const PROPERTIES: &[&str] = &[
     "pointer_arg",
     "edge_hover",
     "scroll",
+    "scroll_steps",
     "scrollbar",
     "fill",
     "color",
@@ -240,6 +241,9 @@ pub struct ViewSpec {
     /// TextInput value is drawn as bullets and kept out of accessibility, IME and copy.
     pub masked: bool,
     pub scroll: Option<String>,
+    /// A non-Scroll node's `scroll = ui.action(..)`; the action takes the wheel delta.
+    pub scroll_action: Option<String>,
+    pub scroll_steps: Option<bead_render::ScrollSteps>,
     pub scrollbar: bool,
     pub fill: Option<Json>,
     /// The fill amount is an animation marker: draw the box even while it is transparent,
@@ -482,6 +486,43 @@ fn key_repeat(
         .is_some_and(|(i, m)| m > i)
     {
         return Err(source.error("key_repeat.min_interval must not exceed interval"));
+    }
+    Ok(Some(out))
+}
+/// The `scroll_steps` prop (B0329): `{min_interval_ms, threshold}`, both optional.
+fn scroll_steps(
+    p: &Props<'_>,
+    has_action: bool,
+    source: &Source,
+) -> Result<Option<bead_render::ScrollSteps>, Diagnostic> {
+    let table = match p.get("scroll_steps") {
+        None => return Ok(None),
+        Some(_) if !has_action => {
+            return Err(source.error("scroll_steps requires scroll = ui.action(..), not a binding"));
+        }
+        Some(Json::Object(table)) => table,
+        // An empty Luau table may arrive as an empty array: all defaults.
+        Some(Json::Array(items)) if items.is_empty() => return Ok(Some(Default::default())),
+        Some(_) => {
+            return Err(source.error("scroll_steps must be a table {min_interval_ms, threshold}"));
+        }
+    };
+    let mut out = bead_render::ScrollSteps::default();
+    for (key, value) in table {
+        let (lo, hi) = match key.as_str() {
+            "min_interval_ms" => (0., 2000.),
+            "threshold" => (1., 1000.),
+            _ => return Err(source.error(format!("unknown scroll_steps field {key}"))),
+        };
+        let n = value
+            .as_f64()
+            .filter(|n| (lo..=hi).contains(n))
+            .ok_or_else(|| source.error(format!("scroll_steps.{key} must be {lo}..{hi}")))?;
+        if key == "threshold" {
+            out.threshold = n as f32;
+        } else {
+            out.min_interval_ms = n as u32;
+        }
     }
     Ok(Some(out))
 }
@@ -930,6 +971,17 @@ impl ViewSpec {
             } else {
                 None
             };
+            // Any other node may take `scroll = ui.action(..)`; a binding there stays inert.
+            let scroll_action = match p.get("scroll").and_then(|v| v.get("name")) {
+                Some(name) if raw.kind != Widget::Scroll => Some(
+                    name.as_str()
+                        .filter(|n| !n.is_empty() && n.len() <= 128)
+                        .ok_or_else(|| source.error("scroll action name must be 1 to 128 bytes"))?
+                        .to_owned(),
+                ),
+                _ => None,
+            };
+            let scroll_steps = scroll_steps(p, scroll_action.is_some(), source)?;
             // A graph's `on_activate` takes a node id from its canvas, not the generic action.
             let action = p
                 .get("on_activate")
@@ -1113,6 +1165,8 @@ impl ViewSpec {
                 multiline: boolean(p, "multiline", false, source)?,
                 masked: boolean(p, "masked", false, source)?,
                 scroll,
+                scroll_action,
+                scroll_steps,
                 scrollbar: boolean(p, "scrollbar", true, source)?,
                 fill: p.get("fill").cloned(),
                 animated_fill: raw
@@ -1744,6 +1798,7 @@ pub fn layout(
             && (view.action.is_some()
                 || view.input.is_some()
                 || view.scroll.is_some()
+                || view.scroll_action.is_some()
                 || view.drag_action.is_some()
                 || view.drag_payload.is_some()
                 || view.drop_action.is_some()
@@ -1781,7 +1836,8 @@ pub fn layout(
                 edge_hover: view.edge_hover,
                 icon: None,
                 input: view.input.clone(),
-                scroll: None,
+                scroll: view.scroll_action.clone(),
+                scroll_steps: view.scroll_steps,
                 action_arg: view.argument.clone(),
                 scroll_store: inherited_scroll.map(str::to_owned),
                 scrollable: view.scroll.is_some(),

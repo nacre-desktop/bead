@@ -83,7 +83,7 @@ impl Session {
         self.current_nodes.iter().rev().find(|node| {
             node.contains(x, y)
                 && if scroll {
-                    node.scroll_store.is_some()
+                    node.scroll_store.is_some() || node.scroll.is_some()
                 } else {
                     node.focusable
                 }
@@ -352,6 +352,19 @@ impl Session {
         }
         regions
     }
+    /// Nodes whose scroll action takes whole steps (B0329): id, clipped bounds, spec.
+    pub fn scroll_step_regions(
+        &self,
+    ) -> Vec<(String, bead_render::Rect, bead_render::ScrollSteps)> {
+        self.current_nodes
+            .iter()
+            .filter_map(|node| {
+                let bounds = rect(&node.draw);
+                let bounds = node.clip.map_or(bounds, |clip| bounds.intersect(clip));
+                Some((node.id.clone(), bounds, node.scroll_steps?))
+            })
+            .collect()
+    }
     pub fn scroll(&mut self, x: f32, y: f32, delta: f64) -> Result<Option<Scene>, Diagnostic> {
         self.keyboard_scroll = None;
         if let Some(scene) = self.graph_scroll(x, y, delta)? {
@@ -369,7 +382,9 @@ impl Session {
                     .iter()
                     .find(|node| node.id == id && node.contains(x, y))
                 {
-                    let can_consume = if let Some(store) = &node.scroll_store {
+                    let can_consume = if node.scroll.is_some() {
+                        true
+                    } else if let Some(store) = &node.scroll_store {
                         match self.stores.get(store) {
                             Some(Value::Number(value)) => {
                                 let limit = node.scroll_limit.unwrap_or(f64::MAX);
@@ -379,7 +394,7 @@ impl Session {
                             _ => true,
                         }
                     } else {
-                        node.scroll.is_some()
+                        false
                     };
                     if can_consume {
                         target = Some(node);
@@ -400,7 +415,10 @@ impl Session {
         let Some(node) = node else {
             return Ok(None);
         };
-        let stores = if let Some(id) = &node.scroll_store {
+        // A node's own scroll action wins over a store it only inherits.
+        let stores = if node.scroll.is_none()
+            && let Some(id) = &node.scroll_store
+        {
             let Some(Value::Number(value)) = self.stores.get(id) else {
                 return Err(node.diagnostic("scroll store not a number"));
             };

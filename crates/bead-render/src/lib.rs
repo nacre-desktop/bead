@@ -590,6 +590,22 @@ pub struct KeyRepeat {
     pub min_interval: Option<u32>,
     pub ramp_ms: u32,
 }
+/// `scroll_steps` (B0329): a node's wheel and finger scrolling arrives as whole +1/-1 steps.
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ScrollSteps {
+    /// At most one step per this many ms per node; steps inside the window are dropped.
+    pub min_interval_ms: u32,
+    /// Logical px of finger or continuous travel per step.
+    pub threshold: f32,
+}
+impl Default for ScrollSteps {
+    fn default() -> Self {
+        Self {
+            min_interval_ms: 0,
+            threshold: 40.,
+        }
+    }
+}
 impl Scene {
     /// A fully opaque scene of this size with nothing in it.
     pub fn empty(width: f32, height: f32) -> Self {

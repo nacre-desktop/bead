@@ -74,6 +74,36 @@ mod tests {
     use super::*;
 
     #[test]
+    fn scroll_steps_follow_detents_finger_travel_and_the_shared_rate_limit() {
+        let spec = |min_interval_ms| bead_render::ScrollSteps {
+            min_interval_ms,
+            threshold: 40.,
+        };
+        let t0 = Instant::now();
+        let at = |ms| t0 + Duration::from_millis(ms);
+        let wheel = |delta| (delta, true);
+        let mut s = Steps::default();
+        assert_eq!(s.event(false, wheel(-100.), false, t0, spec(0)), Some(-1.));
+        assert_eq!(s.event(true, wheel(100.), false, t0, spec(0)), Some(1.));
+        // 15 + 15 + 15 px at threshold 40: one step on the third, 5 px kept.
+        let mut s = Steps::default();
+        let finger: Vec<_> = (0..3)
+            .map(|_| s.event(false, (15., false), false, t0, spec(0)))
+            .collect();
+        assert_eq!(finger, [None, None, Some(1.)]);
+        assert_eq!(s.acc[0], 5.);
+        // An axis stop resets the remainder.
+        assert_eq!(s.event(false, (0., false), true, t0, spec(0)), None);
+        assert_eq!(s.acc[0], 0.);
+        assert_eq!(s.event(false, (-30., false), false, t0, spec(0)), None);
+        assert_eq!(s.event(false, (-30., false), false, t0, spec(0)), Some(-1.));
+        // Steps at 0, 30 and 70 ms with a 60 ms limit: 30 is dropped; axes share the limit.
+        let mut s = Steps::default();
+        assert_eq!(s.event(false, wheel(1.), false, at(0), spec(60)), Some(1.));
+        assert_eq!(s.event(true, wheel(1.), false, at(30), spec(60)), None);
+        assert_eq!(s.event(false, wheel(1.), false, at(70), spec(60)), Some(1.));
+    }
+    #[test]
     fn action_gestures_are_never_amplified_or_glided() {
         let axis = AxisScroll {
             absolute: 15.,
@@ -439,6 +469,48 @@ pub(super) struct State {
     motions: std::collections::BTreeMap<(Target, bool), Motion>,
     pixels: std::collections::BTreeMap<(Target, bool), Pixels>,
     flings: std::collections::BTreeMap<(Target, bool), Fling>,
+    steps: std::collections::BTreeMap<(Target, String), Steps>,
+}
+/// Per-node state of a `scroll_steps` node (B0329): finger travel per axis, and the last step.
+#[derive(Default)]
+struct Steps {
+    acc: [f64; 2],
+    last: Option<Instant>,
+}
+impl Steps {
+    /// One axis event: the +1 (down/right) or -1 step to deliver, if any. A wheel detent is one
+    /// step; finger travel steps each `threshold` px and keeps the remainder. Both axes share
+    /// the rate limit, and a step inside the window is dropped, not queued.
+    fn event(
+        &mut self,
+        horizontal: bool,
+        (delta, wheel): (f64, bool),
+        stop: bool,
+        now: Instant,
+        spec: bead_render::ScrollSteps,
+    ) -> Option<f64> {
+        let acc = &mut self.acc[usize::from(horizontal)];
+        let threshold = f64::from(spec.threshold);
+        let step = if delta == 0. {
+            None
+        } else if wheel {
+            Some(delta.signum())
+        } else {
+            *acc += delta;
+            (acc.abs() >= threshold).then(|| {
+                let sign = acc.signum();
+                *acc -= sign * threshold;
+                sign
+            })
+        };
+        if stop {
+            *acc = 0.;
+        }
+        let window = Duration::from_millis(spec.min_interval_ms.into());
+        let step = step.filter(|_| self.last.is_none_or(|t| now.duration_since(t) >= window))?;
+        self.last = Some(now);
+        Some(step)
+    }
 }
 impl State {
     pub(super) fn interrupt(&mut self, target: &Target) {
@@ -895,22 +967,58 @@ impl App {
                 .canvases
                 .values()
                 .find(|c| c.epoch == *epoch && c.scroll_active())
-                .map(|c| c.source.scroll_regions()),
-            Target::Window(_) => self.window.as_ref().map(|w| w.scroll_regions()),
-            Target::Overlay(_) => self.overlay.as_ref().map(|o| o.scroll_regions()),
-            Target::Panel(_) => self.panel_runtime.as_ref().map(|s| s.scroll_regions()),
+                .map(|c| (c.source.scroll_regions(), c.source.scroll_step_regions())),
+            Target::Window(_) => self
+                .window
+                .as_ref()
+                .map(|w| (w.scroll_regions(), w.scroll_step_regions())),
+            Target::Overlay(_) => self
+                .overlay
+                .as_ref()
+                .map(|o| (o.scroll_regions(), o.scroll_step_regions())),
+            Target::Panel(_) => self
+                .panel_runtime
+                .as_ref()
+                .map(|s| (s.scroll_regions(), s.scroll_step_regions())),
             Target::Primary(Some((_, id))) => self
                 .output_sessions
                 .get(id)
                 .and_then(|s| s.source.as_ref())
-                .map(|s| s.scroll_regions()),
-            Target::Primary(None) => self.runtime.as_ref().map(|s| s.scroll_regions()),
+                .map(|s| (s.scroll_regions(), s.scroll_step_regions())),
+            Target::Primary(None) => self
+                .runtime
+                .as_ref()
+                .map(|s| (s.scroll_regions(), s.scroll_step_regions())),
         };
-        let content = regions.as_ref().is_some_and(|regions| {
-            regions.iter().any(|r| {
-                point.0 >= r.x && point.1 >= r.y && point.0 < r.x + r.w && point.1 < r.y + r.h
-            })
-        });
+        let (regions, steps) = regions.unzip();
+        let inside = |r: &Rect| {
+            point.0 >= r.x && point.1 >= r.y && point.0 < r.x + r.w && point.1 < r.y + r.h
+        };
+        if let Some((id, _, spec)) = steps
+            .iter()
+            .flatten()
+            .rev()
+            .find(|(_, region, _)| inside(region))
+        {
+            // A stepped node takes neither smoothing nor flings: one event, at most one step.
+            let key = (target.clone(), horizontal);
+            self.scrolls.motions.remove(&key);
+            self.scrolls.flings.remove(&key);
+            self.scrolls.pixels.remove(&key);
+            let state = self.scrolls.steps.entry((target.clone(), id.clone()));
+            let step = state.or_default().event(
+                horizontal,
+                movement(axis, true, source),
+                axis.stop,
+                Instant::now(),
+                *spec,
+            );
+            if let Some(step) = step {
+                self.deliver_scroll(&target, horizontal, point, step);
+            }
+            return;
+        }
+        let content = regions.is_some_and(|regions| regions.iter().any(inside));
         let (delta, wheel) = movement(axis, content, source);
         let key = (target.clone(), horizontal);
         if delta == 0. {

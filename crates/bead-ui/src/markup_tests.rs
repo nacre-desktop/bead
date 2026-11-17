@@ -4952,6 +4952,65 @@ fn key_repeat_prop_parses_and_validates() {
     );
 }
 
+/// B0329: `scroll_steps` defaults, ranges, the binding error, and the action seeing the step.
+#[test]
+fn scroll_steps_prop_parses_validates_and_reaches_the_action() {
+    let f = fixture();
+    fs::write(
+        f.0.join("ui/behavior.luau"),
+        "return {stores={seen=0},actions={bump=function(s,d) s.seen=d end},computed={}}",
+    )
+    .unwrap();
+    let load = |props: &str| {
+        fs::write(
+            f.0.join("ui/main.luau"),
+            format!(
+                "local ui=require('bead.ui')\nreturn ui.Panel{{id='r',width=50,height=50,ui.Box{{id='st',width=50,height=50,{props}}}}}"
+            ),
+        )
+        .unwrap();
+        let mut s = f.session();
+        s.entry = "ui/main.luau".into();
+        s.reload().map(|scene| {
+            s.commit(scene);
+            s
+        })
+    };
+    let steps = |props: &str| {
+        let s = load(props).unwrap();
+        s.scroll_step_regions().first().map(|r| r.2)
+    };
+    assert_eq!(steps("scroll=ui.action('bump')"), None);
+    assert_eq!(
+        steps("scroll=ui.action('bump'),scroll_steps={}"),
+        Some(bead_render::ScrollSteps::default())
+    );
+    assert_eq!(
+        steps("scroll=ui.action('bump'),scroll_steps={min_interval_ms=60,threshold=25}"),
+        Some(bead_render::ScrollSteps {
+            min_interval_ms: 60,
+            threshold: 25.
+        })
+    );
+    for bad in [
+        "scroll_steps={min_interval_ms=2001}",
+        "scroll_steps={min_interval_ms=-1}",
+        "scroll_steps={threshold=0}",
+        "scroll_steps={threshold=1001}",
+        "scroll_steps={speed=1}",
+        "scroll_steps=true",
+    ] {
+        let props = format!("scroll=ui.action('bump'),{bad}");
+        assert!(load(&props).is_err(), "{bad}");
+    }
+    assert!(load("scroll=ui.bind('seen'),scroll_steps={}").is_err());
+    assert!(load("scroll_steps={}").is_err());
+    let mut s = load("scroll=ui.action('bump'),scroll_steps={}").unwrap();
+    let scene = s.scroll(25., 25., 1.).unwrap().unwrap();
+    s.commit(scene);
+    assert_eq!(s.stores.get("seen"), Some(&Value::Number(1.)));
+}
+
 #[test]
 fn font_features_parse_validate_and_reach_text_and_measurement() {
     use crate::layout::font_features;

@@ -47,6 +47,8 @@ mod scroll;
 mod transactions;
 mod window;
 pub use overlay::Overlays;
+/// A stepped node: id, clipped bounds and its `scroll_steps` spec.
+pub type StepRegion = (String, Rect, bead_render::ScrollSteps);
 use runtime::App;
 pub use runtime::run_runtime;
 pub(crate) use runtime::{output_event_is_current, output_scope_matches};
@@ -669,6 +671,10 @@ pub trait SceneSource {
     fn set_idle(&mut self, _idle: bool) {}
     /// Content viewports; other wheel targets keep their original single gesture event.
     fn scroll_regions(&self) -> Vec<Rect> {
+        Vec::new()
+    }
+    /// Nodes whose scroll action takes whole +1/-1 steps instead of smoothed pixels (B0329).
+    fn scroll_step_regions(&self) -> Vec<StepRegion> {
         Vec::new()
     }
     /// Whether outside pointer presses may dismiss this surface.
