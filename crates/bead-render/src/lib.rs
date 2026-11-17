@@ -512,7 +512,7 @@ pub struct Scene {
 pub struct KeyRepeat {
     /// Press to first repeat.
     pub delay: Option<u32>,
-    /// Gap after the first repeat, easing to `min_interval` over `ramp_ms` of holding.
+    /// Gap after the first repeat, easing to `min_interval` at `ramp_ms` after the press.
     pub interval: Option<u32>,
     pub min_interval: Option<u32>,
     pub ramp_ms: u32,

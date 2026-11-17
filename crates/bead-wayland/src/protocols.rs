@@ -1996,13 +1996,15 @@ impl RepeatPlan {
             ramp_ms: spec.ramp_ms,
         }
     }
-    /// The gap before the next repeat once `held_ms` have passed since the first repeat: eases linearly from `interval`
-    /// to `min_interval` over `ramp_ms`, then stays there (no ramp: `min_interval` at once).
+    /// The gap before the next repeat once `held_ms` have passed since the press: `interval` at the first repeat
+    /// (`delay`), easing linearly to `min_interval` at `ramp_ms` after the press, then flat. A `ramp_ms` not past
+    /// `delay` means `min_interval` already.
     pub(crate) fn gap_ms(&self, held_ms: f64) -> f64 {
-        let t = if self.ramp_ms == 0 {
+        let span = f64::from(self.ramp_ms.saturating_sub(self.delay));
+        let t = if span == 0. {
             1.
         } else {
-            (held_ms / f64::from(self.ramp_ms)).min(1.)
+            ((held_ms - f64::from(self.delay)) / span).clamp(0., 1.)
         };
         f64::from(self.interval) + (f64::from(self.min_interval) - f64::from(self.interval)) * t
     }
@@ -2040,8 +2042,7 @@ impl KeyRepeatState {
         let held = now.saturating_duration_since(run.since);
         let mut event = run.event.clone();
         event.time = event.time.wrapping_add(held.as_millis() as u32);
-        let since_first = held.as_secs_f64() * 1000. - f64::from(run.plan.delay);
-        let gap = Duration::from_secs_f64(run.plan.gap_ms(since_first.max(0.)) / 1000.);
+        let gap = Duration::from_secs_f64(run.plan.gap_ms(held.as_secs_f64() * 1000.) / 1000.);
         Some((event, gap))
     }
 }
@@ -2181,7 +2182,7 @@ mod key_repeat_tests {
             delay: Some(260),
             interval: Some(95),
             min_interval: Some(62),
-            ramp_ms: 600,
+            ramp_ms: 800,
         };
         RepeatPlan::resolve(spec, (600, 40))
     }
@@ -2189,10 +2190,19 @@ mod key_repeat_tests {
     fn schedule_starts_at_delay_and_eases_to_min_interval() {
         let p = plan();
         assert_eq!(p.delay, 260);
-        assert_eq!(p.gap_ms(0.), 95.);
-        assert_eq!(p.gap_ms(300.), 78.5);
-        assert_eq!(p.gap_ms(600.), 62.);
+        // Counted from the press: interval at the first repeat, min_interval at press + ramp_ms.
+        assert_eq!(p.gap_ms(260.), 95.);
+        assert_eq!(p.gap_ms(530.), 78.5);
+        assert_eq!(p.gap_ms(800.), 62.);
         assert_eq!(p.gap_ms(5000.), 62.);
+        // ramp_ms not past delay: the first gap is already min_interval.
+        let spec = bead_render::KeyRepeat {
+            delay: Some(260),
+            interval: Some(95),
+            min_interval: Some(62),
+            ramp_ms: 260,
+        };
+        assert_eq!(RepeatPlan::resolve(spec, (600, 40)).gap_ms(260.), 62.);
     }
     #[test]
     fn unset_fields_follow_the_system_repeat_and_no_ramp_is_flat() {
@@ -2227,12 +2237,14 @@ mod key_repeat_tests {
         let (event, gap) = run.fire(t0 + Duration::from_millis(260)).unwrap();
         assert_eq!((event.raw_code, event.time), (30, 260));
         assert_eq!(gap, Duration::from_millis(95));
-        let (_, gap) = run.fire(t0 + Duration::from_millis(560)).unwrap();
+        let (_, gap) = run.fire(t0 + Duration::from_millis(530)).unwrap();
         assert!((gap.as_secs_f64() - 0.0785).abs() < 1e-9);
+        let (_, gap) = run.fire(t0 + Duration::from_millis(800)).unwrap();
+        assert_eq!(gap, Duration::from_millis(62));
         // Another key restarts the schedule for the new key.
         run.press(key(31), plan(), t0 + Duration::from_millis(400));
         assert!(run.holds(31) && !run.holds(30));
-        let (_, gap) = run.fire(t0 + Duration::from_millis(400)).unwrap();
+        let (_, gap) = run.fire(t0 + Duration::from_millis(660)).unwrap();
         assert_eq!(gap, Duration::from_millis(95));
         // Focus loss or release stops it: nothing fires afterwards.
         run.stop();
