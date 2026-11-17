@@ -109,6 +109,8 @@ pub(crate) struct PaletteTween {
     /// Clock times (seconds): the tween's start and the last fade frame that served it.
     started: f64,
     last_frame: f64,
+    /// The fades hold their first pose: the tween starts with their clock (B0316).
+    waiting: bool,
 }
 /// Fade frames arrive every refresh; a gap this long means they stopped (hidden surface).
 const FRAMES_STOPPED_AFTER: f64 = 0.05;
@@ -128,12 +130,16 @@ impl PaletteTween {
             generation,
             started,
             last_frame: f64::NEG_INFINITY,
+            waiting: false,
         }
     }
     /// The palette to show at clock `now` and the wait until the following step (`None`: it was the
     /// last). A step that is overdue is skipped for the newest due one: it shows the colour the
     /// wallpaper has reached. `None` when no step is due.
     fn advance(&mut self, now: f64) -> Option<(PaletteMap, Option<f64>)> {
+        if self.waiting {
+            return None;
+        }
         let elapsed = now - self.started;
         let due = self.next
             + self.steps[self.next..]
@@ -145,6 +151,11 @@ impl PaletteTween {
             .get(self.next)
             .map(|(at, _)| (at - elapsed).max(0.));
         Some((mix_palette(&self.from, &self.to, self.steps[due].1), wait))
+    }
+    /// The fades' clock started (or no fade is left to wait for): the first step is due a step's
+    /// time from now.
+    fn start_clock(&mut self, now: f64) {
+        (self.started, self.waiting) = (now, false);
     }
     /// Fade frames are flowing: they apply the steps, the timer only backs them up.
     fn frames_flow(&self, now: f64) -> bool {
@@ -202,6 +213,7 @@ fn ms_since(began: std::time::Instant) -> f64 {
 }
 
 /// One journal line per finished fade, in the PANEL_SLIDE style: what the user saw.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn transition_marker(
     output: &str,
     kind: WallpaperFadeKind,
@@ -210,6 +222,7 @@ pub(crate) fn transition_marker(
     gap_other_ms: f64,
     setup: &SetupTimes,
     retarget_ms: f64,
+    clock_s: f64,
 ) -> String {
     let render_top: Vec<String> = slide
         .render_top
@@ -221,7 +234,8 @@ pub(crate) fn transition_marker(
         "WALLPAPER_TRANSITION output={output} kind={} frames={} duration_ms={:.1} \
          first_frame_ms={:.1} max_gap_ms={:.1} gap_at={} render_top={} palette_steps={palette_steps} \
          gap_other_ms={gap_other_ms:.1} setup=read:{:.1},egl:{:.1},surface:{:.1},canvas:{:.1},\
-         upload:{:.1},first:{:.1} retarget_ms={retarget_ms:.1}",
+         upload:{:.1},first:{:.1} retarget_ms={retarget_ms:.1} \
+         clock_s={clock_s:.3}",
         match kind {
             WallpaperFadeKind::Fade => "fade",
             WallpaperFadeKind::Grow { .. } => "grow",
@@ -254,6 +268,37 @@ pub(crate) fn transport_releasable(fading: bool, other_gl: bool, cpu_host: bool)
     !fading && !other_gl && cpu_host
 }
 
+/// B0316: the first outputs of a change show their first pose (the old image) at most this long
+/// while another output of it is still being set up: one output's setup is 55-65 ms on the
+/// owner's laptop, so two setups plus slack fit and a slow or missing output holds nothing for
+/// longer than a few frames of a 700 ms fade.
+pub(crate) const HOLD_CAP: f64 = 0.15;
+/// Whether a fade at its held first pose keeps waiting for the others to start with it.
+pub(crate) fn hold_first_pose(partner_coming: bool, waited: f64) -> bool {
+    partner_coming && waited < HOLD_CAP
+}
+/// Another output with a shown image has a wallpaper request in flight: it fades with this change
+/// (a hotplugged output has no image to fade from, and the output itself never counts).
+pub(crate) fn partner_coming<'a>(
+    own: &str,
+    jobs: &std::collections::BTreeSet<String>,
+    surfaces: impl IntoIterator<Item = (&'a str, bool)>,
+) -> bool {
+    surfaces
+        .into_iter()
+        .any(|(name, shown)| shown && name != own && jobs.contains(name))
+}
+/// Fades that started on one clock end together: a fade that drew its last frame waits for the
+/// others of its clock, so its final-buffer attach never lands in their last frames.
+pub(crate) fn group_done(
+    runs: impl IntoIterator<Item = (Option<f64>, bool)>,
+    clock: Option<f64>,
+) -> bool {
+    runs.into_iter()
+        .filter(|(at, _)| *at == clock)
+        .all(|(_, done)| done)
+}
+
 #[cfg(feature = "native-gl")]
 pub(super) struct FadeRun {
     // Drop order: the textures go before the EGL window, which goes before the wl_surface.
@@ -271,6 +316,11 @@ pub(super) struct FadeRun {
     /// B0316 diagnostics: the start's phases and the costliest retarget of this run.
     setup: SetupTimes,
     retarget_ms: f64,
+    /// B0316: when the clock of this fade started (`None` while the first pose is held), when the
+    /// hold began, and whether the last frame was drawn (the finish waits for the group).
+    clock: Option<f64>,
+    held_since: f64,
+    done: bool,
 }
 
 #[cfg(feature = "native-gl")]
@@ -338,7 +388,12 @@ impl App {
         self.palette_tween_generation += 1;
         let generation = self.palette_tween_generation;
         let now = self.started.elapsed().as_secs_f64();
-        let tween = PaletteTween::new(from, to, spec, now, generation);
+        let mut tween = PaletteTween::new(from, to, spec, now, generation);
+        tween.waiting = self
+            .wallpaper_surfaces
+            .iter()
+            .filter_map(|s| s.fade.as_ref())
+            .any(|run| run.clock.is_none());
         let first = tween.steps[0].0;
         self.palette_tween = Some(tween);
         self.schedule_palette_step(first, generation);
@@ -358,10 +413,19 @@ impl App {
     /// surface); while frames flow it only waits. The wait until it looks again, if any.
     fn palette_tween_timer(&mut self, generation: u64) -> Option<f64> {
         let now = self.started.elapsed().as_secs_f64();
+        let held = self
+            .wallpaper_surfaces
+            .iter()
+            .filter_map(|s| s.fade.as_ref())
+            .any(|run| run.clock.is_none());
         let tween = self
             .palette_tween
             .as_mut()
             .filter(|t| t.generation == generation)?;
+        if tween.waiting && !held {
+            // The held fade ended without starting a clock (removed output, GL failure).
+            tween.start_clock(now);
+        }
         let Some((palette, wait)) = (!tween.frames_flow(now))
             .then(|| tween.advance(now))
             .flatten()
@@ -488,6 +552,8 @@ impl App {
             run.target = std::mem::take(&mut frame.rgba);
             run.generation += 1;
             run.gaps = GapProbe::default();
+            (run.clock, run.held_since, run.done) =
+                (None, self.started.elapsed().as_secs_f64(), false);
             run.spec = spec;
             run.palette = frame.palette.clone();
             let replaced = run
@@ -550,6 +616,10 @@ impl App {
                 run.setup.read = read_ms;
                 run.setup.first = first_ms;
             }
+        }
+        if retargeted {
+            // The old clock's group may be complete without this fade.
+            self.finish_completed_fades();
         }
         self.schedule_fade_watchdog(&name, generation, spec.duration_ms);
         if let Some(target) = self.pending_palette_target.take() {
@@ -631,6 +701,9 @@ impl App {
                 ..SetupTimes::default()
             },
             retarget_ms: 0.,
+            clock: None,
+            held_since: self.started.elapsed().as_secs_f64(),
+            done: false,
         })
     }
 
@@ -678,19 +751,42 @@ impl App {
     }
 
     /// A fade frame reached the compositor: the first one starts the clock and reports the commit.
+    /// While another output of the change is still being set up (B0316) the first pose stays held
+    /// and the clock does not start: the commit that ends the hold starts every held fade, and
+    /// the palette tween, at one instant.
     fn fade_committed(&mut self, index: usize, drawn: f64, cpu_start: u64) {
         let now = self.started.elapsed().as_secs_f64();
         let name = self.wallpaper_surfaces[index].name.clone();
-        let slide = self.fade_animations.committed_timed(
-            &name,
-            drawn,
-            now,
-            None,
-            drawn,
-            &bead_core::profile::NO_SPLITS,
-        );
+        let run = self.wallpaper_surfaces[index].fade.as_ref();
+        let holding = run.is_some_and(|run| {
+            run.clock.is_none()
+                && hold_first_pose(self.fade_partner_coming(&name), now - run.held_since)
+        });
+        let slide = if holding {
+            None
+        } else {
+            for run in self
+                .wallpaper_surfaces
+                .iter_mut()
+                .filter_map(|s| s.fade.as_mut())
+                .filter(|run| run.clock.is_none())
+            {
+                run.clock = Some(now);
+            }
+            if let Some(tween) = self.palette_tween.as_mut().filter(|t| t.waiting) {
+                tween.start_clock(now);
+            }
+            self.fade_animations.committed_timed(
+                &name,
+                drawn,
+                now,
+                None,
+                drawn,
+                &bead_core::profile::NO_SPLITS,
+            )
+        };
         let surface = &mut self.wallpaper_surfaces[index];
-        if let Some(run) = surface.fade.as_mut() {
+        if let Some(run) = surface.fade.as_mut().filter(|_| !holding) {
             run.gaps
                 .committed(now, cpu_start, bead_core::profile::thread_cpu_ns());
         }
@@ -704,12 +800,39 @@ impl App {
                     run.palette_steps,
                     run.gaps.other_ms(),
                     &run.setup,
-                    run.retarget_ms
+                    run.retarget_ms,
+                    run.clock.unwrap_or_default()
                 )
             );
         }
         if let Some((revision, token)) = surface.fade.as_mut().and_then(|run| run.commit.take()) {
             self.wallpaper_committed(&name, revision, &token, true);
+        }
+    }
+
+    fn fade_partner_coming(&self, own: &str) -> bool {
+        partner_coming(
+            own,
+            &self.wallpaper_jobs,
+            self.wallpaper_surfaces
+                .iter()
+                .map(|s| (s.name.as_str(), s.attached.is_some())),
+        )
+    }
+
+    /// Finish every fade that drew its last frame once all fades of its clock have.
+    pub(super) fn finish_completed_fades(&mut self) {
+        let runs: Vec<_> = self
+            .wallpaper_surfaces
+            .iter()
+            .map(|s| s.fade.as_ref().map(|run| (run.clock, run.done)))
+            .collect();
+        for (index, own) in runs.iter().enumerate() {
+            if let Some((clock, true)) = own
+                && group_done(runs.iter().flatten().copied(), *clock)
+            {
+                self.finish_wallpaper_fade(index);
+            }
         }
     }
 
@@ -731,6 +854,10 @@ impl App {
             .as_ref()
             .map(|run| run.generation)
             != Some(generation)
+            || self.wallpaper_surfaces[index]
+                .fade
+                .as_ref()
+                .is_some_and(|run| run.done)
         {
             return true;
         }
@@ -748,7 +875,10 @@ impl App {
         }
         self.fade_committed(index, drawn, cpu_start);
         if !running {
-            self.finish_wallpaper_fade(index);
+            if let Some(run) = self.wallpaper_surfaces[index].fade.as_mut() {
+                run.done = true;
+            }
+            self.finish_completed_fades();
         }
         self.palette_step_after_frame();
         true
@@ -982,6 +1112,7 @@ mod tests {
                 first: 12.,
             },
             4.2,
+            12.3456,
         );
         assert!(line.starts_with("WALLPAPER_TRANSITION output=DP-1 kind=grow frames="));
         assert!(
@@ -991,7 +1122,7 @@ mod tests {
         assert!(
             line.ends_with(
                 " palette_steps=10 gap_other_ms=3.5 setup=read:3.1,egl:0.0,surface:2.0,\
-                 canvas:20.4,upload:9.8,first:12.0 retarget_ms=4.2"
+                 canvas:20.4,upload:9.8,first:12.0 retarget_ms=4.2 clock_s=12.346"
             ),
             "{line}"
         );
@@ -1106,6 +1237,115 @@ mod tests {
             Fence,
             "an older change still waits"
         );
+    }
+    #[test]
+    fn the_first_output_holds_its_first_pose_while_a_partner_is_coming_up_to_the_cap() {
+        assert!(hold_first_pose(true, 0.));
+        assert!(hold_first_pose(true, HOLD_CAP - 0.001));
+        assert!(
+            !hold_first_pose(true, HOLD_CAP),
+            "a slow partner holds nothing longer"
+        );
+        assert!(!hold_first_pose(false, 0.), "one output: today's behaviour");
+    }
+    #[test]
+    fn only_another_output_with_a_shown_image_and_a_request_in_flight_is_a_partner() {
+        let jobs: std::collections::BTreeSet<String> =
+            ["eDP-1", "DP-1", "HDMI-1"].map(String::from).into();
+        let surfaces = [("eDP-1", true), ("DP-1", true), ("HDMI-1", false)];
+        assert!(partner_coming("eDP-1", &jobs, surfaces), "DP-1 fades too");
+        let only_new = [("eDP-1", true), ("HDMI-1", false)];
+        assert!(
+            !partner_coming("eDP-1", &jobs, only_new),
+            "a hotplugged output has no image to fade from"
+        );
+        let own = std::collections::BTreeSet::from(["eDP-1".to_owned()]);
+        assert!(
+            !partner_coming("eDP-1", &own, surfaces),
+            "its own request never counts"
+        );
+        assert!(
+            !partner_coming("eDP-1", &Default::default(), surfaces),
+            "nothing in flight"
+        );
+    }
+    #[test]
+    fn held_fades_start_on_one_commit_and_end_together() {
+        let mut a = Animations::default();
+        let (seconds, curve) = (0.7, Curve::EaseInOut);
+        a.open_to("eDP-1", true, 10., seconds, curve);
+        // eDP-1 held its first pose (no commit); DP-1 is set up 60 ms later and commits.
+        a.open_to("DP-1", true, 10.06, seconds, curve);
+        assert_eq!(a.value("eDP-1", 10.05).unwrap().0, 0.);
+        a.committed("DP-1", 10.07, 10.07);
+        for step in 0..=84 {
+            let at = 10.07 + f64::from(step) / 120.;
+            assert_eq!(
+                a.value("eDP-1", at),
+                a.value("DP-1", at),
+                "one curve at {at}"
+            );
+        }
+        assert_eq!(a.value("eDP-1", 10.07 + seconds), Some((1., false)));
+        assert_eq!(a.value("DP-1", 10.07 + seconds), Some((1., false)));
+    }
+    #[test]
+    fn a_cap_expiry_starts_the_held_fade_alone_and_the_late_one_starts_later() {
+        let mut a = Animations::default();
+        a.open_to("eDP-1", true, 10., 0.7, Curve::EaseInOut);
+        // The cap ended the hold: eDP-1 commits and starts alone.
+        a.committed("eDP-1", 10.15, 10.15);
+        a.open_to("DP-1", true, 10.3, 0.7, Curve::EaseInOut);
+        a.committed("DP-1", 10.31, 10.31);
+        assert!(a.value("eDP-1", 10.5).unwrap().0 > a.value("DP-1", 10.5).unwrap().0);
+        assert_eq!(a.value("eDP-1", 10.85), Some((1., false)));
+        assert!(
+            a.value("DP-1", 10.85).unwrap().1,
+            "the late output is still fading"
+        );
+    }
+    #[test]
+    fn a_retarget_while_held_stays_held_with_the_baked_pose_and_the_last_target_wins() {
+        let mut a = Animations::default();
+        a.open_to("eDP-1", true, 10., 0.7, Curve::EaseInOut);
+        // A newer wallpaper arrives during the hold: the motion is replaced, still held at 0.
+        a.retain(|id| id != "eDP-1");
+        a.open_to("eDP-1", true, 10.05, 0.7, Curve::EaseInOut);
+        assert_eq!(a.value("eDP-1", 10.1).unwrap().0, 0.);
+        a.committed("eDP-1", 10.12, 10.12);
+        assert_eq!(a.value("eDP-1", 10.12 + 0.7), Some((1., false)));
+    }
+    #[test]
+    fn fades_finish_only_when_every_fade_of_their_clock_drew_its_last_frame() {
+        let one = Some(10.07);
+        assert!(
+            group_done([(one, true)], one),
+            "a lone fade finishes at once"
+        );
+        assert!(!group_done([(one, true), (one, false)], one));
+        assert!(group_done([(one, true), (one, true)], one));
+        assert!(
+            group_done([(one, true), (Some(11.), false), (None, false)], one),
+            "another change's fade does not delay it"
+        );
+    }
+    #[test]
+    fn the_palette_tween_starts_with_the_shared_clock_and_ends_exactly_on_the_target() {
+        let mut t = tween(0, 200, 10.);
+        t.waiting = true;
+        assert!(
+            t.advance(10.5).is_none(),
+            "no step while the first pose is held"
+        );
+        t.start_clock(10.15);
+        assert!(
+            t.advance(10.15 + 0.06).is_none(),
+            "the first step is due 70 ms after the clock"
+        );
+        assert!(t.advance(10.15 + 0.071).is_some());
+        let (last, wait) = t.advance(f64::INFINITY).unwrap();
+        assert_eq!(last, palette([200, 0, 0, 255]));
+        assert!(wait.is_none());
     }
     #[test]
     fn reduced_motion_and_failed_gl_are_a_cut() {
