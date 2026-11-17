@@ -4788,7 +4788,14 @@ return ui.Row{{id="bar",width=400,height=40,gap=20,{root_props}
     };
     assert!(scene("").input_islands.is_none(), "no prop, no region");
     let scene = scene(r#"input="children","#);
-    let bounds = |id: &str| scene.layers.iter().find(|l| l.id.ends_with(id)).unwrap().bounds;
+    let bounds = |id: &str| {
+        scene
+            .layers
+            .iter()
+            .find(|l| l.id.ends_with(id))
+            .unwrap()
+            .bounds
+    };
     // The pill is one rect with its padding, the nested buttons do not split it, a painted
     // label and a transparent row around a button count, and empty boxes do not.
     assert_eq!(

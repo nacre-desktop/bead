@@ -474,6 +474,35 @@ fn island_input_rects(
         .collect()
 }
 
+/// What a bar surface does with its input region this frame (B0321).
+#[derive(Debug, PartialEq)]
+enum IslandInput {
+    Keep,
+    Set(Vec<[i32; 4]>),
+    Reset,
+}
+
+/// Compares the wanted islands with the list last applied: set on change, reset when the prop is gone.
+fn island_input_action(
+    islands: Option<&[bead_render::Rect]>,
+    offset: (f32, f32),
+    lips: &[[i32; 4]],
+    applied: Option<&[[i32; 4]]>,
+) -> IslandInput {
+    match (islands, applied) {
+        (None, None) => IslandInput::Keep,
+        (None, Some(_)) => IslandInput::Reset,
+        (Some(islands), applied) => {
+            let rects = island_input_rects(islands, offset, lips);
+            if applied == Some(rects.as_slice()) {
+                IslandInput::Keep
+            } else {
+                IslandInput::Set(rects)
+            }
+        }
+    }
+}
+
 /// Shadows reserve buffer space, but must not intercept adjacent controls.
 /// Retained layout bounds survive a shell replacing its background primitive.
 pub(super) fn content_input_rect(scene: &Scene) -> Option<[i32; 4]> {
@@ -2456,19 +2485,27 @@ impl App {
                 }
             }
             // `input = "children"` (B0321): the bar takes input on its islands and hosted lips only.
-            if !panel
-                && !s.companion
-                && self.options.interactive
-                && let Some(islands) = &scene.input_islands
-            {
-                let rects = island_input_rects(islands, scene.offset, &bar_lips);
-                if s.input_islands.as_ref() != Some(&rects) {
-                    let region = Region::new(&self.compositor)?;
-                    for [x, y, w, h] in &rects {
-                        region.add(*x, *y, *w, *h);
+            if !panel && !s.companion && self.options.interactive {
+                match island_input_action(
+                    scene.input_islands.as_deref(),
+                    scene.offset,
+                    &bar_lips,
+                    s.input_islands.as_deref(),
+                ) {
+                    IslandInput::Keep => {}
+                    IslandInput::Set(rects) => {
+                        let region = Region::new(&self.compositor)?;
+                        for [x, y, w, h] in &rects {
+                            region.add(*x, *y, *w, *h);
+                        }
+                        wl_surface.set_input_region(Some(region.wl_region()));
+                        s.input_islands = Some(rects);
                     }
-                    wl_surface.set_input_region(Some(region.wl_region()));
-                    s.input_islands = Some(rects);
+                    // The prop went away (a live toggle): back to the default whole-surface input.
+                    IslandInput::Reset => {
+                        wl_surface.set_input_region(None);
+                        s.input_islands = None;
+                    }
                 }
             }
             let input_content_offset = scene
@@ -4455,6 +4492,22 @@ mod island_input_tests {
         let at = |x| island_input_rects(&[Rect::new(x, 0., 80., 40.)], (32., 32.), &[]);
         assert_eq!(at(10.), at(10.), "unchanged layout: nothing to apply");
         assert_ne!(at(10.), at(11.));
+    }
+    #[test]
+    fn the_region_action_keeps_sets_and_resets_when_the_prop_goes_away() {
+        let islands = [Rect::new(0., 0., 10., 10.)];
+        let rects = vec![[32, 32, 10, 10]];
+        let act = |i: Option<&[Rect]>, applied: Option<&[[i32; 4]]>| {
+            island_input_action(i, (32., 32.), &[], applied)
+        };
+        assert_eq!(act(None, None), IslandInput::Keep, "never opted in");
+        assert_eq!(act(Some(&islands), None), IslandInput::Set(rects.clone()));
+        assert_eq!(act(Some(&islands), Some(&rects)), IslandInput::Keep);
+        assert_eq!(
+            act(None, Some(&rects)),
+            IslandInput::Reset,
+            "live toggle back"
+        );
     }
     #[test]
     fn fractional_scale_offsets_stay_in_logical_pixels() {
