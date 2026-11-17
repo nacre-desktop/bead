@@ -567,13 +567,19 @@ impl Generation {
                 Primitive::Text { size, text, .. } => {
                     size.is_finite() && *size >= 1. && *size <= 256. && text.len() <= 65536
                 }
-                Primitive::Shadow { radius, blur, .. } => {
+                Primitive::Shadow {
+                    radius,
+                    blur,
+                    alpha,
+                    ..
+                } => {
                     radius.is_finite()
                         && *radius >= 0.
                         && *radius <= 1024.
                         && blur.is_finite()
                         && *blur >= 0.
                         && *blur <= 64.
+                        && (0. ..=1.).contains(alpha)
                 }
                 Primitive::Image { blur, .. } => blur.is_finite() && (0.0..=32.0).contains(blur),
                 Primitive::Graph { camera, .. } => camera.zoom.is_finite() && camera.zoom > 0.,

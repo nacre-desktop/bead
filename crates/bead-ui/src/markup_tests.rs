@@ -996,6 +996,67 @@ fn panel_shadow_can_be_disabled_without_changing_the_default() {
     );
 }
 
+fn shadow_scene(shadow: &str) -> Result<Vec<Primitive>, Diagnostic> {
+    let f = fixture();
+    fs::write(
+        f.0.join("ui/main.luau"),
+        format!(
+            "local ui=require('bead.ui')\nreturn ui.Box{{id='b',width=160,height=80,radius=12,shadow={shadow}}}"
+        ),
+    )
+    .unwrap();
+    let mut session = f.session();
+    session.entry = "ui/main.luau".into();
+    session.reload().map(|scene| scene.primitives)
+}
+
+#[test]
+fn shadow_table_defaults_extent_and_errors() {
+    let shadow = |p: &[Primitive]| {
+        p.iter()
+            .find_map(|p| match p {
+                Primitive::Shadow {
+                    rect,
+                    radius,
+                    blur,
+                    spread,
+                    dy,
+                    alpha,
+                } => Some((*rect, *radius, *blur, *spread, *dy, *alpha)),
+                _ => None,
+            })
+            .unwrap()
+    };
+    // `true` and an empty table are today's shadow: 30 px (3 sigma of blur 10), no spread, no offset.
+    let today = shadow(&shadow_scene("true").unwrap());
+    assert_eq!(today.0.w - 160., 60.);
+    assert_eq!(
+        (today.1, today.2, today.3, today.4, today.5),
+        (12., 10., 0., 0., 1.)
+    );
+    assert_eq!(shadow(&shadow_scene("{}").unwrap()), today);
+    // The raster is the box grown by 3 * blur + spread, moved down by dy.
+    let (rect, radius, blur, spread, dy, alpha) =
+        shadow(&shadow_scene("{blur=4,spread=2,dy=3,alpha=.5}").unwrap());
+    assert_eq!(rect.w, 160. + 2. * (12. + 2.));
+    assert_eq!(rect.h, 80. + 2. * (12. + 2.));
+    assert_eq!((radius, blur, spread, dy, alpha), (14., 4., 2., 3., 0.5));
+    let plain = shadow(&shadow_scene("{blur=4}").unwrap());
+    assert_eq!(rect.y - plain.0.y, -2. + 3.);
+    for (bad, message) in [
+        ("'soft'", "shadow must be boolean or a table"),
+        ("{blur='x'}", "shadow.blur must be a number"),
+        ("{alpha=2}", "shadow.alpha must be a number"),
+        ("{dy=100}", "shadow.dy must be a number"),
+        ("{glow=1}", "unknown shadow field glow"),
+        ("{blur=1,spread=-4}", "shadow.spread must not be below"),
+    ] {
+        let error = shadow_scene(bad).err().unwrap();
+        assert!(error.message.contains(message), "{bad}: {}", error.message);
+        assert_eq!(error.line, 2);
+    }
+}
+
 #[test]
 fn host_policy_resolves_staged_computed_values_and_reject_keeps_previous_state() {
     let f = fixture();

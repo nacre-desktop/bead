@@ -41,3 +41,9 @@ toast shows its dismiss button; hovering the second toast's background shows onl
 the panel shadow halo. The press inserts a toast at the top (the chip acts on press): 0.12 s after it the new toast is drawn in
 place (y 188) while the others are on their way from their old rows (y 268, 348) to their new ones (348, 428), at 337 and 417;
 after the slide the rows sit at 188, 268, 348, 428.
+
+## Shadow parameters (B0320)
+
+`shadow` is `true`, `false` or `{blur, spread, dy, alpha}` (defaults 10, 0, 0, 1). The old 30 px margin was exactly `3 * blur` (the Gaussian's 3 sigma at blur 10) with spread 0, so `true` emits the same primitive and pixels as before.
+`Primitive::Shadow` gains `spread`, `dy` and `alpha` (serde defaults 0, 0, 1). Its rect is the box grown by `3 * blur + spread`, then moved down by `dy`; its radius is the box radius plus `spread`; alpha scales the `.32` opacity and is part of every raster and cache key.
+Reveal, retained edge bands and clip margins read the margin and offset from the primitive, so a reveal panel with a table shadow follows its real extent.

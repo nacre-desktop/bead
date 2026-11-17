@@ -200,10 +200,18 @@ pub enum Primitive {
         rect: Rect,
         path: std::path::PathBuf,
     },
+    /// `rect` is the whole raster: the box grown by `3 * blur + spread` on every side, then moved down
+    /// by `dy`; `radius` already includes `spread` (B0320).
     Shadow {
         rect: Rect,
         radius: f32,
         blur: f32,
+        #[serde(default)]
+        spread: f32,
+        #[serde(default)]
+        dy: f32,
+        #[serde(default = "full_alpha")]
+        alpha: f32,
     },
     /// A graph canvas (spec 0232): shared, versioned world geometry seen through `camera`.
     /// Frames compare the geometry revision, camera, style and interaction, never every edge.
@@ -217,6 +225,9 @@ pub enum Primitive {
         selected: Option<u32>,
         focus: Option<u32>,
     },
+}
+fn full_alpha() -> f32 {
+    1.
 }
 #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct TextShadow {
@@ -676,9 +687,23 @@ impl Scene {
             })
             .or_else(|| {
                 self.primitives.iter().find_map(|p| match p {
-                    Primitive::Shadow { rect, .. } if rect.w > 60. && rect.h > 60. => Some(
-                        Rect::new(rect.x + 30., rect.y + 30., rect.w - 60., rect.h - 60.),
-                    ),
+                    Primitive::Shadow {
+                        rect,
+                        blur,
+                        spread,
+                        dy,
+                        ..
+                    } => {
+                        let m = blur * 3. + spread;
+                        (rect.w > 2. * m && rect.h > 2. * m).then(|| {
+                            Rect::new(
+                                rect.x + m,
+                                rect.y + m - dy,
+                                rect.w - 2. * m,
+                                rect.h - 2. * m,
+                            )
+                        })
+                    }
                     _ => None,
                 })
             })
@@ -710,7 +735,6 @@ impl Scene {
                     && (a.w - b.w).abs() < 0.01
                     && (a.h - b.h).abs() < 0.01
             };
-            let grown = Rect::new(body.x - 30., body.y - 30., body.w + 60., body.h + 60.);
             let mut shadowed = false;
             let parts: Vec<(usize, Primitive)> = self
                 .primitives
@@ -719,7 +743,25 @@ impl Scene {
                 .filter(|(_, p)| match p {
                     Primitive::Rounded { rect, .. } => near(*rect, body),
                     // Only the panel's own (first) shadow follows the body.
-                    Primitive::Shadow { rect, .. } if !shadowed && near(*rect, grown) => {
+                    Primitive::Shadow {
+                        rect,
+                        blur,
+                        spread,
+                        dy,
+                        ..
+                    } if !shadowed && {
+                        let m = blur * 3. + spread;
+                        near(
+                            *rect,
+                            Rect::new(
+                                body.x - m,
+                                body.y - m + dy,
+                                body.w + 2. * m,
+                                body.h + 2. * m,
+                            ),
+                        )
+                    } =>
+                    {
                         shadowed = true;
                         true
                     }
@@ -800,10 +842,20 @@ impl Scene {
                     fill: *fill,
                     border: *border,
                 },
-                Primitive::Shadow { rect, radius, blur } => Primitive::Shadow {
+                Primitive::Shadow {
+                    rect,
+                    radius,
+                    blur,
+                    spread,
+                    dy,
+                    alpha,
+                } => Primitive::Shadow {
                     rect: follow(rect),
                     radius: *radius,
                     blur: *blur,
+                    spread: *spread,
+                    dy: *dy,
+                    alpha: *alpha,
                 },
                 other => other.clone(),
             };
@@ -1228,8 +1280,14 @@ fn key(p: &Primitive, scale: f32) -> String {
                 path.display()
             )
         }
-        Primitive::Shadow { rect, radius, blur } => {
-            format!("s:{scale}:{}:{}:{radius}:{blur}", rect.w, rect.h)
+        Primitive::Shadow {
+            rect,
+            radius,
+            blur,
+            alpha,
+            ..
+        } => {
+            format!("s:{scale}:{}:{}:{radius}:{blur}:{alpha}", rect.w, rect.h)
         }
         _ => String::new(),
     }
@@ -1623,9 +1681,13 @@ impl Renderer for CpuRenderer {
                     apply_radius_clip(&mut pix, *radius * scale)?;
                     pix
                 }
-                Primitive::Shadow { rect, radius, blur } => {
-                    shadow_pixmap(*rect, *radius, *blur, scale)?
-                }
+                Primitive::Shadow {
+                    rect,
+                    radius,
+                    blur,
+                    alpha,
+                    ..
+                } => shadow_pixmap(*rect, *radius, *blur, *alpha, scale)?,
                 _ => unreachable!(),
             };
             let stage = match p {
@@ -1946,25 +2008,33 @@ pub fn swizzle(bytes: &mut [u8], width: u32, d: Damage) {
         }
     }
 }
-fn shadow_svg(w: f32, h: f32, radius: f32, blur: f32) -> String {
+fn shadow_svg(w: f32, h: f32, radius: f32, blur: f32, alpha: f32) -> String {
     let pad = blur * 3.;
     format!(
-        "<svg xmlns='http://www.w3.org/2000/svg' width='{w}' height='{h}'><defs><filter id='s' filterUnits='userSpaceOnUse' x='0' y='0' width='{w}' height='{h}'><feGaussianBlur stdDeviation='{blur}'/></filter></defs><rect x='{pad}' y='{pad}' width='{}' height='{}' rx='{radius}' fill='black' fill-opacity='.32' filter='url(#s)'/></svg>",
+        "<svg xmlns='http://www.w3.org/2000/svg' width='{w}' height='{h}'><defs><filter id='s' filterUnits='userSpaceOnUse' x='0' y='0' width='{w}' height='{h}'><feGaussianBlur stdDeviation='{blur}'/></filter></defs><rect x='{pad}' y='{pad}' width='{}' height='{}' rx='{radius}' fill='black' fill-opacity='{}' filter='url(#s)'/></svg>",
         w - 2. * pad,
-        h - 2. * pad
+        h - 2. * pad,
+        0.32 * alpha
     )
 }
 /// The shadow a surface's `shadow = true` draws: this margin around the box on every side, this blur.
 pub const SURFACE_SHADOW: (f32, f32) = (30., 10.);
-type ShadowKey = (u32, u32, u32, u32, u32);
+type ShadowKey = (u32, u32, u32, u32, u32, u32);
 /// Shadows a host pinned with [`prewarm_shadows`], served without a raster.
 static PINNED_SHADOWS: Mutex<Vec<(ShadowKey, Arc<Pixmap>)>> = Mutex::new(Vec::new());
-fn shadow_key(rect: Rect, radius: f32, blur: f32, scale: f32) -> ShadowKey {
+fn shadow_key(rect: Rect, radius: f32, blur: f32, alpha: f32, scale: f32) -> ShadowKey {
     let (w, h) = dimensions(rect, scale);
-    (w, h, radius.to_bits(), blur.to_bits(), scale.to_bits())
+    (
+        w,
+        h,
+        radius.to_bits(),
+        blur.to_bits(),
+        alpha.to_bits(),
+        scale.to_bits(),
+    )
 }
-fn shadow_pixmap(rect: Rect, radius: f32, blur: f32, scale: f32) -> Result<Pixmap> {
-    let key = shadow_key(rect, radius, blur, scale);
+fn shadow_pixmap(rect: Rect, radius: f32, blur: f32, alpha: f32, scale: f32) -> Result<Pixmap> {
+    let key = shadow_key(rect, radius, blur, alpha, scale);
     if let Some(pixmap) = PINNED_SHADOWS.lock().ok().and_then(|pinned| {
         pinned
             .iter()
@@ -1973,7 +2043,7 @@ fn shadow_pixmap(rect: Rect, radius: f32, blur: f32, scale: f32) -> Result<Pixma
     }) {
         return Ok((*pixmap).clone());
     }
-    shadow_raster(rect, radius, blur, scale)
+    shadow_raster(rect, radius, blur, alpha, scale)
 }
 /// Raster and pin the shadows of these surface boxes (`(box, radius)` in logical px, the box's
 /// position is ignored) at `scale`, so a surface's first frame needs no Gaussian (a cold raster
@@ -1983,13 +2053,13 @@ pub fn prewarm_shadows(boxes: &[(Rect, f32)], scale: f32) -> Result<()> {
     let mut pinned = Vec::with_capacity(boxes.len());
     for (surface, radius) in boxes {
         let rect = Rect::new(0., 0., surface.w + 2. * margin, surface.h + 2. * margin);
-        let pixmap = shadow_raster(rect, *radius, blur, scale)?;
-        pinned.push((shadow_key(rect, *radius, blur, scale), Arc::new(pixmap)));
+        let pixmap = shadow_raster(rect, *radius, blur, 1., scale)?;
+        pinned.push((shadow_key(rect, *radius, blur, 1., scale), Arc::new(pixmap)));
     }
     *PINNED_SHADOWS.lock().map_err(|_| "shadow cache poisoned")? = pinned;
     Ok(())
 }
-fn shadow_raster(rect: Rect, radius: f32, blur: f32, scale: f32) -> Result<Pixmap> {
+fn shadow_raster(rect: Rect, radius: f32, blur: f32, alpha: f32, scale: f32) -> Result<Pixmap> {
     let _span = bead_core::profile::Span::new("shadow_raster");
     let (w, h) = dimensions(rect, scale);
     // Preserve the same Gaussian corners/edges, stretching only straight sections.
@@ -2009,14 +2079,25 @@ fn shadow_raster(rect: Rect, radius: f32, blur: f32, scale: f32) -> Result<Pixma
     let (sx, xs, tw) = axis(w);
     let (sy, ys, th) = axis(h);
     if (tw, th) == (w, h) {
-        return svg_pixmap(shadow_svg(rect.w, rect.h, radius, blur).as_bytes(), w, h);
+        return svg_pixmap(
+            shadow_svg(rect.w, rect.h, radius, blur, alpha).as_bytes(),
+            w,
+            h,
+        );
     }
     // The Gaussian template depends on radius, blur, scale and the short axis only. A revealing
     // panel re-shapes its shadow every frame, so rendering it full size each time cost tens of
     // milliseconds.
-    type Templates = Vec<((u32, u32, u32, u32, u32), std::sync::Arc<Pixmap>)>;
+    type Templates = Vec<((u32, u32, u32, u32, u32, u32), std::sync::Arc<Pixmap>)>;
     static TEMPLATES: std::sync::Mutex<Templates> = std::sync::Mutex::new(Vec::new());
-    let template_key = (radius.to_bits(), blur.to_bits(), scale.to_bits(), tw, th);
+    let template_key = (
+        radius.to_bits(),
+        blur.to_bits(),
+        alpha.to_bits(),
+        scale.to_bits(),
+        tw,
+        th,
+    );
     let cached = TEMPLATES.lock().ok().and_then(|templates| {
         templates
             .iter()
@@ -2027,7 +2108,7 @@ fn shadow_raster(rect: Rect, radius: f32, blur: f32, scale: f32) -> Result<Pixma
         template
     } else {
         let template = std::sync::Arc::new(svg_pixmap(
-            shadow_svg(tw as f32 / scale, th as f32 / scale, radius, blur).as_bytes(),
+            shadow_svg(tw as f32 / scale, th as f32 / scale, radius, blur, alpha).as_bytes(),
             tw,
             th,
         )?);
@@ -3129,6 +3210,9 @@ mod tests {
                 rect: Rect::new(2., 2., 360., 260.),
                 radius: 18.,
                 blur: 10.,
+                spread: 0.,
+                dy: 0.,
+                alpha: 1.,
             },
             Primitive::Rounded {
                 rect: body,
@@ -3374,6 +3458,9 @@ mod tests {
                     rect: Rect::new(2., 2., 360., 260.),
                     radius: 18.,
                     blur: 10.,
+                    spread: 0.,
+                    dy: 0.,
+                    alpha: 1.,
                 },
                 Primitive::Rounded {
                     rect: Rect::new(32., 32., 300., 200.),
@@ -3924,6 +4011,9 @@ mod tests {
                             rect: Rect::new(0., 0., 40., 30.),
                             radius: 4.,
                             blur: 2.,
+                            spread: 0.,
+                            dy: 0.,
+                            alpha: 1.,
                         },
                     ],
                 };
@@ -3970,13 +4060,119 @@ mod tests {
             }
         }
     }
+    /// B0320: `shadow = true` rasters exactly as before the parameters existed (the legacy SVG, opacity `.32`).
+    #[test]
+    fn default_shadow_raster_is_the_legacy_raster_and_alpha_scales_coverage() {
+        let legacy = |w: f32, h: f32, radius: f32| {
+            format!(
+                "<svg xmlns='http://www.w3.org/2000/svg' width='{w}' height='{h}'><defs><filter id='s' filterUnits='userSpaceOnUse' x='0' y='0' width='{w}' height='{h}'><feGaussianBlur stdDeviation='10'/></filter></defs><rect x='30' y='30' width='{}' height='{}' rx='{radius}' fill='black' fill-opacity='.32' filter='url(#s)'/></svg>",
+                w - 60.,
+                h - 60.
+            )
+        };
+        // A panel (radius 12 at 1.5x) and a box (radius 6 at 1x), both small enough for the exact raster path.
+        for (rect, radius, scale) in [
+            (Rect::new(0., 0., 100., 70.), 12., 1.5),
+            (Rect::new(0., 0., 90., 90.), 6., 1.),
+        ] {
+            let (w, h) = dimensions(rect, scale);
+            let old = svg_pixmap(legacy(rect.w, rect.h, radius).as_bytes(), w, h).unwrap();
+            let new = shadow_raster(rect, radius, 10., 1., scale).unwrap();
+            assert_eq!(old.data(), new.data(), "radius {radius} at {scale}x");
+            let half = shadow_raster(rect, radius, 10., 0.5, scale).unwrap();
+            for (full, half) in new.data().chunks(4).zip(half.data().chunks(4)) {
+                assert!(
+                    half[3].abs_diff(full[3] / 2) <= 1,
+                    "{} vs {}",
+                    half[3],
+                    full[3]
+                );
+            }
+            assert_ne!(
+                shadow_key(rect, radius, 10., 1., scale),
+                shadow_key(rect, radius, 10., 0.5, scale)
+            );
+        }
+        let shadow = |alpha| Primitive::Shadow {
+            rect: Rect::new(0., 0., 90., 90.),
+            radius: 6.,
+            blur: 10.,
+            spread: 0.,
+            dy: 0.,
+            alpha,
+        };
+        assert_ne!(key(&shadow(1.), 1.), key(&shadow(0.5), 1.));
+        // A nine-patch (large) shadow keeps alpha too: the half raster stays within 1/255 of half the full one.
+        let big = Rect::new(0., 0., 400., 300.);
+        let (full, half) = (
+            shadow_raster(big, 12., 10., 1., 1.).unwrap(),
+            shadow_raster(big, 12., 10., 0.5, 1.).unwrap(),
+        );
+        assert!(
+            full.data()
+                .chunks(4)
+                .zip(half.data().chunks(4))
+                .all(|(f, h)| h[3].abs_diff(f[3] / 2) <= 1)
+        );
+    }
+    /// B0320: a table shadow's raster follows the body at its own offsets while a panel reveals.
+    #[test]
+    fn reveal_follows_a_table_shadow_at_its_own_extent() {
+        let body = Rect::new(32., 32., 300., 200.);
+        let mut scene = font_pool_scene();
+        // blur 4, spread 2, dy 3: the raster is the body grown by 14, moved down by 3.
+        scene.primitives = vec![
+            Primitive::Shadow {
+                rect: Rect::new(18., 21., 328., 228.),
+                radius: 20.,
+                blur: 4.,
+                spread: 2.,
+                dy: 3.,
+                alpha: 0.5,
+            },
+            Primitive::Rounded {
+                rect: body,
+                radius: 18.,
+                fill: [1, 2, 3, 255],
+                border: None,
+            },
+        ];
+        scene.motion = Some(Motion {
+            id: "m".into(),
+            open: true,
+            duration: 0.36,
+            return_duration: None,
+            return_curve: None,
+            auto_open: false,
+            spring: false,
+            curve: None,
+            edge: bead_core::Edge::Top,
+            slide_distance: None,
+            fade: false,
+            reveal: true,
+            progress: 1.,
+            parts: Vec::new(),
+            art: None,
+            body: None,
+        });
+        scene.reveal(0.5);
+        let Primitive::Shadow { rect, alpha, .. } = &scene.primitives[0] else {
+            panic!()
+        };
+        assert_eq!((rect.y, rect.h, *alpha), (21., 128., 0.5));
+        scene.reveal(1.);
+        let Primitive::Shadow { rect, .. } = &scene.primitives[0] else {
+            panic!()
+        };
+        assert_eq!(*rect, Rect::new(18., 21., 328., 228.));
+    }
     #[test]
     fn nine_patch_shadow_preserves_gaussian_appearance() {
         let rect = Rect::new(0., 0., 500., 300.);
         let scale = 1.5;
         let (w, h) = dimensions(rect, scale);
-        let exact = svg_pixmap(shadow_svg(rect.w, rect.h, 12., 10.).as_bytes(), w, h).unwrap();
-        let fast = shadow_pixmap(rect, 12., 10., scale).unwrap();
+        let exact = svg_pixmap(shadow_svg(rect.w, rect.h, 12., 10., 1.).as_bytes(), w, h).unwrap();
+        let fast = shadow_pixmap(rect, 12., 10., 1., scale).unwrap();
         let max = exact
             .data()
             .iter()
@@ -3995,8 +4191,9 @@ mod tests {
         for h in [62., 90., 150., 200.] {
             let rect = Rect::new(0., 0., 360., h);
             let (w, hp) = dimensions(rect, scale);
-            let exact = svg_pixmap(shadow_svg(rect.w, rect.h, 16., 10.).as_bytes(), w, hp).unwrap();
-            let fast = shadow_pixmap(rect, 16., 10., scale).unwrap();
+            let exact =
+                svg_pixmap(shadow_svg(rect.w, rect.h, 16., 10., 1.).as_bytes(), w, hp).unwrap();
+            let fast = shadow_pixmap(rect, 16., 10., 1., scale).unwrap();
             let max = exact
                 .data()
                 .iter()
@@ -4205,10 +4402,10 @@ mod weight_tests {
         // The review's OSD pill: a 360 x 64 box, radius 32, at 1.5x (a 420 x 124 shadow).
         let pill = (Rect::new(0., 0., 360., 64.), 32.);
         let shadow = Rect::new(10., 20., 420., 124.);
-        let cold = shadow_raster(shadow, 32., 10., 1.5).unwrap();
+        let cold = shadow_raster(shadow, 32., 10., 1., 1.5).unwrap();
         prewarm_shadows(&[pill], 1.5).unwrap();
         let started = std::time::Instant::now();
-        let warm = shadow_pixmap(shadow, 32., 10., 1.5).unwrap();
+        let warm = shadow_pixmap(shadow, 32., 10., 1., 1.5).unwrap();
         let warm_ms = started.elapsed().as_secs_f64() * 1000.;
         assert_eq!(
             warm.data(),
@@ -4216,7 +4413,7 @@ mod weight_tests {
             "a pinned shadow is the same pixels"
         );
         assert!(warm_ms < 16.7, "pinned shadow took {warm_ms:.3} ms");
-        let key = shadow_key(shadow, 32., 10., 1.5);
+        let key = shadow_key(shadow, 32., 10., 1., 1.5);
         let pinned = |key| {
             PINNED_SHADOWS
                 .lock()

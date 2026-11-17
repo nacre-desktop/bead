@@ -256,10 +256,12 @@ fn inferred_reveal_contour(
                 rect,
                 radius: shadow_radius,
                 blur,
+                alpha,
+                ..
             } if blur.is_finite()
                 && *blur >= 0.
                 && shadow_radius.is_finite()
-                && (*shadow_radius - radius).abs() < 0.01 =>
+                && alpha.is_finite() =>
             {
                 let inset = blur * 3.;
                 let left = rect.x + inset - body.x;
@@ -268,13 +270,16 @@ fn inferred_reveal_contour(
                 let bottom = rect.y + rect.h - inset - (body.y + body.h);
                 let spread_x = (right - left) * 0.5;
                 let spread_y = (bottom - top) * 0.5;
-                if (spread_x - spread_y).abs() >= 0.01 {
+                // The shadow's corner radius is the body's plus its spread.
+                if (spread_x - spread_y).abs() >= 0.01
+                    || (*shadow_radius - radius - spread_x).abs() >= 0.01
+                {
                     return None;
                 }
                 Some((
                     *index,
                     RevealShadow {
-                        color: [0, 0, 0, 82],
+                        color: [0, 0, 0, (81.6 * alpha).round() as u8],
                         blur: *blur,
                         spread: spread_x,
                         offset: ((left + right) * 0.5, (top + bottom) * 0.5),
@@ -1036,6 +1041,47 @@ mod tests {
         }
     }
 
+    /// B0320: a table shadow (blur 2, spread 1, dy 1, alpha .5) reaches the compositor contour at its real extent.
+    #[test]
+    fn reveal_contour_carries_a_table_shadow() -> Result<()> {
+        let mut scene = scene(true, false);
+        scene.primitives.insert(
+            0,
+            Primitive::Shadow {
+                rect: Rect::new(1., 2., 94., 70.),
+                radius: 7.,
+                blur: 2.,
+                spread: 1.,
+                dy: 1.,
+                alpha: 0.5,
+            },
+        );
+        scene.motion.as_mut().unwrap().body = Some(Rect::new(8., 8., 80., 56.));
+        scene.reveal(1.);
+        let mut renderer = TreeCpuRenderer::default();
+        let plan = LayerMotionPlan::for_slide(
+            &scene,
+            true,
+            96,
+            72,
+            1.5,
+            PixelFormat::Rgba,
+            &mut renderer,
+        )?
+        .expect("representable reveal with a table shadow");
+        let shadow = plan.reveal.expect("contour").shadow.expect("shadow");
+        assert_eq!(
+            shadow,
+            RevealShadow {
+                color: [0, 0, 0, 41],
+                blur: 2.,
+                spread: 1.,
+                offset: (0., 1.)
+            }
+        );
+        Ok(())
+    }
+
     #[test]
     fn a_single_generic_rounded_body_gets_compositor_geometry() -> Result<()> {
         let mut renderer = TreeCpuRenderer::default();
@@ -1482,6 +1528,9 @@ mod tests {
             rect: Rect::new(-32., -2., 446., 330.),
             radius: 16.,
             blur: 12.,
+            spread: 0.,
+            dy: 0.,
+            alpha: 1.,
         }];
 
         let ink = scene_ink_bounds(&scene, 1.5, scene.offset).unwrap();
@@ -1539,6 +1588,9 @@ mod tests {
             rect: Rect::new(0., 0., 97., 73.),
             radius: 8.,
             blur: 4.,
+            spread: 0.,
+            dy: 0.,
+            alpha: 1.,
         }];
         let ink = scene_ink_bounds(&scene, 1.5, scene.offset).unwrap();
         assert_eq!(ink.w, 146. / 1.5);
@@ -1777,6 +1829,9 @@ mod tests {
                     rect: Rect::new(24.6, 4., 7.4, 12.),
                     radius: 2.,
                     blur: 1.,
+                    spread: 0.,
+                    dy: 0.,
+                    alpha: 1.,
                 },
             ] {
                 let mut scene = scene(false, false);

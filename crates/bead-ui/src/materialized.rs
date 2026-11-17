@@ -1214,17 +1214,24 @@ fn scale_about(primitive: &mut Primitive, around: bead_render::Rect, s: f32) {
             *rect = scaled(*rect);
             *size *= s;
         }
-        Primitive::Shadow { rect, radius, .. } => {
-            let m = bead_render::SURFACE_SHADOW.0;
+        Primitive::Shadow {
+            rect,
+            radius,
+            blur,
+            spread,
+            dy,
+            ..
+        } => {
+            let m = *blur * 3. + *spread;
             let inner = scaled(bead_render::Rect::new(
                 rect.x + m,
-                rect.y + m,
+                rect.y + m - *dy,
                 rect.w - 2. * m,
                 rect.h - 2. * m,
             ));
             *rect = bead_render::Rect::new(
                 inner.x - m,
-                inner.y - m,
+                inner.y - m + *dy,
                 inner.w + 2. * m,
                 inner.h + 2. * m,
             );

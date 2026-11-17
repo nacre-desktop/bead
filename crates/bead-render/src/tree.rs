@@ -750,12 +750,18 @@ struct EdgeTemplate {
 #[derive(Clone, Copy)]
 enum EdgeKind<'a> {
     Art(&'a crate::RevealArt),
-    Shadow { radius: f32, blur: f32 },
+    Shadow {
+        radius: f32,
+        blur: f32,
+        spread: f32,
+        dy: f32,
+        alpha: f32,
+    },
 }
 struct EdgeSpec<'a> {
     kind: EdgeKind<'a>,
     edge: bead_core::Edge,
-    /// The body whose reveal drives the piece (the shadow's rectangle less its 30 px margin).
+    /// The body whose reveal drives the piece (the shadow's rectangle less its margin).
     body: Rect,
     /// The piece's open-state rectangle and its raster extent along the growth axis.
     f: Rect,
@@ -894,9 +900,11 @@ pub(crate) fn hash_primitive(primitive: &Primitive, at_origin: bool, hash: &mut 
             rect: r,
             radius,
             blur,
+            alpha,
+            ..
         } => {
             rect(r, hash);
-            (radius.to_bits(), blur.to_bits()).hash(hash);
+            (radius.to_bits(), blur.to_bits(), alpha.to_bits()).hash(hash);
         }
         Primitive::Graph {
             rect: r,
@@ -1135,13 +1143,21 @@ impl TreeCache {
         let (ix, iy) = motion.edge.inward();
         let (vertical, far) = (iy != 0., ix > 0. || iy > 0.);
         let f = rect(&item.primitive);
-        let margin = match kind {
-            EdgeKind::Art(_) => 0.,
-            EdgeKind::Shadow { .. } => 30.,
+        // The shadow's raster is its body grown by `m`, moved down by `dy`.
+        let (m, dy) = match kind {
+            EdgeKind::Art(_) => (0., 0.),
+            EdgeKind::Shadow {
+                blur, spread, dy, ..
+            } => (blur * 3. + spread, dy),
+        };
+        let margin = match (vertical, far) {
+            (true, true) => m + dy,
+            (true, false) => m - dy,
+            _ => m,
         };
         let body = match kind {
             EdgeKind::Art(art) => art.body,
-            EdgeKind::Shadow { .. } => Rect::new(f.x + 30., f.y + 30., f.w - 60., f.h - 60.),
+            EdgeKind::Shadow { .. } => Rect::new(f.x + m, f.y + m - dy, f.w - 2. * m, f.h - 2. * m),
         };
         let (origin, extent) = if vertical {
             (f.y, base.pixels.height())
@@ -1348,7 +1364,7 @@ impl TreeCache {
         let inside = EDGE_INSIDE
             + match kind {
                 EdgeKind::Art(_) => 0.,
-                EdgeKind::Shadow { .. } => 30.,
+                EdgeKind::Shadow { blur, spread, .. } => blur * 3. + spread,
             };
         let ghost_progress = ((EDGE_MIN_REVEALED + 24.) / length).clamp(0.5, 0.9);
         let ghost_body = Scene::revealed(body, edge, ghost_progress);
@@ -1379,14 +1395,21 @@ impl TreeCache {
                 let (_, bytes) = (art.draw)(ghost_body, Some(crop));
                 crate::svg_pixmap(&bytes, w, h)?
             }
-            EdgeKind::Shadow { radius, blur } => {
+            EdgeKind::Shadow {
+                radius,
+                blur,
+                spread,
+                dy,
+                alpha,
+            } => {
+                let m = blur * 3. + spread;
                 let grown = Rect::new(
-                    ghost_body.x - 30.,
-                    ghost_body.y - 30.,
-                    ghost_body.w + 60.,
-                    ghost_body.h + 60.,
+                    ghost_body.x - m,
+                    ghost_body.y - m + dy,
+                    ghost_body.w + 2. * m,
+                    ghost_body.h + 2. * m,
                 );
-                let whole = crate::shadow_pixmap(grown, radius, blur, scale)?;
+                let whole = crate::shadow_pixmap(grown, radius, blur, alpha, scale)?;
                 // The ghost raster starts at its own origin; the band is cut at the item's pixel rows/columns.
                 let offset = if vertical {
                     ((grown.y - origin) * scale).round() as i64
@@ -1520,9 +1543,22 @@ impl TreeCache {
             if motion.parts.iter().any(|(i, _)| *i == index) {
                 let kind = match (&item.primitive, motion.art.as_ref()) {
                     (_, Some(art)) if art.index == index => Some(EdgeKind::Art(art)),
-                    (Primitive::Shadow { radius, blur, .. }, _) => Some(EdgeKind::Shadow {
+                    (
+                        Primitive::Shadow {
+                            radius,
+                            blur,
+                            spread,
+                            dy,
+                            alpha,
+                            ..
+                        },
+                        _,
+                    ) => Some(EdgeKind::Shadow {
                         radius: *radius,
                         blur: *blur,
+                        spread: *spread,
+                        dy: *dy,
+                        alpha: *alpha,
                     }),
                     _ => None,
                 };
@@ -1953,12 +1989,25 @@ impl TreeCache {
                         (_, Some(art)) if art.index == *index => {
                             self.ensure_edge(scene, item, EdgeKind::Art(art), scale);
                         }
-                        (Primitive::Shadow { radius, blur, .. }, _) => self.ensure_edge(
+                        (
+                            Primitive::Shadow {
+                                radius,
+                                blur,
+                                spread,
+                                dy,
+                                alpha,
+                                ..
+                            },
+                            _,
+                        ) => self.ensure_edge(
                             scene,
                             item,
                             EdgeKind::Shadow {
                                 radius: *radius,
                                 blur: *blur,
+                                spread: *spread,
+                                dy: *dy,
+                                alpha: *alpha,
                             },
                             scale,
                         ),
@@ -5940,6 +5989,9 @@ mod tests {
                     rect: Rect::new(-30., -30., 1060., 860.),
                     radius: 12.,
                     blur: 10.,
+                    spread: 0.,
+                    dy: 0.,
+                    alpha: 1.,
                 },
                 Primitive::Rounded {
                     rect: Rect::new(0., 0., 1000., 800.),
@@ -6050,6 +6102,9 @@ mod tests {
                     rect: Rect::new(-30., -30., 1044., 710.),
                     radius: 12.,
                     blur: 10.,
+                    spread: 0.,
+                    dy: 0.,
+                    alpha: 1.,
                 },
                 Primitive::Rounded {
                     rect: Rect::new(0., 0., 984., 650.),
@@ -6213,6 +6268,9 @@ mod tests {
                     rect: Rect::new(-30., -30., 260., 160.),
                     radius: 12.,
                     blur: 8.,
+                    spread: 0.,
+                    dy: 0.,
+                    alpha: 1.,
                 },
                 rounded(Rect::new(0., 0., 200., 100.), [30, 30, 40, 255], None),
                 rounded(
@@ -7101,6 +7159,9 @@ mod tests {
             rect: Rect::new(0., 0., 2000., 2000.),
             radius: 35.,
             blur: 10.,
+            spread: 0.,
+            dy: 0.,
+            alpha: 1.,
         }];
         scene.layers = vec![crate::SceneLayer {
             id: "large-shadow".into(),
@@ -8665,6 +8726,9 @@ mod tests {
                 rect: Rect::new(0., 0., 80., 64.),
                 radius: 12.,
                 blur: 6.,
+                spread: 0.,
+                dy: 0.,
+                alpha: 1.,
             },
             Primitive::Rounded {
                 rect: Rect::new(6., 6., 64., 48.),
@@ -9402,6 +9466,9 @@ mod tests {
                 rect: shadow,
                 radius,
                 blur: 10.,
+                spread: 0.,
+                dy: 0.,
+                alpha: 1.,
             },
             Primitive::Rounded {
                 rect: joined,

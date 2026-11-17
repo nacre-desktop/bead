@@ -243,7 +243,7 @@ pub struct ViewSpec {
     pub border_color: Option<Json>,
     pub border_width: f32,
     pub radius: f32,
-    pub shadow: bool,
+    pub shadow: Option<ShadowStyle>,
     /// Root `Panel` only: the id of the child that is the panel body (reveal, input region).
     pub body: Option<String>,
     /// The edge this box is attached to: its two corners there are square at `join` = 1.
@@ -393,6 +393,60 @@ fn boolean(p: &Props<'_>, name: &str, default: bool, source: &Source) -> Result<
             .as_bool()
             .ok_or_else(|| source.error(format!("{name} must be boolean"))),
     }
+}
+/// The `shadow` prop (B0320): `true` is the surface shadow (blur 10, spread 0, no offset, full strength).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ShadowStyle {
+    pub blur: f32,
+    pub spread: f32,
+    pub dy: f32,
+    pub alpha: f32,
+}
+fn shadow_style(
+    p: &Props<'_>,
+    default: bool,
+    source: &Source,
+) -> Result<Option<ShadowStyle>, Diagnostic> {
+    let mut style = ShadowStyle {
+        blur: bead_render::SURFACE_SHADOW.1,
+        spread: 0.,
+        dy: 0.,
+        alpha: 1.,
+    };
+    let table = match p.get("shadow") {
+        None => return Ok(default.then_some(style)),
+        Some(Json::Bool(on)) => return Ok(on.then_some(style)),
+        Some(Json::Object(table)) => table,
+        // An empty Luau table may arrive as an empty array: all defaults.
+        Some(Json::Array(items)) if items.is_empty() => return Ok(Some(style)),
+        Some(_) => {
+            return Err(source.error("shadow must be boolean or a table {blur, spread, dy, alpha}"));
+        }
+    };
+    for (key, value) in table {
+        let (field, range) = match key.as_str() {
+            "blur" => (&mut style.blur, 0.0..=64.),
+            "spread" => (&mut style.spread, -32.0..=64.),
+            "dy" => (&mut style.dy, -64.0..=64.),
+            "alpha" => (&mut style.alpha, 0.0..=1.),
+            _ => return Err(source.error(format!("unknown shadow field {key}"))),
+        };
+        *field = value
+            .as_f64()
+            .map(|n| n as f32)
+            .filter(|n| range.contains(n))
+            .ok_or_else(|| {
+                source.error(format!(
+                    "shadow.{key} must be a number {}..{}",
+                    range.start(),
+                    range.end()
+                ))
+            })?;
+    }
+    if style.blur * 3. + style.spread < 0. {
+        return Err(source.error("shadow.spread must not be below -3 * blur"));
+    }
+    Ok(Some(style))
 }
 fn dimension<T: FromLength + FromPercent + TaffyAuto>(
     p: &Props<'_>,
@@ -988,7 +1042,7 @@ impl ViewSpec {
                     if raw.kind == Widget::Panel { 12. } else { 9. },
                     source,
                 )?,
-                shadow: boolean(p, "shadow", raw.kind == Widget::Panel, source)?,
+                shadow: shadow_style(p, raw.kind == Widget::Panel, source)?,
                 body: p
                     .get("body")
                     .map(|_| text(p, "body", "", source).map(|id| format!("{child_scope}{id}")))
@@ -1385,20 +1439,24 @@ pub fn layout(
                 out.scene.clips.insert(index, c);
             }
         };
-        if view.shadow {
-            let (margin, blur) = bead_render::SURFACE_SHADOW;
+        if let Some(s) = view.shadow {
+            // The raster is the shadow's own extent: 3 sigma of blur plus spread, moved down by dy.
+            let margin = s.blur * 3. + s.spread;
             emit(
                 Primitive::Shadow {
                     rect: Rect::new(
                         r.x - margin,
-                        r.y - margin,
+                        r.y - margin + s.dy,
                         r.w + 2. * margin,
                         r.h + 2. * margin,
                     ),
-                    radius: view.radius,
-                    blur,
+                    radius: view.radius + s.spread,
+                    blur: s.blur,
+                    spread: s.spread,
+                    dy: s.dy,
+                    alpha: s.alpha,
                 },
-                Some(margin),
+                Some(margin + s.dy.abs()),
             );
         }
         let border = (view.border_width > 0. || view.selected)

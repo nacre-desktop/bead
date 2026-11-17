@@ -224,9 +224,15 @@ fn content_key(scene: &Scene, scale: f32) -> u64 {
                     coordinate.to_bits().hash(&mut h);
                 }
             }
-            Primitive::Shadow { radius, blur, .. } => {
+            Primitive::Shadow {
+                radius,
+                blur,
+                alpha,
+                ..
+            } => {
                 radius.to_bits().hash(&mut h);
                 blur.to_bits().hash(&mut h);
+                alpha.to_bits().hash(&mut h);
             }
             Primitive::Graph {
                 geometry,
