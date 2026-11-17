@@ -4,10 +4,11 @@
 //! grows the new image from the output centre. `BEAD_FADE_WARM=<n>` runs warm mode (B0317) for n
 //! changes (`BEAD_FADE_RETARGET_MS=<ms>` adds a second change that long after each warm one) between `BEAD_FADE_COLD` (default 3) cold ones, `BEAD_FADE_CYCLES` (default 1) times,
 //! and prints `PROOF_MEM` (RSS and anonymous memory) before every change and after each switch.
+//! `BEAD_FADE_MS` sets the fade duration; `BEAD_FADE_PALETTE_ONLY=1` (B0327) makes every change after the first a palette-only frame and prints `PROOF_PALETTE` per palette step.
 use bead_wayland::{
     Options, ShellControl, WallpaperFade, WallpaperFadeKind, WallpaperFrame, WallpaperProvider, run,
 };
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 #[derive(Default)]
@@ -15,6 +16,9 @@ struct Provider {
     /// The committed revision per output: every output of a change fades.
     revision: Mutex<BTreeMap<String, u64>>,
     changed: Mutex<Option<Box<dyn Fn() + Send + Sync>>>,
+    /// `BEAD_FADE_PALETTE_ONLY=1` (B0327): after the first image every change keeps the pixels
+    /// and flips only the palette; the frames prepared that way are listed here.
+    only: Mutex<BTreeSet<(String, u64)>>,
 }
 impl Provider {
     fn next(&self, output: &str) -> u64 {
@@ -50,7 +54,12 @@ impl WallpaperProvider for Provider {
     }
     fn prepare(&self, output: String, width: u32, height: u32) -> Result<WallpaperFrame, String> {
         let revision = self.next(&output);
-        let rgba = self.image(width, height, revision);
+        let only = revision > 1 && env_number("BEAD_FADE_PALETTE_ONLY", 0) > 0;
+        if only {
+            self.only.lock().unwrap().insert((output.clone(), revision));
+        }
+        // A palette-only frame carries the pixels of the previous revision.
+        let rgba = self.image(width, height, revision - u64::from(only));
         let colour = [[200u8, 80, 60, 255], [60, 100, 220, 255]][(revision % 2) as usize];
         Ok(WallpaperFrame {
             output,
@@ -63,8 +72,17 @@ impl WallpaperProvider for Provider {
             commit_token: Arc::new(()),
         })
     }
+    fn palette_only(&self, output: &str, revision: u64) -> bool {
+        self.only
+            .lock()
+            .unwrap()
+            .contains(&(output.to_owned(), revision))
+    }
     fn is_current(&self, frame: &WallpaperFrame) -> bool {
         frame.revision == self.next(&frame.output)
+    }
+    fn uploaded(&self, output: &str, revision: u64, _: &Arc<dyn std::any::Any + Send + Sync>) {
+        println!("PROOF_UPLOADED output={output} revision={revision}");
     }
     fn committed(&self, output: &str, revision: u64, _: &Arc<dyn std::any::Any + Send + Sync>) {
         self.revision
@@ -77,8 +95,8 @@ impl WallpaperProvider for Provider {
     fn output_removed(&self, _: &str) {}
 }
 /// The warm switch of the proof host, flipped by the schedule below.
-#[derive(Default)]
 struct Warm {
+    start: std::time::Instant,
     on: AtomicBool,
     changed: Mutex<Option<Box<dyn Fn() + Send + Sync>>>,
 }
@@ -88,6 +106,13 @@ impl ShellControl for Warm {
     }
     fn wallpaper_warm(&self) -> bool {
         self.on.load(Ordering::SeqCst)
+    }
+    fn palette_changed(&self, palette: &BTreeMap<String, [u8; 4]>) {
+        let t = self.start.elapsed().as_secs_f64() * 1000.;
+        println!(
+            "PROOF_PALETTE t_ms={t:.1} accent={:?}",
+            palette.get("accent")
+        );
     }
 }
 fn env_number(name: &str, default: usize) -> usize {
@@ -121,7 +146,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or(3000);
     let ticker = provider.clone();
     let warm_changes = env_number("BEAD_FADE_WARM", 0);
-    let warm = Arc::new(Warm::default());
+    let warm = Arc::new(Warm {
+        start: std::time::Instant::now(),
+        on: AtomicBool::new(false),
+        changed: Mutex::new(None),
+    });
     let switch = warm.clone();
     let (cold, cycles) = (
         env_number("BEAD_FADE_COLD", 3),
@@ -153,7 +182,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
     let mut options = Options::default();
-    options.control = (warm_changes > 0).then_some(warm as Arc<dyn ShellControl>);
+    let logs_palette = warm_changes > 0 || env_number("BEAD_FADE_PALETTE_ONLY", 0) > 0;
+    options.control = logs_palette.then_some(warm as Arc<dyn ShellControl>);
     options.wallpaper = Some(provider);
     options.wallpaper_fade = Some(WallpaperFade {
         kind: if std::env::var("BEAD_FADE_KIND").as_deref() == Ok("grow") {
@@ -161,6 +191,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         } else {
             WallpaperFadeKind::Fade
         },
+        duration_ms: env_number("BEAD_FADE_MS", 700) as u32,
         ..WallpaperFade::default()
     });
     run(options, bead_render::Scene::empty(100., 32.))

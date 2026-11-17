@@ -1244,6 +1244,11 @@ impl App {
         let stage_revision = frame.revision;
         let stage_token = frame.commit_token.clone();
         #[cfg(feature = "native-gl")]
+        if !staged && self.install_palette_only(&frame, &palette_key) {
+            self.request_dirty_wallpaper(&output_name);
+            return;
+        }
+        #[cfg(feature = "native-gl")]
         if !staged && self.install_with_palette_tween(&palette_key, frame.output.as_str()) {
             let installed = frame.revision;
             self.install_wallpaper(frame);
