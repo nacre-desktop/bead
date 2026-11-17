@@ -1589,6 +1589,7 @@ impl TreeCache {
                         primitives: vec![local(&shaped)],
                         offset: (0., 0.),
                         bounds: scene.bounds,
+                        input_islands: None,
                     };
                     let raster_profile = bead_core::profile::Span::new("reveal_art_raster");
                     let sliced = match (&shaped, motion.art.as_ref()) {
@@ -2346,6 +2347,7 @@ impl TreeCache {
                             primitives: Vec::with_capacity(1),
                             offset: (0., 0.),
                             bounds: scene.bounds,
+                            input_islands: None,
                         });
                         content.primitives.clear();
                         content.primitives.push(local(primitive));
@@ -5449,6 +5451,7 @@ mod tests {
                 fill: [70, 80, 90, 255],
                 border: Some(([200, 30, 40, 255], 2.)),
             }],
+            input_islands: None,
         };
         let mut cache = TreeCache::default();
         cache.prepare(&scene, 1.).unwrap();
@@ -5520,6 +5523,7 @@ mod tests {
             offset: (0., 0.),
             bounds: Rect::new(0., 0., 10., 6.),
             primitives: vec![],
+            input_islands: None,
         };
         for (color, clip) in [
             ([220, 30, 40, 255], Rect::new(0., 0., 5., 6.)),
@@ -6002,6 +6006,7 @@ mod tests {
             ],
             offset: (32., 32.),
             bounds: Rect::new(-32., -32., 1064., 864.),
+            input_islands: None,
         };
         scene.motion = Some(crate::Motion {
             id: "edge-test".into(),
@@ -6115,6 +6120,7 @@ mod tests {
             ],
             offset: (32., 32.),
             bounds: Rect::new(-32., -32., 1048., 714.),
+            input_islands: None,
         };
         scene.motion = Some(crate::Motion {
             id: "resident-test".into(),
@@ -6290,6 +6296,7 @@ mod tests {
             ],
             offset: (32., 32.),
             bounds: Rect::new(-32., -32., 264., 164.),
+            input_islands: None,
         };
         scene.motion = Some(crate::Motion {
             id: "slide-test".into(),
@@ -7650,6 +7657,7 @@ mod tests {
             ],
             offset: (0., 0.),
             bounds: Rect::new(0., 0., 24., 20.),
+            input_islands: None,
         }
     }
 

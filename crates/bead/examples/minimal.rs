@@ -20,6 +20,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             fill: [40, 70, 90, 255],
             border: None,
         }],
+        input_islands: None,
     };
     if std::env::args().any(|a| a == "--check") {
         let mut renderer = bead::render::renderer(Default::default())?;

@@ -133,6 +133,7 @@ pub const PROPERTIES: &[&str] = &[
     "radius",
     "shadow",
     "body",
+    "input",
     "join_edge",
     "join",
     "font_size",
@@ -246,6 +247,8 @@ pub struct ViewSpec {
     pub shadow: Option<ShadowStyle>,
     /// Root `Panel` only: the id of the child that is the panel body (reveal, input region).
     pub body: Option<String>,
+    /// Root only, `input = "children"` (B0321): the surface takes input on the root's direct children only.
+    pub input_children: bool,
     /// The edge this box is attached to: its two corners there are square at `join` = 1.
     pub join_edge: Option<bead_core::Edge>,
     pub join: f32,
@@ -926,6 +929,13 @@ impl ViewSpec {
                     "shadow is only valid on a surface: Panel, Box, Row, Column, Grid or Button",
                 ));
             }
+            let input_children = match p.get("input") {
+                None => false,
+                Some(v) if v == "children" && path == "view" => true,
+                Some(_) => {
+                    return Err(source.error("input is only valid on the root, as \"children\""));
+                }
+            };
             if p.contains_key("body") && (raw.kind != Widget::Panel || path != "view") {
                 return Err(source.error("body is only valid on the root Panel"));
             }
@@ -1047,6 +1057,7 @@ impl ViewSpec {
                     .get("body")
                     .map(|_| text(p, "body", "", source).map(|id| format!("{child_scope}{id}")))
                     .transpose()?,
+                input_children,
                 join_edge: p
                     .get("join_edge")
                     .map(|value| {
@@ -1352,6 +1363,7 @@ pub fn layout(
             primitives: vec![],
             offset: (32., 32.),
             bounds: Rect::new(-32., -32., root_size.width + 64., root_size.height + 64.),
+            input_islands: None,
         },
         nodes: vec![],
     };
@@ -1756,8 +1768,34 @@ pub fn layout(
             motion.parts = parts;
         }
     }
+    if view.input_children {
+        output.scene.input_islands = Some(input_islands(&output, &view.id));
+    }
     output.scene.settle_open_duration();
     Ok(output)
+}
+/// Islands, not leaves (B0321): the rect of each direct child of the root that, or whose descendant,
+/// is interactive or paints something. Empty spacers drop out; the gaps between islands stay open.
+fn input_islands(out: &LaidOut, root: &str) -> Vec<Rect> {
+    let layers = &out.scene.layers;
+    let mut rects = Vec::new();
+    for (i, layer) in layers.iter().enumerate() {
+        if layer.parent.as_deref() != Some(root) {
+            continue;
+        }
+        let mut subtree = std::collections::BTreeSet::from([layer.id.as_str()]);
+        for later in &layers[i + 1..] {
+            if later.parent.as_deref().is_some_and(|p| subtree.contains(p)) {
+                subtree.insert(later.id.as_str());
+            }
+        }
+        if layer.own.start < layer.subtree_end
+            || out.nodes.iter().any(|n| subtree.contains(n.id.as_str()))
+        {
+            rects.push(layer.bounds);
+        }
+    }
+    rects
 }
 /// `primitive` grown by `extent` behind `edge`: the part that `joined_clip` cuts off.
 fn joined_rect(mut primitive: Primitive, edge: bead_core::Edge, extent: f32) -> Primitive {

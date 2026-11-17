@@ -344,6 +344,7 @@ mod tests {
                 fill: [200, 30, 60, 255],
                 border: None,
             }],
+            input_islands: None,
         }
     }
     #[test]

@@ -78,6 +78,7 @@ mod layer_motion_renderer_tests {
             }],
             offset: (0., 0.),
             bounds: bead_render::Rect::new(0., 0., 16., 16.),
+            input_islands: None,
         };
         let frozen = bead_render::tree::TreeCpuRenderer::snapshot(&scene, 1.).unwrap();
         assert!(accepted_frozen_snapshot(&frozen, &scene, 1.).unwrap());
@@ -445,6 +446,32 @@ pub(super) fn content_window_rect(scene: &Scene) -> Option<[i32; 4]> {
         ((body.x + body.w).ceil() - x).max(0.) as i32,
         ((body.y + body.h).ceil() - y).max(0.) as i32,
     ])
+}
+
+/// The integer rect that contains `r`, as `content_input_rect` rounds it.
+pub(super) fn outer_rect(r: bead_render::Rect) -> [i32; 4] {
+    let (x, y) = (r.x.floor(), r.y.floor());
+    [
+        x as i32,
+        y as i32,
+        ((r.x + r.w).ceil() - x).max(0.) as i32,
+        ((r.y + r.h).ceil() - y).max(0.) as i32,
+    ]
+}
+
+/// A bar's children-only input (B0321): each island moved by the scene offset, then the hosted
+/// lips, which keep taking the bar's pointer. Empty rects are dropped.
+fn island_input_rects(
+    islands: &[bead_render::Rect],
+    offset: (f32, f32),
+    lips: &[[i32; 4]],
+) -> Vec<[i32; 4]> {
+    islands
+        .iter()
+        .map(|r| outer_rect(r.translated(offset.0, offset.1)))
+        .chain(lips.iter().copied())
+        .filter(|r| r[2] > 0 && r[3] > 0)
+        .collect()
 }
 
 /// Shadows reserve buffer space, but must not intercept adjacent controls.
@@ -1886,6 +1913,11 @@ impl App {
         let mut layer_motion_pose = (0., 0.);
         let mut layer_motion_sampled_progress = None;
         let mut layer_motion_pending_input = None;
+        let bar_lips = if self.options.bar && !self.surfaces[index].companion {
+            self.bar_lip_input(&self.surfaces[index].output)
+        } else {
+            Vec::new()
+        };
         let mut pending_promotion_staged = false;
         let result = (|| -> Result<(), Box<dyn Error>> {
             #[cfg(feature = "native-gl")]
@@ -2421,6 +2453,22 @@ impl App {
                 } else if s.keyboard_visible != Some(interactivity) {
                     s.layer.set_keyboard_interactivity(interactivity);
                     s.keyboard_visible = Some(interactivity);
+                }
+            }
+            // `input = "children"` (B0321): the bar takes input on its islands and hosted lips only.
+            if !panel
+                && !s.companion
+                && self.options.interactive
+                && let Some(islands) = &scene.input_islands
+            {
+                let rects = island_input_rects(islands, scene.offset, &bar_lips);
+                if s.input_islands.as_ref() != Some(&rects) {
+                    let region = Region::new(&self.compositor)?;
+                    for [x, y, w, h] in &rects {
+                        region.add(*x, *y, *w, *h);
+                    }
+                    wl_surface.set_input_region(Some(region.wl_region()));
+                    s.input_islands = Some(rects);
                 }
             }
             let input_content_offset = scene
@@ -4079,6 +4127,7 @@ mod repair_tests {
                             fill(Rect::new(4., 4., 16., 10.), [frame * 13, 93, 25, 170]),
                             fill(Rect::new(74., 54., 16., 10.), [29, frame * 11, 217, 255]),
                         ],
+                        input_islands: None,
                     };
                     for (_, pending, _) in &mut buffers {
                         track_repair(
@@ -4247,6 +4296,7 @@ mod input_tests {
             ],
             offset: (32., 32.),
             bounds: Rect::new(-32., -32., 264., 164.),
+            input_islands: None,
         }
     }
 
@@ -4384,5 +4434,34 @@ mod input_tests {
         assert!(!should_stage_command_promotion(true, true, false, true));
         assert!(should_stage_command_promotion(true, true, true, true));
         assert!(!should_stage_command_promotion(false, true, true, true));
+    }
+}
+#[cfg(test)]
+mod island_input_tests {
+    use super::*;
+    use bead_render::Rect;
+    #[test]
+    fn islands_follow_the_scene_offset_round_outward_and_keep_hosted_lips() {
+        let islands = [Rect::new(10.25, 0., 80., 40.5), Rect::new(0., 0., 0., 40.)];
+        assert_eq!(
+            island_input_rects(&islands, (32., 32.), &[[5, 6, 7, 8]]),
+            [[42, 32, 81, 41], [5, 6, 7, 8]],
+            "an empty island drops out; fractional edges round outward"
+        );
+        assert!(island_input_rects(&[], (32., 32.), &[]).is_empty());
+    }
+    #[test]
+    fn same_layout_gives_the_same_list_and_a_moved_pill_a_new_one() {
+        let at = |x| island_input_rects(&[Rect::new(x, 0., 80., 40.)], (32., 32.), &[]);
+        assert_eq!(at(10.), at(10.), "unchanged layout: nothing to apply");
+        assert_ne!(at(10.), at(11.));
+    }
+    #[test]
+    fn fractional_scale_offsets_stay_in_logical_pixels() {
+        // 1.25x: the offset is a logical 32.8; a 20.8-wide island ends at 53.6 and rounds out.
+        assert_eq!(
+            island_input_rects(&[Rect::new(0., 0., 20.8, 10.)], (32.8, 0.), &[]),
+            [[32, 0, 22, 10]]
+        );
     }
 }

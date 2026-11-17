@@ -254,6 +254,7 @@ mod tests {
             }],
             offset: (0., 0.),
             bounds: Rect::new(0., 0., 100., 100.),
+            input_islands: None,
         };
         assert!(patch_text_layer(&mut scene, "tile.value", "54%"));
         assert!(matches!(

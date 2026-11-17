@@ -1379,6 +1379,7 @@ mod tests {
             }],
             offset: (0., 0.),
             bounds: bead_render::Rect::new(0., 0., 16., 16.),
+            input_islands: None,
         }
     }
     fn prepared_frame(scene: &mut Scene) -> Arc<bead_render::tree::Frame> {

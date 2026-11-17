@@ -86,6 +86,11 @@ Before, each pearl draw (about 1/s) dropped the resident's tab and redrew the fr
 - A layer surface takes input only where something visible is interactive. The bar and a panel-mode primary set their hit area as they draw; a primary that is neither (a panels-only app's `(0, 32)` strip under the bar's exclusive zone) starts with an empty input region (`starts_input_less`), so it never swallows clicks meant for windows.
 - Reserved frame strips are always input-less; a lip's input is its own rect (see the top-tab rule above).
 
+## Children-only input (B0321)
+
+- A root with `input = "children"` (Luau prop on the view root) makes the bar's input region the union of its direct children's rects that, or whose descendants, are interactive or paint something; empty spacers and the gaps between children take no input, so clicks there reach the windows below.
+- `Scene::input_islands` carries the layout-space rects; the bar adds the scene offset and the bar-hosted lips (still reachable, as in B0298), and calls `set_input_region` only when the rect list differs from the last one applied. Reserved frame strips stay input-less. Without the prop nothing is set.
+
 ## Lip state while attached (B0300)
 - The tab glows only for the pointer on the tab surface (`LipTab::hovered`, set in `edge_pointer`'s tab branch from Enter/Motion/Leave by `tab_hovered`). The free strip keeps setting `edge.hovered`, which holds a hover-opened panel open (the pointer overshooting onto the screen edge must not close it) but never reaches the art of the tab. Before, `draw_tab` read `edge.hovered == key`, so the strip at the far screen edge made the attached tab glow, until the pointer left it.
 - Detaching the tab clears `edge.hovered` for its key: the destroyed surface sends no Leave, and a stale hover would block the exit grace.

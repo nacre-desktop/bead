@@ -2571,6 +2571,7 @@ impl App {
                 callbacks: Default::default(),
                 input_visible: None,
                 input_rect: None,
+                input_islands: None,
                 keyboard_visible: None,
                 redraw: false,
                 fractional,

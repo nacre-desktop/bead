@@ -1019,6 +1019,8 @@ struct Surface {
     callbacks: policy::Callbacks,
     input_visible: Option<bool>,
     input_rect: Option<[i32; 4]>,
+    /// The rects last applied as a bar's `input = "children"` region (B0321).
+    input_islands: Option<Vec<[i32; 4]>>,
     keyboard_visible: Option<KeyboardInteractivity>,
     redraw: bool,
     fractional: Option<WpFractionalScaleV1>,

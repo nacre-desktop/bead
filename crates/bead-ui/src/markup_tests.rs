@@ -4764,3 +4764,51 @@ fn package_view_require_of_a_missing_module_errors_like_a_directory_view() {
         };
     assert_eq!(from_package, from_dir);
 }
+/// B0321: `input = "children"` lists the root's interactive or painted direct children, whole.
+#[test]
+fn children_input_lists_islands_not_leaves() {
+    let f = fixture();
+    let scene = |root_props: &str| {
+        fs::write(
+            f.0.join("ui/main.luau"),
+            format!(
+                r#"local ui=require("bead.ui")
+return ui.Row{{id="bar",width=400,height=40,gap=20,{root_props}
+ ui.Row{{id="pill",padding=8,gap=12,fill="surface",
+  ui.Button{{id="a",width=30,height=24,text="A",on_activate=ui.action("select","a")}},
+  ui.Button{{id="b",width=30,height=24,text="B",on_activate=ui.action("select","b")}}}},
+ ui.Box{{id="spacer",width=30,height=40}},
+ ui.Text{{id="label",width=40,height=40,text="hi"}},
+ ui.Row{{id="bare",padding=4,ui.Button{{id="c",width=30,height=24,text="C",on_activate=ui.action("select","c")}}}},
+ ui.Box{{id="empty",width=10,height=40,ui.Box{{id="deeper",width=5,height=5}}}}}}"#
+            ),
+        )
+        .unwrap();
+        session(&f).current
+    };
+    assert!(scene("").input_islands.is_none(), "no prop, no region");
+    let scene = scene(r#"input="children","#);
+    let bounds = |id: &str| scene.layers.iter().find(|l| l.id.ends_with(id)).unwrap().bounds;
+    // The pill is one rect with its padding, the nested buttons do not split it, a painted
+    // label and a transparent row around a button count, and empty boxes do not.
+    assert_eq!(
+        scene.input_islands.unwrap(),
+        [bounds("pill"), bounds("label"), bounds("bare")]
+    );
+}
+#[test]
+fn children_input_is_root_only_and_needs_children() {
+    let f = fixture();
+    for (props, child) in [(r#"input="all","#, ""), ("", r#"input="children""#)] {
+        fs::write(
+            f.0.join("ui/main.luau"),
+            format!(
+                "local ui=require('bead.ui')\nreturn ui.Box{{id='r',width=50,height=20,{props} ui.Box{{id='k',{child}}}}}"
+            ),
+        )
+        .unwrap();
+        let mut s = f.session();
+        s.entry = "ui/main.luau".into();
+        assert!(s.reload().is_err(), "{props}{child}");
+    }
+}

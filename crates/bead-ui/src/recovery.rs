@@ -33,5 +33,6 @@ pub fn safe_bar(palette: &Palette) -> Scene {
                 shadow: None,
             },
         ],
+        input_islands: None,
     }
 }

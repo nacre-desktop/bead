@@ -882,6 +882,7 @@ mod tests {
             ],
             offset: (0., 0.),
             bounds,
+            input_islands: None,
         };
         let spec = DragVisual {
             id: "thumb".into(),
@@ -1104,6 +1105,7 @@ mod tests {
             }],
             offset: (32., 32.),
             bounds: Rect::new(-32., -32., 500., 900.),
+            input_islands: None,
         };
         let draw = painted_layer(&scene, "thumb").expect("painted layer");
         let spec = DragVisual {

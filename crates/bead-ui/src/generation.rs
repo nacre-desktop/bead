@@ -1137,6 +1137,7 @@ impl Generation {
             clips: Default::default(),
             layers: Vec::new(),
             prepared: Default::default(),
+            input_islands: None,
         })
     }
     pub fn hit(&self, stores: &Stores, x: f32, y: f32) -> Option<&Node> {

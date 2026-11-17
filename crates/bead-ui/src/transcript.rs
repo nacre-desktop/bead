@@ -134,6 +134,7 @@ impl Meter {
             primitives: vec![],
             offset: (0., 0.),
             bounds: Rect::new(0., 0., 1., 1.),
+            input_islands: None,
         };
         scene.font_files = match (&self.fixed, &self.picker) {
             (Some(fonts), _) => fonts.clone(),

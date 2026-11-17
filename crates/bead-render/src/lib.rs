@@ -501,6 +501,9 @@ pub struct Scene {
     pub primitives: Vec<Primitive>,
     pub offset: (f32, f32),
     pub bounds: Rect,
+    /// `input = "children"` (B0321): layout-space rects of the root's interactive or painted direct
+    /// children. A bar surface takes input there only; None leaves its input untouched.
+    pub input_islands: Option<Vec<Rect>>,
 }
 impl Scene {
     /// A fully opaque scene of this size with nothing in it.
@@ -519,6 +522,7 @@ impl Scene {
             primitives: vec![],
             offset: (0., 0.),
             bounds: Rect::new(0., 0., width, height),
+            input_islands: None,
         }
     }
     /// Pose a panel motion. Revealing panels grow from their dock while opening
@@ -3611,6 +3615,7 @@ mod tests {
             ],
             offset: (0., 0.),
             bounds: Rect::new(0., 0., 364., 264.),
+            input_islands: None,
         };
         let original = scene.primitives.clone();
         let mut animations = bead_core::animation::Animations::default();
@@ -3694,6 +3699,7 @@ mod tests {
                 align: None,
                 shadow: None,
             }],
+            input_islands: None,
         }
     }
     #[test]
@@ -3905,6 +3911,7 @@ mod tests {
                     border: None,
                 },
             ],
+            input_islands: None,
         };
         let mut renderer = CpuRenderer::default();
         let mut bytes = vec![0; 64];
@@ -4016,6 +4023,7 @@ mod tests {
                             alpha: 1.,
                         },
                     ],
+                    input_islands: None,
                 };
                 // Include fractional scaling and abrupt movement / erasure.
                 if frame % 7 == 0 {
@@ -4492,6 +4500,7 @@ mod symbol_ink_tests {
                     }],
                     offset: (0., 0.),
                     bounds: Rect::new(0., 0., 80., 80.),
+                    input_islands: None,
                 };
                 let width = (80. * scale) as u32;
                 let mut pixels = vec![0; width as usize * width as usize * 4];

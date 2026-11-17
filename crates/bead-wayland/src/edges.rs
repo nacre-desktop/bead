@@ -775,6 +775,24 @@ impl App {
     fn bar_hosts(&self, lip: &Lip) -> bool {
         self.options.bar && !self.bar_off && lip.edge == self.options.edge
     }
+    /// Bar-surface rects of the lips the bar hosts. They take the bar's pointer, so a children-only
+    /// bar (B0321) keeps them reachable.
+    pub(super) fn bar_lip_input(&self, output: &wl_output::WlOutput) -> Vec<[i32; 4]> {
+        let Some((w, h)) = self.output.info(output).and_then(|i| i.logical_size) else {
+            return Vec::new();
+        };
+        let origin = bar_origin(self.options.edge, (w, h), self.bar_thickness() as f32);
+        self.edge
+            .chrome
+            .lips
+            .iter()
+            .filter(|l| self.bar_hosts(l))
+            .map(|lip| {
+                let r = lip.rect((w as f32, h as f32));
+                rendering::outer_rect(Rect::new(r.x - origin.0, r.y - origin.1, r.w, r.h))
+            })
+            .collect()
+    }
     pub(super) fn bar_thickness(&self) -> u32 {
         self.options.bar_size.unwrap_or_else(|| {
             self.options
