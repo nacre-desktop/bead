@@ -231,7 +231,7 @@ impl PendingPalette {
     }
 }
 
-fn frame_matches_palette(
+pub(crate) fn frame_matches_palette(
     frame: &WallpaperFrame,
     palette: &std::collections::BTreeMap<String, [u8; 4]>,
 ) -> bool {
@@ -1225,12 +1225,18 @@ impl App {
             return;
         }
         if self.options.primary_factory.is_some() {
+            #[cfg(feature = "native-gl")]
+            let tween_wait = staged && self.staged_waits_for_tween(&palette_key, &output_name);
+            #[cfg(not(feature = "native-gl"))]
+            let tween_wait = false;
             if self.wallpaper_palette.as_ref() == Some(&palette_key)
                 || self.output_sessions.is_empty()
+                || tween_wait
             {
                 if staged {
                     self.wallpaper_pending_frames.push(frame);
-                    if self.wallpaper_palette_outputs.is_none() {
+                    // The fade throws a staged buffer away, so a tween waits without one.
+                    if self.wallpaper_palette_outputs.is_none() && !tween_wait {
                         self.stage_pending_wallpaper(&output_name, stage_revision, &stage_token);
                     }
                     return;

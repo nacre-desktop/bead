@@ -80,6 +80,26 @@ pub(crate) fn palette_schedule(duration: f64, curve: Curve) -> Vec<(f64, f32)> {
         })
         .collect()
 }
+#[derive(Debug, PartialEq)]
+pub(crate) enum TweenRoute {
+    Fence,
+    /// Another output of the change that is already tweening.
+    Joins,
+    Starts,
+}
+pub(crate) fn tween_route(
+    possible: bool,
+    foreign_pending: bool,
+    tween_to_key: bool,
+    differs: bool,
+) -> TweenRoute {
+    match (possible && !foreign_pending, tween_to_key, differs) {
+        (false, ..) => TweenRoute::Fence,
+        (true, true, _) => TweenRoute::Joins,
+        (true, false, true) => TweenRoute::Starts,
+        (true, false, false) => TweenRoute::Fence,
+    }
+}
 pub(crate) struct PaletteTween {
     from: PaletteMap,
     pub(crate) to: PaletteMap,
@@ -93,6 +113,7 @@ pub(crate) fn transition_marker(
     output: &str,
     kind: WallpaperFadeKind,
     slide: &bead_core::animation::Slide,
+    palette_steps: u32,
 ) -> String {
     let render_top: Vec<String> = slide
         .render_top
@@ -102,7 +123,7 @@ pub(crate) fn transition_marker(
         .collect();
     format!(
         "WALLPAPER_TRANSITION output={output} kind={} frames={} duration_ms={:.1} \
-         first_frame_ms={:.1} max_gap_ms={:.1} gap_at={} render_top={}",
+         first_frame_ms={:.1} max_gap_ms={:.1} gap_at={} render_top={} palette_steps={palette_steps}",
         match kind {
             WallpaperFadeKind::Fade => "fade",
             WallpaperFadeKind::Grow { .. } => "grow",
@@ -140,6 +161,8 @@ pub(super) struct FadeRun {
     commit: Option<(u64, std::sync::Arc<dyn std::any::Any + Send + Sync>)>,
     palette: bead_render::Palette,
     generation: u64,
+    /// Palette tween steps applied while this fade ran, for the marker.
+    palette_steps: u32,
 }
 
 #[cfg(feature = "native-gl")]
@@ -153,30 +176,39 @@ impl App {
         .is_some()
     }
 
-    /// Whether this change swaps the palette with a fade instead of the palette fence.
-    pub(super) fn install_with_palette_tween(&mut self, key: &PaletteMap, output: &str) -> bool {
-        if !self.fade_wanted()
-            || self.wallpaper_palette_outputs.is_some()
-            || !self.wallpaper_pending_frames.is_empty()
-            || self.wallpaper_surfaces.iter().all(|s| s.name != output)
-        {
-            return false;
-        }
-        if self
-            .palette_tween
-            .as_ref()
-            .is_some_and(|tween| tween.to == *key)
-        {
-            return true; // another output of the same change
-        }
+    fn palette_tween_route(&self, key: &PaletteMap, output: &str) -> TweenRoute {
+        let tween_to_key = self.palette_tween.as_ref().is_some_and(|t| t.to == *key);
         let differs = self
             .wallpaper_palette
             .as_ref()
             .is_some_and(|current| current != key);
-        if differs {
+        // Frames of an older change would be pushed back onto the fence by this one.
+        let foreign_pending = self
+            .wallpaper_pending_frames
+            .iter()
+            .any(|frame| !crate::runtime::frame_matches_palette(frame, key));
+        tween_route(
+            self.fade_wanted()
+                && self.wallpaper_palette_outputs.is_none()
+                && self.wallpaper_surfaces.iter().any(|s| s.name == output),
+            foreign_pending,
+            tween_to_key,
+            differs,
+        )
+    }
+
+    /// Whether a staged frame waits for its confirmation to tween instead of building the fence.
+    pub(super) fn staged_waits_for_tween(&self, key: &PaletteMap, output: &str) -> bool {
+        self.palette_tween_route(key, output) != TweenRoute::Fence
+    }
+
+    /// Whether this change swaps the palette with a fade instead of the palette fence.
+    pub(super) fn install_with_palette_tween(&mut self, key: &PaletteMap, output: &str) -> bool {
+        let route = self.palette_tween_route(key, output);
+        if route == TweenRoute::Starts {
             self.pending_palette_target = Some(key.clone());
         }
-        differs
+        route != TweenRoute::Fence
     }
 
     /// After install: a fade starts the tween itself; a cut applies the new palette at once.
@@ -233,6 +265,13 @@ impl App {
             self.palette_tween = None;
         }
         self.palette_tween_until = self.started.elapsed().as_secs_f64() + 1.;
+        for run in self
+            .wallpaper_surfaces
+            .iter_mut()
+            .filter_map(|s| s.fade.as_mut())
+        {
+            run.palette_steps += 1;
+        }
         self.apply_palette_step(palette);
         wait
     }
@@ -435,6 +474,7 @@ impl App {
             commit: Some((frame.revision, frame.commit_token.clone())),
             palette: frame.palette.clone(),
             generation: 1,
+            palette_steps: 0,
         })
     }
 
@@ -495,7 +535,10 @@ impl App {
         );
         let surface = &mut self.wallpaper_surfaces[index];
         if let (Some(slide), Some(run)) = (slide, &surface.fade) {
-            println!("{}", transition_marker(&name, run.spec.kind, &slide));
+            println!(
+                "{}",
+                transition_marker(&name, run.spec.kind, &slide, run.palette_steps)
+            );
         }
         if let Some((revision, token)) = surface.fade.as_mut().and_then(|run| run.commit.take()) {
             self.wallpaper_committed(&name, revision, &token, true);
@@ -752,13 +795,36 @@ mod tests {
             "DP-1",
             WallpaperFadeKind::Grow { origin: (0.5, 0.5) },
             &slide,
+            10,
         );
         assert!(line.starts_with("WALLPAPER_TRANSITION output=DP-1 kind=grow frames="));
         assert!(
             line.contains("first_frame_ms=52.0") && line.contains("max_gap_ms=2"),
             "{line}"
         );
+        assert!(line.ends_with(" palette_steps=10"), "{line}");
         assert!(line.contains(" render_top="));
+    }
+    #[test]
+    fn a_staged_or_live_change_tweens_only_when_a_fade_runs_and_nothing_older_waits() {
+        use TweenRoute::*;
+        assert_eq!(tween_route(true, false, false, true), Starts);
+        assert_eq!(
+            tween_route(true, false, true, true),
+            Joins,
+            "another output of the same change"
+        );
+        assert_eq!(tween_route(true, false, false, false), Fence, "no change");
+        assert_eq!(
+            tween_route(false, false, true, true),
+            Fence,
+            "reduced motion, GL failed, no fade or a palette group waits"
+        );
+        assert_eq!(
+            tween_route(true, true, true, true),
+            Fence,
+            "an older change still waits"
+        );
     }
     #[test]
     fn reduced_motion_and_failed_gl_are_a_cut() {
