@@ -233,6 +233,15 @@ pub(crate) struct SetupTimes {
     /// The held first pose: draw and present.
     pub(crate) first: f64,
 }
+/// B0317: how the fade started. `warm`: from a resident run; `start_ms`: main-thread wall of the
+/// start (or latest retarget), including the hand-over to the upload thread; `upload_wait_ms`:
+/// from the frame being accepted to its texture being ready (0: uploaded on the main thread).
+#[derive(Clone, Copy, Default, Debug, PartialEq)]
+pub(crate) struct StartInfo {
+    pub(crate) warm: bool,
+    pub(crate) start_ms: f64,
+    pub(crate) upload_wait_ms: f64,
+}
 fn ms_since(began: std::time::Instant) -> f64 {
     began.elapsed().as_secs_f64() * 1e3
 }
@@ -249,6 +258,7 @@ pub(crate) fn transition_marker(
     retarget_ms: f64,
     clock_s: f64,
     (gap_peer_ms, gap_step_ms, step_max_ms): (f64, f64, f64),
+    start: &StartInfo,
 ) -> String {
     let render_top: Vec<String> = slide
         .render_top
@@ -262,7 +272,7 @@ pub(crate) fn transition_marker(
          gap_other_ms={gap_other_ms:.1} setup=read:{:.1},egl:{:.1},surface:{:.1},canvas:{:.1},\
          upload:{:.1},first:{:.1} retarget_ms={retarget_ms:.1} \
          clock_s={clock_s:.3} gap_peer_ms={gap_peer_ms:.1} gap_step_ms={gap_step_ms:.1} \
-         step_max_ms={step_max_ms:.1}",
+         step_max_ms={step_max_ms:.1} warm={} start_ms={:.1} upload_wait_ms={:.1}",
         match kind {
             WallpaperFadeKind::Fade => "fade",
             WallpaperFadeKind::Grow { .. } => "grow",
@@ -279,6 +289,18 @@ pub(crate) fn transition_marker(
         setup.canvas,
         setup.upload,
         setup.first,
+        u8::from(start.warm),
+        start.start_ms,
+        start.upload_wait_ms,
+    )
+}
+
+/// One journal line per change of warm mode (and when a release that waited for a fade is done),
+/// so a resident run that never goes is visible. `bytes` estimates the textures held.
+pub(crate) fn warm_marker(on: bool, outputs: usize, textures: usize, bytes: u64) -> String {
+    format!(
+        "WALLPAPER_WARM state={} outputs={outputs} textures={textures} bytes={bytes}",
+        if on { "on" } else { "off" }
     )
 }
 
@@ -334,6 +356,8 @@ pub(crate) struct Warm {
     pub(crate) on: bool,
     /// The upload thread failed: uploads stay on the main thread until warm mode changes.
     failed: bool,
+    /// Warm mode ended and a fade still held its run: report when the last one is released.
+    releasing: bool,
     next_token: u64,
     #[cfg(feature = "native-gl")]
     upload: Option<UploadThread>,
@@ -351,6 +375,9 @@ pub(super) struct PendingUpload {
     tween: Option<PaletteMap>,
     /// Everything but the pixels, which travel with the job.
     frame: WallpaperFrame,
+    arrived: std::time::Instant,
+    /// Main-thread ms spent handing the frame over.
+    handover_ms: f64,
 }
 /// What a fade start carries besides the frame.
 #[cfg(feature = "native-gl")]
@@ -359,6 +386,9 @@ struct Launch {
     /// The adopted texture of the frame's pixels, when the upload thread made one.
     texture: Option<u32>,
     tween: Option<PaletteMap>,
+    /// Main-thread ms already spent on this start, and the wait for the upload thread.
+    carried_ms: f64,
+    upload_wait_ms: f64,
 }
 
 /// B0316: the first outputs of a change show their first pose (the old image) at most this long
@@ -421,6 +451,8 @@ pub(super) struct FadeRun {
     resting: bool,
     /// B0317: the newest frame waiting for the upload thread; the run keeps its image meanwhile.
     upload: Option<PendingUpload>,
+    /// B0317 marker fields of the current fade.
+    start: StartInfo,
 }
 
 #[cfg(feature = "native-gl")]
@@ -668,6 +700,8 @@ impl App {
                 began,
                 texture: None,
                 tween: self.pending_palette_target.take(),
+                carried_ms: 0.,
+                upload_wait_ms: 0.,
             };
             return self.launch_on_run(index, frame, spec, launch);
         }
@@ -697,6 +731,8 @@ impl App {
             began,
             texture: None,
             tween: self.pending_palette_target.take(),
+            carried_ms: 0.,
+            upload_wait_ms: 0.,
         };
         self.fade_launched(index, frame, spec, false, read_ms, launch);
         Ok(())
@@ -738,7 +774,9 @@ impl App {
             provider.discarded(&name, old.frame.revision);
         }
         let retargeted = !run.resting;
+        run.start.upload_wait_ms = launch.upload_wait_ms;
         if run.resting {
+            run.start.warm = true;
             // The run lives on across fades: this one's marker starts from zero.
             run.palette_steps = 0;
             run.retarget_ms = 0.;
@@ -752,8 +790,7 @@ impl App {
         run.target = std::mem::take(&mut frame.rgba);
         run.generation += 1;
         run.gaps = GapProbe::default();
-        (run.clock, run.held_since, run.done) =
-            (None, self.started.elapsed().as_secs_f64(), false);
+        (run.clock, run.held_since, run.done) = (None, self.started.elapsed().as_secs_f64(), false);
         run.spec = spec;
         run.palette = frame.palette.clone();
         let replaced = run
@@ -805,10 +842,13 @@ impl App {
             return;
         }
         let first_ms = ms_since(drawn_at);
+        if let Some(run) = self.wallpaper_surfaces[index].fade.as_mut() {
+            run.start.start_ms = launch.carried_ms + ms_since(launch.began);
+        }
         self.fade_committed(index, now, cpu_start);
         if let Some(run) = self.wallpaper_surfaces[index].fade.as_mut() {
             if retargeted {
-                run.retarget_ms = run.retarget_ms.max(ms_since(launch.began));
+                run.retarget_ms = run.retarget_ms.max(run.start.start_ms);
             } else {
                 run.setup.read = read_ms;
                 run.setup.first = first_ms;
@@ -842,6 +882,7 @@ impl App {
         mut frame: WallpaperFrame,
         spec: WallpaperFade,
     ) -> Option<WallpaperFrame> {
+        let arrived = std::time::Instant::now();
         let Some(thread) = &self.warm.upload else {
             return Some(frame);
         };
@@ -861,6 +902,8 @@ impl App {
             spec,
             tween: self.pending_palette_target.take(),
             frame,
+            arrived,
+            handover_ms: ms_since(arrived),
         };
         let run = self.wallpaper_surfaces[index].fade.as_mut()?;
         if let (Some(old), Some(provider)) = (run.upload.replace(pending), &self.options.wallpaper)
@@ -890,6 +933,8 @@ impl App {
             spec,
             tween,
             mut frame,
+            arrived,
+            handover_ms,
             ..
         }) = self.wallpaper_surfaces[index]
             .fade
@@ -919,6 +964,12 @@ impl App {
             began: std::time::Instant::now(),
             texture,
             tween,
+            carried_ms: handover_ms,
+            upload_wait_ms: if texture.is_some() {
+                arrived.elapsed().as_secs_f64() * 1e3
+            } else {
+                0.
+            },
         };
         if let Err(frame) = self.launch_on_run(index, frame, spec, launch) {
             // The run is gone (GL error): the new image replaces the old one as a cut.
@@ -945,13 +996,11 @@ impl App {
             Ok(uploader) => uploader,
             Err(error) => return self.warm_upload_failed(name, error),
         };
-        let source = self
-            .loop_handle
-            .insert_source(receiver, |event, _, app| {
-                if let calloop::channel::Event::Msg(done) = event {
-                    app.upload_done(done);
-                }
-            });
+        let source = self.loop_handle.insert_source(receiver, |event, _, app| {
+            if let calloop::channel::Event::Msg(done) = event {
+                app.upload_done(done);
+            }
+        });
         match source {
             Ok(source) => self.warm.upload = Some(UploadThread { uploader, source }),
             Err(error) => self.warm_upload_failed(name, error),
@@ -1064,6 +1113,7 @@ impl App {
             done: false,
             resting: false,
             upload: None,
+            start: StartInfo::default(),
         })
     }
 
@@ -1164,7 +1214,8 @@ impl App {
                     &run.setup,
                     run.retarget_ms,
                     run.clock.unwrap_or_default(),
-                    (run.gaps.peer_ms(), run.gaps.step_ms(), run.step_max_ms)
+                    (run.gaps.peer_ms(), run.gaps.step_ms(), run.step_max_ms),
+                    &run.start,
                 )
             );
         }
@@ -1274,14 +1325,12 @@ impl App {
         match self.wallpaper_surfaces[index].fade.as_ref() {
             None => {}
             Some(run) if run.resting => {}
-            Some(run) => match fade_end(
-                self.warm.on,
-                self.wallpaper_gl_failed,
-                run.upload.is_some(),
-            ) {
-                FadeEnd::Rest => self.rest_wallpaper_fade(index),
-                FadeEnd::Release => self.release_wallpaper_run(index),
-            },
+            Some(run) => {
+                match fade_end(self.warm.on, self.wallpaper_gl_failed, run.upload.is_some()) {
+                    FadeEnd::Rest => self.rest_wallpaper_fade(index),
+                    FadeEnd::Release => self.release_wallpaper_run(index),
+                }
+            }
         }
     }
 
@@ -1318,6 +1367,13 @@ impl App {
         self.schedule_wallpaper_release_poll(name.clone());
         // Warm mode began during this fade: the thread starts now, before the next change.
         self.start_upload_thread(&name);
+        // The replaced pixels (and the provider's frame buffers) go back to the system now, as
+        // for a cold finish: warm mode holds textures, not heap fragments.
+        #[cfg(all(target_os = "linux", target_env = "gnu"))]
+        // SAFETY: plain libc call.
+        unsafe {
+            libc::malloc_trim(0);
+        }
         println!(
             "WALLPAPER_FADE_FINISH output={name} ms={:.1}",
             ms_since(began)
@@ -1432,23 +1488,60 @@ impl App {
         }
         self.warm.on = on;
         self.warm.failed = false;
-        if !on {
-            self.release_wallpaper_gl();
+        if on {
+            self.report_warm(true);
+            return;
         }
+        self.warm.releasing = true;
+        self.release_wallpaper_gl();
+        // A fade that still runs keeps its run; the line with nothing left follows its end.
+        if self.warm.releasing {
+            self.report_warm(false);
+        }
+    }
+
+    fn report_warm(&self, on: bool) {
+        let runs = self
+            .wallpaper_surfaces
+            .iter()
+            .filter_map(|s| s.fade.as_ref());
+        let (mut outputs, mut textures, mut bytes) = (0, 0, 0u64);
+        for run in runs {
+            outputs += 1;
+            textures += run.fader.textures();
+            bytes +=
+                run.fader.textures() as u64 * u64::from(run.size.0) * u64::from(run.size.1) * 4;
+        }
+        println!("{}", warm_marker(on, outputs, textures, bytes));
     }
 
     /// Give the shared EGL transport back once no fade or other GL surface needs it. Runs at rest
     /// go first when warm mode is over; a running fade releases itself when it ends.
     pub(super) fn release_wallpaper_gl(&mut self) {
+        self.release_gl_objects();
+        if self.warm.releasing && !self.wallpaper_surfaces.iter().any(|s| s.fade.is_some()) {
+            self.warm.releasing = false;
+            println!("{}", warm_marker(false, 0, 0, 0));
+            let live = bead_render::gl::live_textures();
+            if live != 0 {
+                eprintln!("WALLPAPER_WARM_LEAK live_textures={live}");
+            }
+        }
+    }
+
+    fn release_gl_objects(&mut self) {
         for index in 0..self.wallpaper_surfaces.len() {
-            let idle = self.wallpaper_surfaces[index].fade.as_ref().is_some_and(|run| {
-                release_idle(
-                    self.warm.on,
-                    self.wallpaper_gl_failed,
-                    run.resting,
-                    run.upload.is_some(),
-                )
-            });
+            let idle = self.wallpaper_surfaces[index]
+                .fade
+                .as_ref()
+                .is_some_and(|run| {
+                    release_idle(
+                        self.warm.on,
+                        self.wallpaper_gl_failed,
+                        run.resting,
+                        run.upload.is_some(),
+                    )
+                });
             if idle {
                 self.release_run_objects(index);
             }
@@ -1520,7 +1613,11 @@ mod tests {
     fn a_fade_ends_at_rest_only_while_warm_and_gl_works() {
         assert_eq!(fade_end(true, false, false), FadeEnd::Rest);
         assert_eq!(fade_end(false, false, false), FadeEnd::Release);
-        assert_eq!(fade_end(true, true, false), FadeEnd::Release, "GL failure releases");
+        assert_eq!(
+            fade_end(true, true, false),
+            FadeEnd::Release,
+            "GL failure releases"
+        );
         assert_eq!(
             fade_end(false, false, true),
             FadeEnd::Rest,
@@ -1530,23 +1627,58 @@ mod tests {
     #[test]
     fn warm_off_releases_runs_at_rest_at_once_and_running_ones_when_they_end() {
         // (warm, gl_failed, resting, upload waiting)
-        assert!(!release_idle(true, false, true, false), "warm keeps the run");
-        assert!(release_idle(false, false, true, false), "off and idle: right away");
-        assert!(!release_idle(false, false, false, false), "off but fading: at its end");
-        assert!(!release_idle(false, false, true, true), "off, upload waiting: after its fade");
-        assert!(release_idle(true, true, true, false), "GL failure releases a run at rest");
+        assert!(
+            !release_idle(true, false, true, false),
+            "warm keeps the run"
+        );
+        assert!(
+            release_idle(false, false, true, false),
+            "off and idle: right away"
+        );
+        assert!(
+            !release_idle(false, false, false, false),
+            "off but fading: at its end"
+        );
+        assert!(
+            !release_idle(false, false, true, true),
+            "off, upload waiting: after its fade"
+        );
+        assert!(
+            release_idle(true, true, true, false),
+            "GL failure releases a run at rest"
+        );
         // The running fade then ends through `fade_end`, with warm off: released.
         assert_eq!(fade_end(false, false, false), FadeEnd::Release);
+    }
+    #[test]
+    fn warm_mode_reports_its_state_in_one_line() {
+        assert_eq!(
+            warm_marker(true, 2, 2, 40_608_000),
+            "WALLPAPER_WARM state=on outputs=2 textures=2 bytes=40608000"
+        );
+        assert_eq!(
+            warm_marker(false, 0, 0, 0),
+            "WALLPAPER_WARM state=off outputs=0 textures=0 bytes=0"
+        );
     }
     #[test]
     fn the_upload_thread_serves_warm_mode_only_and_the_newest_frame_wins() {
         // (warm, gl_failed, worker_failed)
         assert!(worker_wanted(true, false, false));
-        assert!(!worker_wanted(false, false, false), "not warm: today's main-thread upload");
+        assert!(
+            !worker_wanted(false, false, false),
+            "not warm: today's main-thread upload"
+        );
         assert!(!worker_wanted(true, true, false));
-        assert!(!worker_wanted(true, false, true), "a failed thread falls back");
+        assert!(
+            !worker_wanted(true, false, true),
+            "a failed thread falls back"
+        );
         assert!(upload_current(Some(7), 7));
-        assert!(!upload_current(Some(8), 7), "superseded: the texture is deleted");
+        assert!(
+            !upload_current(Some(8), 7),
+            "superseded: the texture is deleted"
+        );
         assert!(!upload_current(None, 7), "the run is gone or fell back");
     }
     fn palette(colour: [u8; 4]) -> PaletteMap {
@@ -1617,6 +1749,11 @@ mod tests {
             4.2,
             12.3456,
             (3.04, 0.25, 1.26),
+            &StartInfo {
+                warm: true,
+                start_ms: 1.84,
+                upload_wait_ms: 17.26,
+            },
         );
         assert!(line.starts_with("WALLPAPER_TRANSITION output=DP-1 kind=grow frames="));
         assert!(
@@ -1627,7 +1764,8 @@ mod tests {
             line.ends_with(
                 " palette_steps=10 gap_other_ms=3.5 setup=read:3.1,egl:0.0,surface:2.0,\
                  canvas:20.4,upload:9.8,first:12.0 retarget_ms=4.2 clock_s=12.346 \
-                 gap_peer_ms=3.0 gap_step_ms=0.2 step_max_ms=1.3"
+                 gap_peer_ms=3.0 gap_step_ms=0.2 step_max_ms=1.3 warm=1 start_ms=1.8 \
+                 upload_wait_ms=17.3"
             ),
             "{line}"
         );

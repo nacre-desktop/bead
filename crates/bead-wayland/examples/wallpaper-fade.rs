@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: MIT
 //! Private-compositor proof host for the wallpaper crossfade: a generated wallpaper that changes
 //! every `BEAD_FADE_INTERVAL_MS` (default 3000) with alternating palettes; `BEAD_FADE_KIND=grow`
-//! grows the new image from the output centre.
+//! grows the new image from the output centre. `BEAD_FADE_WARM=<n>` runs warm mode (B0317) for n
+//! changes between `BEAD_FADE_COLD` (default 3) cold ones, `BEAD_FADE_CYCLES` (default 1) times,
+//! and prints `PROOF_MEM` (RSS and anonymous memory) before every change and after each switch.
 use bead_wayland::{
-    Options, WallpaperFade, WallpaperFadeKind, WallpaperFrame, WallpaperProvider, run,
+    Options, ShellControl, WallpaperFade, WallpaperFadeKind, WallpaperFrame, WallpaperProvider, run,
 };
 use std::collections::BTreeMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 #[derive(Default)]
 struct Provider {
@@ -73,6 +76,43 @@ impl WallpaperProvider for Provider {
     fn discarded(&self, _: &str, _: u64) {}
     fn output_removed(&self, _: &str) {}
 }
+/// The warm switch of the proof host, flipped by the schedule below.
+#[derive(Default)]
+struct Warm {
+    on: AtomicBool,
+    changed: Mutex<Option<Box<dyn Fn() + Send + Sync>>>,
+}
+impl ShellControl for Warm {
+    fn watch(&self, changed: Box<dyn Fn() + Send + Sync>) {
+        *self.changed.lock().unwrap() = Some(changed);
+    }
+    fn wallpaper_warm(&self) -> bool {
+        self.on.load(Ordering::SeqCst)
+    }
+}
+fn env_number(name: &str, default: usize) -> usize {
+    std::env::var(name)
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(default)
+}
+/// RSS and anonymous memory of this process.
+fn proof_mem(label: &str) {
+    let rollup = std::fs::read_to_string("/proc/self/smaps_rollup").unwrap_or_default();
+    let kb = |key: &str| {
+        rollup
+            .lines()
+            .find_map(|line| line.strip_prefix(key))
+            .and_then(|rest| rest.split_whitespace().next())
+            .unwrap_or("0")
+            .to_owned()
+    };
+    println!(
+        "PROOF_MEM {label} rss_kb={} anon_kb={}",
+        kb("Rss:"),
+        kb("Anonymous:")
+    );
+}
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let provider = Arc::new(Provider::default());
     let every = std::env::var("BEAD_FADE_INTERVAL_MS")
@@ -80,15 +120,34 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .and_then(|v| v.parse().ok())
         .unwrap_or(3000);
     let ticker = provider.clone();
+    let warm_changes = env_number("BEAD_FADE_WARM", 0);
+    let warm = Arc::new(Warm::default());
+    let switch = warm.clone();
+    let (cold, cycles) = (
+        env_number("BEAD_FADE_COLD", 3),
+        env_number("BEAD_FADE_CYCLES", 1),
+    );
     std::thread::spawn(move || {
-        loop {
+        // Per cycle: `cold` changes with warm off, then `warm_changes` with it on; one more cold run.
+        let period = (cold + warm_changes).max(1);
+        for change in 0..=usize::MAX {
             std::thread::sleep(std::time::Duration::from_millis(every));
+            let want = warm_changes > 0 && change < cycles * period && change % period >= cold;
+            proof_mem(&format!("change={change} warm={}", u8::from(want)));
+            if want != switch.on.swap(want, Ordering::SeqCst)
+                && let Some(changed) = &*switch.changed.lock().unwrap()
+            {
+                changed();
+                std::thread::sleep(std::time::Duration::from_millis(600));
+                proof_mem(&format!("change={change} switched={}", u8::from(want)));
+            }
             if let Some(changed) = &*ticker.changed.lock().unwrap() {
                 changed();
             }
         }
     });
     let mut options = Options::default();
+    options.control = (warm_changes > 0).then_some(warm as Arc<dyn ShellControl>);
     options.wallpaper = Some(provider);
     options.wallpaper_fade = Some(WallpaperFade {
         kind: if std::env::var("BEAD_FADE_KIND").as_deref() == Ok("grow") {

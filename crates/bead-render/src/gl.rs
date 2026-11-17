@@ -721,17 +721,8 @@ struct UploadGl {
     gen_textures: unsafe extern "system" fn(i32, *mut u32),
     bind: unsafe extern "system" fn(u32, u32),
     parameter: unsafe extern "system" fn(u32, u32, i32),
-    image: unsafe extern "system" fn(
-        u32,
-        i32,
-        i32,
-        i32,
-        i32,
-        i32,
-        u32,
-        u32,
-        *const std::ffi::c_void,
-    ),
+    image:
+        unsafe extern "system" fn(u32, i32, i32, i32, i32, i32, u32, u32, *const std::ffi::c_void),
     finish: unsafe extern "system" fn(),
     error: unsafe extern "system" fn() -> u32,
     delete: GlDelete,
@@ -823,13 +814,14 @@ impl Uploader {
                     match (job, &setup) {
                         (Job::Upload { token, size, rgba }, setup) => {
                             let began = std::time::Instant::now();
-                            let texture = match setup {
-                                Ok((_, gl)) => std::panic::catch_unwind(
-                                    std::panic::AssertUnwindSafe(|| gl.upload(size, &rgba)),
-                                )
-                                .unwrap_or_else(|_| Err("upload panicked".into())),
-                                Err(error) => Err(error.to_string()),
-                            };
+                            let texture =
+                                match setup {
+                                    Ok((_, gl)) => std::panic::catch_unwind(
+                                        std::panic::AssertUnwindSafe(|| gl.upload(size, &rgba)),
+                                    )
+                                    .unwrap_or_else(|_| Err("upload panicked".into())),
+                                    Err(error) => Err(error.to_string()),
+                                };
                             if let Ok(texture) = texture {
                                 outstanding.insert(texture);
                             }
