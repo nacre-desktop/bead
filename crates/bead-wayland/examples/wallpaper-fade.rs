@@ -5,16 +5,24 @@
 use bead_wayland::{
     Options, WallpaperFade, WallpaperFadeKind, WallpaperFrame, WallpaperProvider, run,
 };
-use std::sync::{
-    Arc, Mutex,
-    atomic::{AtomicU64, Ordering},
-};
+use std::collections::BTreeMap;
+use std::sync::{Arc, Mutex};
 #[derive(Default)]
 struct Provider {
-    revision: AtomicU64,
+    /// The committed revision per output: every output of a change fades.
+    revision: Mutex<BTreeMap<String, u64>>,
     changed: Mutex<Option<Box<dyn Fn() + Send + Sync>>>,
 }
 impl Provider {
+    fn next(&self, output: &str) -> u64 {
+        self.revision
+            .lock()
+            .unwrap()
+            .get(output)
+            .copied()
+            .unwrap_or(0)
+            + 1
+    }
     fn image(&self, width: u32, height: u32, revision: u64) -> Vec<u8> {
         let tint = [[255u8, 60, 40], [30, 90, 255]][(revision % 2) as usize];
         let mut rgba = Vec::with_capacity((width * height * 4) as usize);
@@ -38,7 +46,7 @@ impl WallpaperProvider for Provider {
         Ok(())
     }
     fn prepare(&self, output: String, width: u32, height: u32) -> Result<WallpaperFrame, String> {
-        let revision = self.revision.load(Ordering::SeqCst) + 1;
+        let revision = self.next(&output);
         let rgba = self.image(width, height, revision);
         let colour = [[200u8, 80, 60, 255], [60, 100, 220, 255]][(revision % 2) as usize];
         Ok(WallpaperFrame {
@@ -53,10 +61,13 @@ impl WallpaperProvider for Provider {
         })
     }
     fn is_current(&self, frame: &WallpaperFrame) -> bool {
-        frame.revision == self.revision.load(Ordering::SeqCst) + 1
+        frame.revision == self.next(&frame.output)
     }
     fn committed(&self, output: &str, revision: u64, _: &Arc<dyn std::any::Any + Send + Sync>) {
-        self.revision.store(revision, Ordering::SeqCst);
+        self.revision
+            .lock()
+            .unwrap()
+            .insert(output.to_owned(), revision);
         println!("PROOF_COMMITTED output={output} revision={revision}");
     }
     fn discarded(&self, _: &str, _: u64) {}
