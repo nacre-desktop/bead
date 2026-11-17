@@ -782,6 +782,16 @@ impl OutputHandler for App {
             .filter(|s| s.output == output)
             .map(|s| s.name.clone())
             .collect();
+        #[cfg(feature = "native-gl")]
+        for run in self
+            .wallpaper_surfaces
+            .iter_mut()
+            .filter(|s| s.output == output)
+            .filter_map(|s| s.fade.take())
+            .collect::<Vec<_>>()
+        {
+            self.drop_fade_run(run);
+        }
         self.wallpaper_surfaces.retain(|s| s.output != output);
         #[cfg(feature = "native-gl")]
         self.release_wallpaper_gl();

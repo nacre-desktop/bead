@@ -239,6 +239,13 @@ pub trait ShellControl: Send + Sync {
     fn bar_thickness(&self) -> Option<u32> {
         None
     }
+    /// Keep the wallpaper fade's GL resident while this is true (B0317): about two output-sized
+    /// textures per output (one at rest), the transport and a canvas, so a change starts without
+    /// setup. Everything is released when it turns false (after a running fade), when an output
+    /// goes and on a GL failure. Re-read after every change callback; the host owns the guard.
+    fn wallpaper_warm(&self) -> bool {
+        false
+    }
     /// Reserved screen edges and lips (B0047). Re-read after every change callback.
     fn edge_chrome(&self) -> EdgeChrome {
         EdgeChrome::default()

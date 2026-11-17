@@ -64,6 +64,8 @@ impl App {
             return;
         };
         self.set_bar_off(!control.bar_enabled());
+        #[cfg(feature = "native-gl")]
+        self.set_wallpaper_warm(control.wallpaper_warm());
         if self.panel_target
             && self
                 .panel_name

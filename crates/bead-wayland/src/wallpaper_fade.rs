@@ -4,7 +4,9 @@
 //! The wallpaper surface stays on the SHM path. For the length of one change it borrows the
 //! shared EGL transport: both images are uploaded first, a held first pose is committed (that
 //! commit starts the clock, B0170), every frame callback draws the next blend, and the final
-//! SHM buffer is attached before the EGL surface and transport are released again.
+//! SHM buffer is attached before the EGL surface and transport are released again. While the host
+//! asks for warm mode (B0317) a fade ends at rest instead: the run (transport, EGL surface, canvas
+//! and the shown texture) stays, and the next change starts from it.
 // Without a GL renderer there is no fade: its state and helpers stay unused.
 #![cfg_attr(not(feature = "native-gl"), allow(dead_code, unused_imports))]
 use super::*;
@@ -293,6 +295,32 @@ pub(crate) fn transport_releasable(fading: bool, other_gl: bool, cpu_host: bool)
     !fading && !other_gl && cpu_host
 }
 
+/// B0317: what a fade that drew its last frame does with its GL run.
+#[derive(Debug, PartialEq)]
+pub(crate) enum FadeEnd {
+    /// Warm: the run stays at rest, showing the final frame, without the SHM attach.
+    Rest,
+    /// Not warm (or GL failed): attach the final SHM buffer and release the run.
+    Release,
+}
+pub(crate) fn fade_end(warm: bool, gl_failed: bool) -> FadeEnd {
+    if warm && !gl_failed {
+        FadeEnd::Rest
+    } else {
+        FadeEnd::Release
+    }
+}
+/// A run at rest is released when warm mode ends or GL failed; a fade (or an upload for it) that
+/// is still going releases through `fade_end` when it ends.
+pub(crate) fn release_idle(warm: bool, gl_failed: bool, resting: bool) -> bool {
+    (!warm || gl_failed) && resting
+}
+/// Warm mode's host switch.
+#[derive(Default)]
+pub(crate) struct Warm {
+    pub(crate) on: bool,
+}
+
 /// B0316: the first outputs of a change show their first pose (the old image) at most this long
 /// while another output of it is still being set up: one output's setup is 55-65 ms on the
 /// owner's laptop, so two setups plus slack fit and a slow or missing output holds nothing for
@@ -348,6 +376,9 @@ pub(super) struct FadeRun {
     clock: Option<f64>,
     held_since: f64,
     done: bool,
+    /// B0317: the fade ended warm: only the shown texture is left, nothing is drawn until the
+    /// next change starts from here.
+    resting: bool,
 }
 
 #[cfg(feature = "native-gl")]
@@ -468,7 +499,10 @@ impl App {
     /// last fade completes the tween.
     pub(super) fn palette_step_after_frame(&mut self) {
         let now = self.started.elapsed().as_secs_f64();
-        let fading = self.wallpaper_surfaces.iter().any(|s| s.fade.is_some());
+        let fading = self
+            .wallpaper_surfaces
+            .iter()
+            .any(|s| s.fade.as_ref().is_some_and(|run| !run.resting));
         let Some(tween) = self.palette_tween.as_mut() else {
             return;
         };
@@ -487,6 +521,7 @@ impl App {
             .wallpaper_surfaces
             .iter_mut()
             .filter_map(|s| s.fade.as_mut())
+            .filter(|run| !run.resting)
         {
             run.palette_steps += 1;
         }
@@ -499,6 +534,7 @@ impl App {
             .wallpaper_surfaces
             .iter_mut()
             .filter_map(|s| s.fade.as_mut())
+            .filter(|run| !run.resting)
         {
             run.step_max_ms = run.step_max_ms.max(ms);
         }
@@ -574,27 +610,47 @@ impl App {
             self.wallpaper_gl_failed,
         ) else {
             // A running fade ends at its old target; the cut then replaces it.
-            self.finish_wallpaper_fade(index);
+            self.release_wallpaper_run(index);
             return Err(frame);
         };
         let size = (frame.width, frame.height);
         let began = std::time::Instant::now();
-        let retargeted = self.wallpaper_surfaces[index].fade.is_some();
+        // A run at rest (warm) starts a new fade; a running one is retargeted.
+        let resting = self.wallpaper_surfaces[index]
+            .fade
+            .as_ref()
+            .is_some_and(|run| run.resting);
+        let retargeted = self.wallpaper_surfaces[index].fade.is_some() && !resting;
         let mut read_ms = 0.;
-        if retargeted {
+        if self.wallpaper_surfaces[index].fade.is_some() {
             let surface = &mut self.wallpaper_surfaces[index];
             let run = surface.fade.as_mut().unwrap();
+            let upload = std::time::Instant::now();
             let result = (|| -> Result<(), Box<dyn Error>> {
                 let transport = self.gl.as_ref().ok_or("GL transport missing")?;
                 transport.activate(&run.gl, size.0, size.1)?;
-                run.fader.retarget(&frame.rgba)
+                run.fader
+                    .retarget(bead_render::gl::Pixels::Rgba(&frame.rgba))
             })();
             if result.is_err() {
-                self.wallpaper_surfaces[index].fade = None;
+                if let Some(run) = self.wallpaper_surfaces[index].fade.take() {
+                    self.drop_fade_run(run);
+                }
                 self.release_wallpaper_gl();
                 return Err(frame);
             }
             let run = self.wallpaper_surfaces[index].fade.as_mut().unwrap();
+            if resting {
+                // The run lives on across fades: this one's marker starts from zero.
+                run.palette_steps = 0;
+                run.retarget_ms = 0.;
+                run.step_max_ms = 0.;
+                run.setup = SetupTimes {
+                    upload: ms_since(upload),
+                    ..SetupTimes::default()
+                };
+                run.resting = false;
+            }
             run.target = std::mem::take(&mut frame.rgba);
             run.generation += 1;
             run.gaps = GapProbe::default();
@@ -752,6 +808,7 @@ impl App {
             clock: None,
             held_since: self.started.elapsed().as_secs_f64(),
             done: false,
+            resting: false,
         })
     }
 
@@ -867,7 +924,7 @@ impl App {
             &self.wallpaper_jobs,
             self.wallpaper_surfaces
                 .iter()
-                .map(|s| (s.name.as_str(), s.attached.is_some())),
+                .map(|s| (s.name.as_str(), s.attached.is_some() || s.fade.is_some())),
         )
     }
 
@@ -954,25 +1011,87 @@ impl App {
         );
     }
 
-    /// Attach the final SHM buffer, then give the EGL surface and transport back.
+    /// A fade drew its last frame (or its watchdog fired): warm, it rests; otherwise it is released.
     pub(super) fn finish_wallpaper_fade(&mut self, index: usize) {
-        let Some(run) = self.wallpaper_surfaces[index].fade.take() else {
+        match self.wallpaper_surfaces[index].fade.as_ref() {
+            None => {}
+            Some(run) if run.resting => {}
+            Some(_) => match fade_end(self.warm.on, self.wallpaper_gl_failed) {
+                FadeEnd::Rest => self.rest_wallpaper_fade(index),
+                FadeEnd::Release => self.release_wallpaper_run(index),
+            },
+        }
+    }
+
+    /// B0317: the fade ended warm. The EGL surface keeps showing the final frame (no SHM attach):
+    /// `from` is deleted, the transport, surface, canvas and the shown texture stay.
+    /// `committed` fired with the fade's first frame, as for a cold one; only a fade that never
+    /// reached it reports here, so the provider hears each revision exactly once.
+    fn rest_wallpaper_fade(&mut self, index: usize) {
+        let began = std::time::Instant::now();
+        let name = self.wallpaper_surfaces[index].name.clone();
+        let Some(run) = self.wallpaper_surfaces[index].fade.as_mut() else {
             return;
         };
-        let began = std::time::Instant::now();
+        let activated = (|| -> Result<(), Box<dyn Error>> {
+            let transport = self.gl.as_ref().ok_or("GL transport missing")?;
+            transport.activate(&run.gl, run.size.0, run.size.1)
+        })();
+        if let Err(error) = activated {
+            self.wallpaper_gl_failed = true;
+            eprintln!("WALLPAPER_FADE_FALLBACK output={name} reason={error}");
+            self.release_wallpaper_run(index);
+            return;
+        }
+        run.fader.settle();
+        (run.resting, run.done) = (true, true);
+        let commit = run.commit.take();
+        self.fade_animations.retain(|id| id != name);
+        if let Some((revision, token)) = commit {
+            if let Some(provider) = &self.options.wallpaper {
+                provider.uploaded(&name, revision, &token);
+            }
+            self.wallpaper_committed(&name, revision, &token, false);
+        }
+        self.schedule_wallpaper_release_poll(name.clone());
+        println!(
+            "WALLPAPER_FADE_FINISH output={name} ms={:.1}",
+            ms_since(began)
+        );
+    }
+
+    /// Free a run's GL objects in the order EGL needs: textures and canvas with the context
+    /// current, the context unbound, then the window surface.
+    pub(super) fn drop_fade_run(&self, run: FadeRun) {
         let FadeRun {
-            fader,
-            gl,
-            target,
-            mut commit,
-            palette,
-            ..
+            fader, gl, size, ..
         } = run;
+        if let Some(transport) = &self.gl {
+            let _ = transport.activate(&gl, size.0, size.1);
+        }
         drop(fader);
         if let Some(transport) = &self.gl {
             let _ = transport.unbind();
         }
         drop(gl);
+    }
+
+    /// Attach the final SHM buffer, then give the run's GL objects (and, last, the transport) back.
+    pub(super) fn release_wallpaper_run(&mut self, index: usize) {
+        if self.release_run_objects(index) {
+            self.release_wallpaper_gl();
+        }
+    }
+
+    fn release_run_objects(&mut self, index: usize) -> bool {
+        let Some(mut run) = self.wallpaper_surfaces[index].fade.take() else {
+            return false;
+        };
+        let began = std::time::Instant::now();
+        let target = std::mem::take(&mut run.target);
+        let mut commit = run.commit.take();
+        let palette = run.palette.clone();
+        self.drop_fade_run(run);
         let output_handle = self.wallpaper_surfaces[index].output.clone();
         let logical = self
             .output
@@ -1021,22 +1140,41 @@ impl App {
         if let Some((revision, token)) = commit.take() {
             self.wallpaper_committed(&name, revision, &token, false);
         }
-        self.schedule_wallpaper_release_poll(name);
-        self.release_wallpaper_gl();
+        self.schedule_wallpaper_release_poll(name.clone());
         #[cfg(all(target_os = "linux", target_env = "gnu"))]
         // SAFETY: plain libc call; returns the freed fade copies to the system.
         unsafe {
             libc::malloc_trim(0);
         }
         println!(
-            "WALLPAPER_FADE_FINISH output={} ms={:.1}",
-            self.wallpaper_surfaces[index].name,
+            "WALLPAPER_FADE_FINISH output={name} ms={:.1}",
             ms_since(began)
         );
+        true
     }
 
-    /// Give the shared EGL transport back once no fade or other GL surface needs it.
+    /// The host's warm switch changed (or was read for the first time).
+    pub(super) fn set_wallpaper_warm(&mut self, on: bool) {
+        if self.warm.on == on {
+            return;
+        }
+        self.warm.on = on;
+        if !on {
+            self.release_wallpaper_gl();
+        }
+    }
+
+    /// Give the shared EGL transport back once no fade or other GL surface needs it. Runs at rest
+    /// go first when warm mode is over; a running fade releases itself when it ends.
     pub(super) fn release_wallpaper_gl(&mut self) {
+        for index in 0..self.wallpaper_surfaces.len() {
+            let idle = self.wallpaper_surfaces[index].fade.as_ref().is_some_and(|run| {
+                release_idle(self.warm.on, self.wallpaper_gl_failed, run.resting)
+            });
+            if idle {
+                self.release_run_objects(index);
+            }
+        }
         let fading = self.wallpaper_surfaces.iter().any(|s| s.fade.is_some());
         if !transport_releasable(
             fading,
@@ -1096,6 +1234,22 @@ mod tests {
         assert_eq!(blend(&a, 0.45), 0., "no jump on retarget");
         a.committed("DP-1", 0.45, 0.45);
         assert_eq!(a.value("DP-1", 0.45 + 0.7), Some((1., false)));
+    }
+    #[test]
+    fn a_fade_ends_at_rest_only_while_warm_and_gl_works() {
+        assert_eq!(fade_end(true, false), FadeEnd::Rest);
+        assert_eq!(fade_end(false, false), FadeEnd::Release);
+        assert_eq!(fade_end(true, true), FadeEnd::Release, "GL failure releases");
+    }
+    #[test]
+    fn warm_off_releases_runs_at_rest_at_once_and_running_ones_when_they_end() {
+        // (warm, gl_failed, resting)
+        assert!(!release_idle(true, false, true), "warm keeps the run");
+        assert!(release_idle(false, false, true), "off and idle: right away");
+        assert!(!release_idle(false, false, false), "off but fading: at its end");
+        assert!(release_idle(true, true, true), "GL failure releases a run at rest");
+        // The running fade then ends through `fade_end`, with warm off: released.
+        assert_eq!(fade_end(false, false), FadeEnd::Release);
     }
     fn palette(colour: [u8; 4]) -> PaletteMap {
         [("accent".to_owned(), colour)].into()

@@ -432,13 +432,45 @@ pub enum WallpaperBlend {
         origin: (f32, f32),
     },
 }
-/// Two output-sized textures blended on the GPU, only for the length of a wallpaper change.
+/// Textures alive in all faders and the upload thread (femtovg images and raw uploads): zero
+/// once every wallpaper GL object was released (B0317).
+static LIVE_TEXTURES: std::sync::atomic::AtomicIsize = std::sync::atomic::AtomicIsize::new(0);
+pub fn live_textures() -> isize {
+    LIVE_TEXTURES.load(std::sync::atomic::Ordering::Relaxed)
+}
+fn count(delta: isize) {
+    LIVE_TEXTURES.fetch_add(delta, std::sync::atomic::Ordering::Relaxed);
+}
+type GlDelete = unsafe extern "system" fn(i32, *const u32);
+fn gl_proc<T: Copy>(display: &Display, name: &std::ffi::CStr) -> Result<T> {
+    let address = display.get_proc_address(name);
+    if address.is_null() {
+        return Err(format!("missing {}", name.to_string_lossy()).into());
+    }
+    assert_eq!(std::mem::size_of::<T>(), std::mem::size_of_val(&address));
+    // SAFETY: T is the extern "system" signature GL defines for `name`; sizes checked above.
+    Ok(unsafe { std::mem::transmute_copy(&address) })
+}
+/// Pixels for a fader image: uploaded here, or a texture the upload thread already made (the
+/// fader owns it from then on and deletes it).
+pub enum Pixels<'a> {
+    Rgba(&'a [u8]),
+    Texture(u32),
+}
+/// A fader image: a femtovg texture, plus the raw GL texture femtovg does not delete itself.
+struct Img {
+    id: femtovg::ImageId,
+    native: Option<u32>,
+}
+/// Two output-sized textures blended on the GPU. A fade can end at rest (`settle`): only the
+/// shown image stays, and the next `retarget` brings the new one.
 pub struct WallpaperFader {
     canvas: femtovg::Canvas<femtovg::renderer::OpenGl>,
-    from: femtovg::ImageId,
-    to: femtovg::ImageId,
+    from: Option<Img>,
+    to: Option<Img>,
     size: (u32, u32),
     last: (f32, WallpaperBlend),
+    delete: GlDelete,
     /// Wall milliseconds of `new`: the renderer and canvas, then the two uploads (B0316).
     pub setup_ms: (f64, f64),
 }
@@ -453,31 +485,85 @@ impl WallpaperFader {
                 display.get_proc_address(name).cast()
             })
         }?;
-        let mut canvas = femtovg::Canvas::new(renderer)?;
+        let canvas = femtovg::Canvas::new(renderer)?;
         let canvas_ms = began.elapsed().as_secs_f64() * 1e3;
-        let from = Self::upload(&mut canvas, size, from)?;
-        let to = Self::upload(&mut canvas, size, to)?;
-        Ok(Self {
+        let mut fader = Self {
             canvas,
-            from,
-            to,
+            from: None,
+            to: None,
             size,
             last: (0., WallpaperBlend::Fade),
-            setup_ms: (canvas_ms, began.elapsed().as_secs_f64() * 1e3 - canvas_ms),
-        })
+            delete: gl_proc(display, c"glDeleteTextures")?,
+            setup_ms: (0., 0.),
+        };
+        // An error drops the fader, whose Drop frees whichever image exists by then.
+        fader.from = Some(fader.make(Pixels::Rgba(from))?);
+        fader.to = Some(fader.make(Pixels::Rgba(to))?);
+        fader.setup_ms = (canvas_ms, began.elapsed().as_secs_f64() * 1e3 - canvas_ms);
+        Ok(fader)
     }
-    fn upload(
-        canvas: &mut femtovg::Canvas<femtovg::renderer::OpenGl>,
-        (w, h): (u32, u32),
-        rgba: &[u8],
-    ) -> Result<femtovg::ImageId> {
-        if rgba.len() != w as usize * h as usize * 4 {
-            return Err("wallpaper texture size mismatch".into());
+    fn make(&mut self, pixels: Pixels) -> Result<Img> {
+        let (w, h) = self.size;
+        match pixels {
+            Pixels::Rgba(rgba) => {
+                if rgba.len() != w as usize * h as usize * 4 {
+                    return Err("wallpaper texture size mismatch".into());
+                }
+                let id = self.canvas.create_image(
+                    femtovg::ImageSource::Rgba(imgref::Img::new(
+                        rgba.as_rgba(),
+                        w as usize,
+                        h as usize,
+                    )),
+                    femtovg::ImageFlags::empty(),
+                )?;
+                count(1);
+                Ok(Img { id, native: None })
+            }
+            Pixels::Texture(texture) => {
+                let info = femtovg::ImageInfo::new(
+                    femtovg::ImageFlags::empty(),
+                    w as usize,
+                    h as usize,
+                    femtovg::PixelFormat::Rgba8,
+                );
+                let handle = std::num::NonZeroU32::new(texture).ok_or("texture 0")?;
+                // SAFETY: femtovg's native texture is glow's `NativeTexture(NonZeroU32)`; glow is
+                // not a direct dependency here, and transmute checks that the sizes agree.
+                let native = unsafe {
+                    std::mem::transmute::<
+                        std::num::NonZeroU32,
+                        <femtovg::renderer::OpenGl as femtovg::Renderer>::NativeTexture,
+                    >(handle)
+                };
+                match self.canvas.create_image_from_native_texture(native, info) {
+                    Ok(id) => Ok(Img {
+                        id,
+                        native: Some(texture),
+                    }),
+                    Err(error) => {
+                        self.delete_texture(texture);
+                        Err(error.into())
+                    }
+                }
+            }
         }
-        Ok(canvas.create_image(
-            femtovg::ImageSource::Rgba(imgref::Img::new(rgba.as_rgba(), w as usize, h as usize)),
-            femtovg::ImageFlags::empty(),
-        )?)
+    }
+    fn delete_texture(&self, texture: u32) {
+        // SAFETY: the context is current (callers activate it) and in the texture's share group.
+        unsafe { (self.delete)(1, &texture) };
+        count(-1);
+    }
+    fn free(&mut self, image: Img) {
+        self.canvas.delete_image(image.id);
+        match image.native {
+            Some(texture) => self.delete_texture(texture),
+            None => count(-1),
+        }
+    }
+    /// Textures held: two while fading, one at rest.
+    pub fn textures(&self) -> usize {
+        usize::from(self.from.is_some()) + usize::from(self.to.is_some())
     }
     fn paint(&mut self, blend: f32, mode: WallpaperBlend) {
         let (w, h) = (self.size.0 as f32, self.size.1 as f32);
@@ -489,9 +575,15 @@ impl WallpaperFader {
             paint.set_anti_alias(false);
             paint
         };
-        canvas.fill_path(&full, &layer(self.from, 1.));
+        let Some(from) = self.from.as_ref().map(|image| image.id) else {
+            return;
+        };
+        canvas.fill_path(&full, &layer(from, 1.));
+        let Some(to) = self.to.as_ref().map(|image| image.id) else {
+            return;
+        };
         match mode {
-            WallpaperBlend::Fade => canvas.fill_path(&full, &layer(self.to, blend)),
+            WallpaperBlend::Fade => canvas.fill_path(&full, &layer(to, blend)),
             WallpaperBlend::Grow { origin } => {
                 let (cx, cy) = (origin.0 * w, origin.1 * h);
                 let far = [(0., 0.), (w, 0.), (0., h), (w, h)]
@@ -506,7 +598,7 @@ impl WallpaperFader {
                     if r > 0. {
                         let mut disc = femtovg::Path::new();
                         disc.circle(cx, cy, r);
-                        canvas.fill_path(&disc, &layer(self.to, alpha));
+                        canvas.fill_path(&disc, &layer(to, alpha));
                     }
                 }
             }
@@ -520,35 +612,62 @@ impl WallpaperFader {
         self.paint(blend, mode);
         self.canvas.flush();
     }
-    /// Make the last drawn blend the new `from` and upload `to`: a retarget with no jump.
-    pub fn retarget(&mut self, to: &[u8]) -> Result<()> {
-        let (w, h) = self.size;
-        let baked = self.canvas.create_image_empty(
-            w as usize,
-            h as usize,
-            femtovg::PixelFormat::Rgba8,
-            femtovg::ImageFlags::PREMULTIPLIED | femtovg::ImageFlags::FLIP_Y,
-        )?;
-        self.canvas
-            .set_render_target(femtovg::RenderTarget::Image(baked));
-        let (blend, mode) = self.last;
-        self.paint(blend, mode);
-        self.canvas.flush();
-        self.canvas.set_render_target(femtovg::RenderTarget::Screen);
-        let to = Self::upload(&mut self.canvas, self.size, to)?;
-        self.canvas.delete_image(self.from);
-        self.canvas.delete_image(self.to);
-        (self.from, self.to) = (baked, to);
+    /// Make the last drawn blend the new `from` (at rest the shown image already is) and take
+    /// `to`: a retarget with no jump.
+    pub fn retarget(&mut self, to: Pixels) -> Result<()> {
+        let to = self.make(to)?;
+        if self.to.is_some() {
+            let (w, h) = self.size;
+            let baked = self.canvas.create_image_empty(
+                w as usize,
+                h as usize,
+                femtovg::PixelFormat::Rgba8,
+                femtovg::ImageFlags::PREMULTIPLIED | femtovg::ImageFlags::FLIP_Y,
+            );
+            let baked = match baked {
+                Ok(baked) => baked,
+                Err(error) => {
+                    self.free(to);
+                    return Err(error.into());
+                }
+            };
+            count(1);
+            self.canvas
+                .set_render_target(femtovg::RenderTarget::Image(baked));
+            let (blend, mode) = self.last;
+            self.paint(blend, mode);
+            self.canvas.flush();
+            self.canvas.set_render_target(femtovg::RenderTarget::Screen);
+            for old in [self.from.take(), self.to.take()].into_iter().flatten() {
+                self.free(old);
+            }
+            self.from = Some(Img {
+                id: baked,
+                native: None,
+            });
+        }
+        self.to = Some(to);
         Ok(())
+    }
+    /// The fade ended: `from` goes, `to` is the shown image and the next fade's `from`.
+    pub fn settle(&mut self) {
+        let Some(shown) = self.to.take() else {
+            return;
+        };
+        if let Some(old) = self.from.replace(shown) {
+            self.free(old);
+        }
     }
 }
 impl Drop for WallpaperFader {
     fn drop(&mut self) {
-        self.canvas.delete_image(self.from);
-        self.canvas.delete_image(self.to);
+        for image in [self.from.take(), self.to.take()].into_iter().flatten() {
+            self.free(image);
+        }
         self.canvas.flush();
     }
 }
+
 struct Texture {
     key: u64,
     image: femtovg::ImageId,

@@ -123,6 +123,9 @@ pub(super) struct App {
     pub(super) fade_animations: bead_core::animation::Animations,
     #[cfg_attr(not(feature = "native-gl"), allow(dead_code))]
     pub(super) wallpaper_gl_failed: bool,
+    /// B0317: warm mode (the host asks to keep the wallpaper fade's GL resident).
+    #[cfg_attr(not(feature = "native-gl"), allow(dead_code))]
+    pub(super) warm: crate::wallpaper_fade::Warm,
     #[cfg_attr(not(feature = "native-gl"), allow(dead_code))]
     pub(super) palette_tween: Option<crate::wallpaper_fade::PaletteTween>,
     #[cfg_attr(not(feature = "native-gl"), allow(dead_code))]
@@ -490,6 +493,7 @@ pub fn run_runtime(
         wallpaper_unconfirmed: Vec::new(),
         fade_animations: Default::default(),
         wallpaper_gl_failed: false,
+        warm: Default::default(),
         palette_tween: None,
         palette_tween_generation: 0,
         pending_palette_target: None,
@@ -637,6 +641,8 @@ pub fn run_runtime(
         }));
         app.bar_off = !control.bar_enabled();
         app.decoration_variant = control.decoration_variant();
+        #[cfg(feature = "native-gl")]
+        app.set_wallpaper_warm(control.wallpaper_warm());
     }
     let _commands = if let Some(path) = &app.options.command_socket {
         let (sender, receiver) = calloop::channel::channel::<UiEvent>();
@@ -726,6 +732,8 @@ pub fn run_runtime(
         }
     });
     drop(watchdog);
+    #[cfg(feature = "native-gl")]
+    app.set_wallpaper_warm(false);
     if let Some(error) = conn.backend().last_error() {
         // Nothing can be released through a dead connection, and every request
         // would log the error again: skip teardown and let the service manager
@@ -978,7 +986,7 @@ impl App {
             surface.attached = None;
             surface.staged = None;
             #[cfg(feature = "native-gl")]
-            let faded = surface.fade.take().is_some();
+            let faded = surface.fade.take();
             if let Ok(pool) = SlotPool::new(4096, &self.shm) {
                 surface.pool = pool;
             } else {
@@ -988,7 +996,8 @@ impl App {
             surface.release_timer_pending = false;
             let _ = surface;
             #[cfg(feature = "native-gl")]
-            if faded {
+            if let Some(run) = faded {
+                self.drop_fade_run(run);
                 self.release_wallpaper_gl();
             }
             self.prepare_wallpaper(provider, name, width as u32, height as u32);
