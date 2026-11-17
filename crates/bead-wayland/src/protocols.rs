@@ -1753,7 +1753,9 @@ impl KeyboardHandler for App {
         if self.key_repeat.is_active() {
             return;
         }
+        self.repeating_key = true;
         self.deliver_key(c, qh, k, s, event);
+        self.repeating_key = false;
     }
     fn release_key(
         &mut self,
@@ -1973,7 +1975,9 @@ impl App {
             return None;
         };
         let (conn, qh) = (self.conn.clone(), self.qh.clone());
+        self.repeating_key = true;
         self.deliver_key(&conn, &qh, &keyboard, self.last_input_serial, event);
+        self.repeating_key = false;
         self.key_repeat.is_active().then_some(gap)
     }
 }

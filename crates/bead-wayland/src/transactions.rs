@@ -552,15 +552,20 @@ impl App {
                             .filter(|_| {
                                 packet.is_accepted() || packet.is_settled() || packet.is_failed()
                             })
-                            .map(|palette| {
-                                (palette.clone(), !packet.is_failed() && !packet.has_error())
+                            .map(|_| {
+                                (
+                                    packet.wallpaper_palettes().to_vec(),
+                                    !packet.is_failed() && !packet.has_error(),
+                                )
                             })
                     } else {
                         None
                     };
                     self.panel_ui(*event);
-                    if let Some((palette, accepted)) = palette_settled {
-                        self.wallpaper_panel_palette_settled(epoch, &palette, accepted);
+                    if let Some((palettes, accepted)) = palette_settled {
+                        for palette in &palettes {
+                            self.wallpaper_panel_palette_settled(epoch, palette, accepted);
+                        }
                     }
                     if self
                         .pearl
@@ -590,9 +595,9 @@ impl App {
             }));
         }
         let palette_packet = if let UiEvent::Worker(packet) = &event {
-            packet.wallpaper_palette().map(|palette| {
+            packet.wallpaper_palette().map(|_| {
                 (
-                    palette.clone(),
+                    packet.wallpaper_palettes().to_vec(),
                     packet.is_accepted(),
                     packet.is_settled(),
                     packet.is_failed(),
@@ -603,13 +608,15 @@ impl App {
             None
         };
         let accepted = self.ui_inner(event);
-        if let Some((palette, is_accepted, is_settled, is_failed, has_error)) = palette_packet
+        if let Some((palettes, is_accepted, is_settled, is_failed, has_error)) = palette_packet
             && (is_settled || is_failed || is_accepted)
         {
-            self.wallpaper_palette_settled(
-                &palette,
-                is_settled || (is_accepted && accepted && !has_error),
-            );
+            for palette in &palettes {
+                self.wallpaper_palette_settled(
+                    palette,
+                    is_settled || (is_accepted && accepted && !has_error),
+                );
+            }
         }
     }
     pub(super) fn ui_inner(&mut self, event: UiEvent) -> bool {
@@ -926,7 +933,15 @@ impl App {
                 snapshot.focused_window().map_or("", |w| w.title.as_str())
             );
         }
-        let staged = runtime.stage(event).and_then(|scene| {
+        // Only the key's own event is a droppable repeat, not what it triggers (B0332).
+        let staged = if self.repeating_key
+            && matches!(&event, UiEvent::Command { .. } | UiEvent::Key { .. })
+        {
+            runtime.stage_repeat(event)
+        } else {
+            runtime.stage(event)
+        };
+        let staged = staged.and_then(|scene| {
             if let Some(scene) = &scene {
                 let indices: Vec<_> = self
                     .surfaces

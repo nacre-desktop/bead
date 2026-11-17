@@ -727,6 +727,11 @@ pub trait SceneSource {
         wakeup: Box<dyn Fn(Result<(), String>) + Send>,
     ) -> Result<(), Box<dyn Error>>;
     fn stage(&mut self, event: UiEvent) -> Result<Option<Scene>, Box<dyn Error>>;
+    /// A held key's repeat (B0332). A worker drops it while an earlier repeat still waits in
+    /// its queue, so a slow view never replays repeats after the key is released.
+    fn stage_repeat(&mut self, event: UiEvent) -> Result<Option<Scene>, Box<dyn Error>> {
+        self.stage(event)
+    }
     fn validate(&self) -> Result<(), Box<dyn Error>>;
     fn state_summary(&self) -> String;
     /// Changes whenever `accessibility_tree`, `state_summary` or `saved_state` may return

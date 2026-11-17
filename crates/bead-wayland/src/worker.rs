@@ -108,7 +108,8 @@ pub struct Packet {
     mirror: Option<Arc<Mirror>>,
     error: Option<String>,
     reload: bool,
-    wallpaper_palette: Option<std::collections::BTreeMap<String, [u8; 4]>>,
+    /// The staged palette last, after the queued ones it replaced (B0332).
+    wallpaper_palette: Option<Vec<std::collections::BTreeMap<String, [u8; 4]>>>,
 }
 impl std::fmt::Debug for Packet {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -132,7 +133,12 @@ impl Packet {
         self.reload
     }
     pub fn wallpaper_palette(&self) -> Option<&std::collections::BTreeMap<String, [u8; 4]>> {
-        self.wallpaper_palette.as_ref()
+        self.wallpaper_palette.as_ref()?.last()
+    }
+    /// Every palette this packet settles, in send order: a replaced one settles with its
+    /// replacement, just before it, so a fence sees the same acks, later but never earlier.
+    pub(crate) fn wallpaper_palettes(&self) -> &[std::collections::BTreeMap<String, [u8; 4]>] {
+        self.wallpaper_palette.as_deref().unwrap_or_default()
     }
     pub fn is_accepted(&self) -> bool {
         matches!(self.phase, Phase::Accepted)
@@ -166,6 +172,8 @@ enum Job {
     Idle(bool),
     FrameInterval(std::time::Duration),
     Stage(UiEvent, Vec<f32>),
+    /// A held key's repeat (B0332): dropped while an earlier one is still queued.
+    Repeat(UiEvent, Vec<f32>),
     Resume(Vec<f32>),
     ContentScroll(UiEvent, Vec<f32>),
     Viewport(u32, u32),
@@ -183,6 +191,9 @@ struct BusyWindow {
     animation: u32,
     kinds: std::collections::HashMap<String, (u32, u64)>,
     keys: std::collections::HashMap<String, u32>,
+    /// B0332: queued palettes replaced by a newer one, and key repeats dropped.
+    palettes: u32,
+    repeats: u32,
 }
 impl BusyWindow {
     fn new(seconds: u64, min_pct: f64) -> Self {
@@ -195,6 +206,8 @@ impl BusyWindow {
             animation: 0,
             kinds: Default::default(),
             keys: Default::default(),
+            palettes: 0,
+            repeats: 0,
         }
     }
     /// Add one finished job that began at `at`; the line body when its window closed hot.
@@ -224,12 +237,21 @@ impl BusyWindow {
                 .max_by(|a, b| a.1.cmp(b.1).then_with(|| b.0.cmp(a.0)))
                 .map(|(key, n)| format!(" top_key={key}:{n}"))
                 .unwrap_or_default();
+            let absorbed = if self.palettes + self.repeats > 0 {
+                format!(
+                    " coalesced_palette={} dropped_repeats={}",
+                    self.palettes, self.repeats
+                )
+            } else {
+                String::new()
+            };
             (pct >= self.min_pct).then(|| {
                 format!(
-                    "window_s={} cpu_pct={pct:.0} jobs={} top={top} animation_packets={}{key}",
+                    "window_s={} cpu_pct={pct:.0} jobs={} top={top} animation_packets={}{key}{}",
                     wall.as_secs(),
                     self.jobs,
-                    self.animation
+                    self.animation,
+                    absorbed
                 )
             })
         });
@@ -283,7 +305,7 @@ fn model_keys(job: &Job) -> Vec<String> {
 }
 fn job_kind(job: &Job) -> String {
     match job {
-        Job::Stage(event, _) => format!("Stage/{}", event_kind(event)),
+        Job::Stage(event, _) | Job::Repeat(event, _) => format!("Stage/{}", event_kind(event)),
         Job::ContentScroll(event, _) => format!("ContentScroll/{}", event_kind(event)),
         Job::Resume(_) => "Resume".into(),
         Job::PrepareImages(_) => "PrepareImages".into(),
@@ -296,7 +318,7 @@ fn job_kind(job: &Job) -> String {
 fn enqueue(queue: &mut VecDeque<Job>, mut job: Job) -> bool {
     let counted = matches!(
         &job,
-        Job::Stage(..) | Job::ContentScroll(..) | Job::Resume(..)
+        Job::Stage(..) | Job::ContentScroll(..) | Job::Resume(..) | Job::Repeat(..)
     );
     let mut combined = false;
     // Combine content travel before doing layout, without combining wheel actions
@@ -365,7 +387,39 @@ fn complete_pending(pending: &std::sync::atomic::AtomicUsize) {
         |count| Some(count.saturating_sub(1)),
     );
 }
-fn enqueue_pending(queue: &mut VecDeque<Job>, job: Job, pending: &std::sync::atomic::AtomicUsize) {
+/// What the queue absorbed (B0332): the palettes a newer queued one replaced (they settle with
+/// it), and the `WORKER_BUSY` counts of those and of dropped key repeats.
+#[derive(Default)]
+struct Absorbed {
+    palettes: Vec<std::collections::BTreeMap<String, [u8; 4]>>,
+    replaced: u32,
+    repeats: u32,
+}
+fn enqueue_pending(
+    queue: &mut VecDeque<Job>,
+    job: Job,
+    pending: &std::sync::atomic::AtomicUsize,
+    absorbed: &mut Absorbed,
+) {
+    match &job {
+        // A held key waits behind at most one repeat; presses and other jobs are never dropped.
+        Job::Repeat(..) if queue.iter().any(|queued| matches!(queued, Job::Repeat(..))) => {
+            absorbed.repeats += 1;
+            complete_pending(pending);
+            return;
+        }
+        // A palette is a full overlay on the base palette: only the newest queued one is staged.
+        Job::Stage(UiEvent::WallpaperPalette(_), _) => queue.retain_mut(|queued| {
+            let Job::Stage(UiEvent::WallpaperPalette(palette), _) = queued else {
+                return true;
+            };
+            absorbed.palettes.push(std::mem::take(palette));
+            absorbed.replaced += 1;
+            complete_pending(pending);
+            false
+        }),
+        _ => {}
+    }
     if enqueue(queue, job) {
         complete_pending(pending);
     }
@@ -448,6 +502,16 @@ impl Source {
             .send(job)
             .map_err(|_| "script worker disconnected".into())
     }
+    /// Send a job whose packet (or its absorption into the queue) releases a pending credit.
+    fn send_counted(&self, job: Job) -> Result<Option<Scene>, Box<dyn Error>> {
+        self.pending
+            .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+        if let Err(error) = self.send(job) {
+            complete_pending(&self.pending);
+            return Err(error);
+        }
+        Ok(None)
+    }
 }
 impl Source {
     /// Stop the worker; the returned handle finishes once its last job and session drop are done.
@@ -523,6 +587,7 @@ fn bake(
 fn prepare_resource_job(
     job: Job,
     cache: &mut bead_render::tree::TreeCache,
+    policy: bead_render::tree::ImagePolicy,
 ) -> Result<Result<(), String>, Job> {
     match job {
         Job::PrepareImages(images) => {
@@ -539,12 +604,15 @@ fn prepare_resource_job(
         Job::PrepareCpu(request) => {
             let result = request.prepare();
             let frame = cache.frame.take();
-            *cache = Default::default();
+            // B0332: the worker keeps its own image policy. The CPU cache is Dense, so a GL
+            // panel's worker rastered every later image per rect and ignored bake_size.
+            *cache = bead_render::tree::TreeCache::default().with_image_policy(policy);
             let result = result.map(|prepared| {
                 if let Some(mut prepared) = prepared {
                     // ReleasePrepared names the source frame, which can still
                     // be a native recipe while its CPU pixels are already warm.
                     prepared.frame = frame;
+                    prepared.set_image_policy(policy);
                     *cache = prepared;
                 }
             });
@@ -580,13 +648,7 @@ impl SceneSource for Source {
             && !self.retired.load(std::sync::atomic::Ordering::Acquire)
     }
     fn resume(&mut self) -> Result<Option<Scene>, Box<dyn Error>> {
-        self.pending
-            .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
-        if let Err(error) = self.send(Job::Resume(self.scales.clone())) {
-            complete_pending(&self.pending);
-            return Err(error);
-        }
-        Ok(None)
+        self.send_counted(Job::Resume(self.scales.clone()))
     }
 
     fn wakeup_at(&self) -> Option<std::time::Instant> {
@@ -725,20 +787,24 @@ impl SceneSource for Source {
                 let mut mirrored = Arc::new(Mirror::default());
                 // Stretches (30 s at 25%) and the steady idle tick (10 min at 1%).
                 let mut busy = [BusyWindow::new(30, 25.), BusyWindow::new(600, 1.)];
+                let mut absorbed = Absorbed::default();
                 let mut running: Option<(std::time::Instant, u64, String, bool, Vec<String>)> = None;
                 'actor: loop {
                     if let Some((at, cpu, kind, animation, keys)) = running.take() {
                         let cpu = bead_core::profile::thread_cpu_ns().saturating_sub(cpu);
                         for window in &mut busy {
+                            window.palettes += absorbed.replaced;
+                            window.repeats += absorbed.repeats;
                             if let Some(line) = window.record(at, kind.as_str(), cpu, animation, keys.as_slice()) {
                                 eprintln!("WORKER_BUSY session={label} {line}");
                             }
                         }
+                        (absorbed.replaced, absorbed.repeats) = (0, 0);
                     }
                     for job in receiver.try_iter() {
                         match job {
                             Job::Stop => break 'actor,
-                            job => enqueue_pending(&mut queue, job, &pending),
+                            job => enqueue_pending(&mut queue, job, &pending, &mut absorbed),
                         }
                     }
                     let job = if let Some(job) = queue.pop_front() {
@@ -770,7 +836,7 @@ impl SceneSource for Source {
                         matches!(&job, Job::Stage(UiEvent::Model(v), _) if v.is_empty()),
                         model_keys(&job),
                     ));
-                    let job = match prepare_resource_job(job, &mut cache) {
+                    let job = match prepare_resource_job(job, &mut cache, image_policy) {
                         Ok(result) => {
                             wakeup(UiEvent::ResourcesPrepared(result));
                             continue;
@@ -780,10 +846,11 @@ impl SceneSource for Source {
                     let resume = matches!(&job, Job::Resume(_));
                     let job = match job {
                         Job::Resume(scales) => Job::Stage(UiEvent::Relayout, scales),
+                        Job::Repeat(event, scales) => Job::Stage(event, scales),
                         job => job,
                     };
                     match job {
-                        Job::Resume(_) => unreachable!("resume converted above"),
+                        Job::Resume(_) | Job::Repeat(..) => unreachable!("converted above"),
                         Job::PrepareImages(_) | Job::PrepareCpu(_) => {
                             unreachable!("resource jobs handled above")
                         }
@@ -851,7 +918,9 @@ impl SceneSource for Source {
                             let baked_after = cache.serial();
                             let wallpaper_palette =
                                 if let UiEvent::WallpaperPalette(values) = &event {
-                                    Some(values.clone())
+                                    let mut palettes = std::mem::take(&mut absorbed.palettes);
+                                    palettes.push(values.clone());
+                                    Some(palettes)
                                 } else {
                                     None
                                 };
@@ -937,9 +1006,12 @@ impl SceneSource for Source {
                                             for job in receiver.try_iter() {
                                                 match job {
                                                     Job::Stop => break 'actor,
-                                                    job => {
-                                                        enqueue_pending(&mut queue, job, &pending)
-                                                    }
+                                                    job => enqueue_pending(
+                                                        &mut queue,
+                                                        job,
+                                                        &pending,
+                                                        &mut absorbed,
+                                                    ),
                                                 }
                                             }
                                         }
@@ -995,7 +1067,7 @@ impl SceneSource for Source {
                                     Ok(Job::Stop) | Err(_) => break 'actor,
                                     Ok(job @ (Job::PrepareImages(_) | Job::PrepareCpu(_))) => {
                                         wakeup(UiEvent::ResourcesPrepared(
-                                            prepare_resource_job(job, &mut cache)
+                                            prepare_resource_job(job, &mut cache, image_policy)
                                                 .unwrap_or_else(|_| unreachable!()),
                                         ));
                                     }
@@ -1068,7 +1140,9 @@ impl SceneSource for Source {
                                         }
                                         break;
                                     }
-                                    Ok(job) => enqueue_pending(&mut queue, job, &pending),
+                                    Ok(job) => {
+                                        enqueue_pending(&mut queue, job, &pending, &mut absorbed)
+                                    }
                                 }
                             }
                         }
@@ -1198,17 +1272,14 @@ impl SceneSource for Source {
                 .any(|r| *x >= r.x && *y >= r.y && *x < r.x + r.w && *y < r.y + r.h),
             _ => false,
         };
-        self.pending
-            .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
-        if let Err(error) = self.send(if content_scroll {
+        self.send_counted(if content_scroll {
             Job::ContentScroll(event, self.scales.clone())
         } else {
             Job::Stage(event, self.scales.clone())
-        }) {
-            complete_pending(&self.pending);
-            return Err(error);
-        }
-        Ok(None)
+        })
+    }
+    fn stage_repeat(&mut self, event: UiEvent) -> Result<Option<Scene>, Box<dyn Error>> {
+        self.send_counted(Job::Repeat(event, self.scales.clone()))
     }
     fn validate(&self) -> Result<(), Box<dyn Error>> {
         Ok(())
@@ -1498,6 +1569,15 @@ mod tests {
                 tint: None,
             };
             fixture.asset_data.insert("proof.svg".into(), Arc::from(&br##"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><rect width="16" height="16" fill="#123456"/></svg>"##[..]));
+            // A raster item under every policy: the warm CPU pixels the close keeps and releases.
+            fixture.primitives.push(bead_render::Primitive::Shadow {
+                rect: bead_render::Rect::new(2., 2., 12., 12.),
+                radius: 4.,
+                blur: 2.,
+                spread: 0.,
+                dy: 0.,
+                alpha: 1.,
+            });
             let mut cache = bead_render::tree::TreeCache::default()
                 .with_image_policy(bead_render::tree::ImagePolicy::UploadOnly);
             bake(&mut cache, &mut fixture, &[1.]).unwrap();
@@ -1511,7 +1591,11 @@ mod tests {
                 .request
                 .clone();
             assert!(matches!(
-                prepare_resource_job(Job::PrepareCpu(request), &mut cache),
+                prepare_resource_job(
+                    Job::PrepareCpu(request),
+                    &mut cache,
+                    bead_render::tree::ImagePolicy::UploadOnly
+                ),
                 Ok(Ok(()))
             ));
             assert!(Arc::ptr_eq(cache.frame.as_ref().unwrap(), &source_frame));
@@ -1527,8 +1611,9 @@ mod tests {
                     cache.builds, builds,
                     "the first scene update reuses baked CPU pixels"
                 );
-                assert!(cache.frame.as_ref().unwrap().items[0].raster.is_some());
-                assert!(cache.frame.as_ref().unwrap().items[0].image.is_none());
+                // B0332: the adopted cache stays UploadOnly, so the image stays a payload.
+                assert!(cache.frame.as_ref().unwrap().items[0].raster.is_none());
+                assert!(cache.frame.as_ref().unwrap().items[0].image.is_some());
             }
             let current = Arc::downgrade(cache.frame.as_ref().unwrap());
             assert!(release_cached_prepared(&mut cache, &[current]));
@@ -1540,13 +1625,64 @@ mod tests {
             );
         }
     }
+    #[test]
+    fn cpu_preparation_keeps_one_upload_payload_for_a_bake_size_image() {
+        use bead_render::Renderer;
+        let sized = |w: f32| {
+            let mut fixture = scene();
+            fixture.primitives[0] = bead_render::Primitive::Image {
+                opacity: 1.,
+                rect: bead_render::Rect::new(0., 0., w, w),
+                path: "proof.svg".into(),
+                blur: 0.,
+                fit: bead_render::ImageFit::Fill,
+                clip_polygon: None,
+                bake_size: Some((16., 16.)),
+                radius: 0.,
+                tint: None,
+            };
+            fixture.asset_data.insert("proof.svg".into(), Arc::from(&br##"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><rect width="16" height="16" fill="#123456"/></svg>"##[..]));
+            fixture
+        };
+        let policy = bead_render::tree::ImagePolicy::UploadOnly;
+        let mut cache = bead_render::tree::TreeCache::default().with_image_policy(policy);
+        let mut first = sized(8.);
+        bake(&mut cache, &mut first, &[1.]).unwrap();
+        let error = bead_render::tree::TreeCpuRenderer::default()
+            .prepare_on_ui(&first, 1.)
+            .unwrap_err();
+        let request = error
+            .downcast_ref::<bead_render::tree::CpuResourcesPending>()
+            .unwrap()
+            .request
+            .clone();
+        assert!(matches!(
+            prepare_resource_job(Job::PrepareCpu(request), &mut cache, policy),
+            Ok(Ok(()))
+        ));
+        let builds = cache.builds;
+        let payloads: Vec<_> = (9..13)
+            .map(|w| {
+                cache.prepare(&sized(w as f32), 1.).unwrap();
+                let item = &cache.frame.as_ref().unwrap().items[0];
+                assert!(item.raster.is_none(), "a GL worker's image stays a payload");
+                item.image.clone().unwrap()
+            })
+            .collect();
+        assert!(
+            payloads.iter().all(|p| Arc::ptr_eq(p, &payloads[0])),
+            "one build"
+        );
+        assert_eq!((payloads[0].width, payloads[0].height), (16, 16));
+        assert_eq!(cache.builds, builds, "no image raster");
+    }
 
     #[test]
     fn prepared_release_is_deferred_to_the_ordered_actor_loop() {
         let mut cache = bead_render::tree::TreeCache::default();
         let job = Job::ReleasePrepared(Vec::new());
         assert!(matches!(
-            prepare_resource_job(job, &mut cache),
+            prepare_resource_job(job, &mut cache, Default::default()),
             Err(Job::ReleasePrepared(_))
         ));
     }
@@ -2707,5 +2843,130 @@ mod tests {
         assert!(!source.report(&packet(Phase::Accepted, None)));
         assert!(source.report(&packet(Phase::Ready, broken)));
         assert!(!source.report(&packet(Phase::Failed, Some("bake failed"))));
+    }
+
+    fn palette(red: u8) -> BTreeMap<String, [u8; 4]> {
+        BTreeMap::from([("surface".into(), [red, 0, 0, 255])])
+    }
+    fn command(name: &str) -> UiEvent {
+        UiEvent::Command {
+            command: name.into(),
+            shift: false,
+        }
+    }
+    #[test]
+    fn queue_keeps_the_newest_palette_and_one_repeat_and_releases_their_credit() {
+        let (pending, mut absorbed) = (AtomicUsize::new(0), Absorbed::default());
+        let mut queue = VecDeque::new();
+        for job in [
+            Job::Stage(UiEvent::WallpaperPalette(palette(1)), vec![1.]),
+            Job::Stage(command("tab"), vec![1.]),
+            Job::Stage(UiEvent::WallpaperPalette(palette(2)), vec![1.]),
+            Job::Repeat(command("left"), vec![1.]),
+            Job::Repeat(command("left"), vec![1.]),
+            Job::Stage(command("left"), vec![1.]),
+            Job::Repeat(command("left"), vec![1.]),
+        ] {
+            pending.fetch_add(1, Ordering::AcqRel);
+            enqueue_pending(&mut queue, job, &pending, &mut absorbed);
+        }
+        assert!(matches!(
+            queue.make_contiguous(),
+            [
+                Job::Stage(UiEvent::Command { .. }, _),
+                Job::Stage(UiEvent::WallpaperPalette(newest), _),
+                Job::Repeat(..),
+                Job::Stage(UiEvent::Command { .. }, _),
+            ] if *newest == palette(2)
+        ));
+        assert_eq!(pending.load(Ordering::Acquire), queue.len());
+        assert_eq!(absorbed.palettes, [palette(1)]);
+        assert_eq!((absorbed.replaced, absorbed.repeats), (1, 2));
+    }
+    /// Logs each staged event; the first stage waits for the gate, so later jobs queue.
+    struct Gated {
+        log: Arc<std::sync::Mutex<Vec<String>>>,
+        gate: Option<mpsc::Receiver<()>>,
+    }
+    impl SceneSource for Gated {
+        fn watch(
+            &mut self,
+            _: Box<dyn Fn(Result<(), String>) + Send>,
+        ) -> Result<(), Box<dyn Error>> {
+            Ok(())
+        }
+        fn stage(&mut self, event: UiEvent) -> Result<Option<Scene>, Box<dyn Error>> {
+            if let Some(gate) = self.gate.take() {
+                let _ = gate.recv();
+            }
+            self.log.lock().unwrap().push(match event {
+                UiEvent::WallpaperPalette(values) => format!("palette {}", values["surface"][0]),
+                UiEvent::Command { command, .. } => command,
+                event => event_kind(&event),
+            });
+            Ok(Some(scene()))
+        }
+        fn validate(&self) -> Result<(), Box<dyn Error>> {
+            Ok(())
+        }
+        fn state_summary(&self) -> String {
+            String::new()
+        }
+        fn commit(&mut self) -> bool {
+            true
+        }
+        fn error_scene(&mut self, _: String) -> Scene {
+            scene()
+        }
+    }
+    #[test]
+    fn stalled_worker_settles_replaced_palettes_with_the_newest_and_runs_one_repeat() {
+        let log = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let (open, gate) = mpsc::channel();
+        let staged = log.clone();
+        let mut source = Source::new(
+            Box::new(move || {
+                Ok(Box::new(Gated {
+                    log: staged,
+                    gate: Some(gate),
+                }))
+            }),
+            scene(),
+        );
+        let (sender, receiver) = mpsc::channel();
+        source.services(Box::new(move |event| {
+            let _ = sender.send(event);
+        }));
+        source.stage(UiEvent::Reload).unwrap();
+        // The view stalls: a fenced palette, a press, a tween step and a held key queue up.
+        source.stage(UiEvent::WallpaperPalette(palette(1))).unwrap();
+        source.stage(command("tab")).unwrap();
+        source.stage(UiEvent::WallpaperPalette(palette(2))).unwrap();
+        for _ in 0..5 {
+            source.stage_repeat(command("left")).unwrap();
+        }
+        source.stage(command("right")).unwrap();
+        source.stage_repeat(command("left")).unwrap();
+        open.send(()).unwrap();
+        let mut settled = Vec::new();
+        while log.lock().unwrap().len() < 5 || source.pending.load(Ordering::Acquire) > 0 {
+            let Ok(UiEvent::Worker(packet)) = receiver.recv_timeout(Duration::from_secs(2)) else {
+                panic!("worker packet");
+            };
+            if packet.is_accepted() && !packet.wallpaper_palettes().is_empty() {
+                // The ack comes after the newest palette staged, never at the replaced one.
+                assert!(log.lock().unwrap().contains(&"palette 2".into()));
+                settled.push(packet.wallpaper_palettes().to_vec());
+                assert_eq!(packet.wallpaper_palette(), Some(&palette(2)));
+            }
+            source.stage(UiEvent::Worker(packet)).unwrap();
+            source.commit();
+        }
+        assert_eq!(settled, [[palette(1), palette(2)]], "both settle, once");
+        // One repeat ran after the stall; the press behind it still did.
+        assert_eq!(
+            *log.lock().unwrap(),
+            ["Reload", "tab", "palette 2", "left", "right"]
+        );
     }
 }

@@ -16,6 +16,8 @@ pub(super) struct App {
     pub(super) repeat_token: Option<calloop::RegistrationToken>,
     pub(super) repeat_info: (u32, u32),
     pub(super) non_repeating: Vec<u32>,
+    /// B0332: the key now delivered is a repeat (own or SCTK), which a worker may drop.
+    pub(super) repeating_key: bool,
     pub(super) event_sender: Option<calloop::channel::Sender<UiEvent>>,
     pub(super) dismiss: Option<panel::Dismiss>,
     pub(super) hidden: bool,
@@ -397,6 +399,7 @@ pub fn run_runtime(
         repeat_token: None,
         repeat_info: (600, 40),
         non_repeating: Vec::new(),
+        repeating_key: false,
         event_sender: None,
         dismiss: None,
         hidden: false,
