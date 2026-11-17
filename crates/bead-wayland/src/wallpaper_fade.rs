@@ -40,9 +40,13 @@ impl Default for WallpaperFade {
 }
 
 type PaletteMap = std::collections::BTreeMap<String, [u8; 4]>;
-/// The palette follows the fade in this many steps: a step repaints the bar and open panels on
-/// the CPU, so the rate is bounded (about 14 steps per second at the default duration).
-pub(crate) const PALETTE_STEPS: usize = 10;
+/// The palette follows the tween at about one step per 60 Hz frame, within these bounds (B0327).
+pub(crate) const PALETTE_STEPS_MIN: usize = 10;
+pub(crate) const PALETTE_STEPS_MAX: usize = 60;
+/// Steps for a tween of `duration` seconds: 500 ms gives 30.
+pub(crate) fn palette_steps(duration: f64) -> usize {
+    ((duration * 60.).round() as usize).clamp(PALETTE_STEPS_MIN, PALETTE_STEPS_MAX)
+}
 
 fn to_linear(c: u8) -> f32 {
     (f32::from(c) / 255.).powf(2.2)
@@ -75,9 +79,10 @@ pub(crate) fn mix_palette(from: &PaletteMap, to: &PaletteMap, t: f32) -> Palette
 /// (seconds after the clock starts, mix) per step: each step shows the colour the wallpaper
 /// blend has reached at that time, and the last one is exactly the new palette.
 pub(crate) fn palette_schedule(duration: f64, curve: Curve) -> Vec<(f64, f32)> {
-    (1..=PALETTE_STEPS)
+    let n = palette_steps(duration);
+    (1..=n)
         .map(|k| {
-            let t = k as f32 / PALETTE_STEPS as f32;
+            let t = k as f32 / n as f32;
             (duration * f64::from(t), curve.ease(t))
         })
         .collect()
@@ -2017,17 +2022,31 @@ mod tests {
     #[test]
     fn the_palette_schedule_is_bounded_and_follows_the_curve() {
         let steps = palette_schedule(0.7, Curve::EaseInOut);
-        assert_eq!(steps.len(), PALETTE_STEPS);
-        assert!((steps[PALETTE_STEPS - 1].0 - 0.7).abs() < 1e-9);
-        assert_eq!(steps[PALETTE_STEPS - 1].1, 1.);
+        let n = steps.len();
+        assert_eq!(n, 42, "700 ms at one step per 60 Hz frame");
+        assert!((steps[n - 1].0 - 0.7).abs() < 1e-9);
+        assert_eq!(steps[n - 1].1, 1.);
         assert!(
             steps
                 .windows(2)
                 .all(|w| w[0].0 < w[1].0 && w[0].1 <= w[1].1)
         );
         assert!(
-            (steps[PALETTE_STEPS / 2 - 1].1 - 0.5).abs() < 1e-6,
+            (steps[n / 2 - 1].1 - 0.5).abs() < 1e-6,
             "half time, half way"
+        );
+    }
+    #[test]
+    fn the_step_count_is_one_per_frame_within_bounds() {
+        assert_eq!(palette_steps(0.5), 30);
+        assert_eq!(palette_steps(0.05), PALETTE_STEPS_MIN);
+        assert_eq!(palette_steps(0.), PALETTE_STEPS_MIN);
+        assert_eq!(palette_steps(5.), PALETTE_STEPS_MAX);
+        let s = palette_schedule(0.5, Curve::Linear);
+        assert_eq!(
+            (s.len(), s[29]),
+            (30, (0.5, 1.)),
+            "the last step is the end"
         );
     }
     #[test]
@@ -2125,15 +2144,18 @@ mod tests {
     #[test]
     fn a_step_due_during_a_fade_is_applied_after_a_frame_not_by_the_timer() {
         let mut t = tween(0, 200, 10.);
-        assert!(t.advance(10.06).is_none(), "the first step is due at 70 ms");
+        assert!(
+            t.advance(10.01).is_none(),
+            "the first step is due at 16.7 ms"
+        );
         t.last_frame = 10.065;
         assert!(t.frames_flow(10.07), "frames flow: the timer defers");
         assert!(t.retry_after(10.07) >= 0.01, "and looks again soon");
         let (colour, wait) = t.advance(10.073).expect("the frame applies the due step");
         assert!(colour["accent"][0] > 0 && colour["accent"][0] < 100);
         assert!(
-            (wait.unwrap() - 0.067).abs() < 1e-6,
-            "wait for the second step"
+            (wait.unwrap() - 0.01033).abs() < 1e-4,
+            "wait for the next step"
         );
         assert!(t.advance(10.074).is_none(), "applied once");
         assert!(!t.frames_flow(10.2), "frames stopped: the timer takes over");
@@ -2145,22 +2167,22 @@ mod tests {
         let mut applied = Vec::new();
         for (k, at) in times.iter().enumerate() {
             let (colour, wait) = t.advance(*at).expect("a step is due at its time");
-            assert_eq!(wait.is_none(), k == PALETTE_STEPS - 1);
+            assert_eq!(wait.is_none(), k == times.len() - 1);
             applied.push(colour["accent"][0]);
         }
-        assert_eq!(applied.len(), PALETTE_STEPS);
-        assert!(applied.windows(2).all(|w| w[0] < w[1] || w[1] == 200));
-        assert_eq!(applied[PALETTE_STEPS - 1], 200, "exactly the new palette");
+        assert_eq!(applied.len(), times.len());
+        assert!(applied.windows(2).all(|w| w[0] <= w[1]));
+        assert_eq!(applied[times.len() - 1], 200, "exactly the new palette");
     }
     #[test]
     fn a_late_step_skips_the_overdue_ones_and_the_last_frame_completes_the_tween() {
         let mut t = tween(0, 200, 0.);
-        let (_, wait) = t.advance(0.5).unwrap();
+        let (_, wait) = t.advance(0.505).unwrap();
         assert_eq!(
-            t.next, 7,
-            "steps 1 to 6 were overdue, the one at 490 ms ran"
+            t.next, 30,
+            "steps 1 to 29 were overdue, the one at 500 ms ran"
         );
-        assert!((wait.unwrap() - 0.06).abs() < 1e-6);
+        assert!((wait.unwrap() - 0.01167).abs() < 1e-4);
         let (colour, wait) = t.advance(f64::INFINITY).unwrap();
         assert_eq!(colour, palette([200, 0, 0, 255]));
         assert!(wait.is_none());
@@ -2311,10 +2333,10 @@ mod tests {
         );
         t.start_clock(10.15);
         assert!(
-            t.advance(10.15 + 0.06).is_none(),
-            "the first step is due 70 ms after the clock"
+            t.advance(10.15 + 0.01).is_none(),
+            "the first step is due 16.7 ms after the clock"
         );
-        assert!(t.advance(10.15 + 0.071).is_some());
+        assert!(t.advance(10.15 + 0.02).is_some());
         let (last, wait) = t.advance(f64::INFINITY).unwrap();
         assert_eq!(last, palette([200, 0, 0, 255]));
         assert!(wait.is_none());
