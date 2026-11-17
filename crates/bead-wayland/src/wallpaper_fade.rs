@@ -173,23 +173,46 @@ impl PaletteTween {
 /// (compositor, GPU or a blocking call). Two clock reads per frame, no allocation.
 #[derive(Default)]
 pub(crate) struct GapProbe {
-    last: Option<(f64, u64)>,
-    /// (gap seconds, other main-thread ms) of the largest gap so far.
-    worst: (f64, f64),
+    last: Option<(f64, CpuMark)>,
+    /// (gap seconds, other, peer-frame and palette-step main-thread ms) of the largest gap so far.
+    worst: (f64, f64, f64, f64),
+}
+/// B0319: main-thread CPU (ns) at one instant: the thread total and the running sums spent inside
+/// fade frames (all outputs) and inside palette steps (host callback included).
+#[derive(Clone, Copy, Default)]
+pub(crate) struct CpuMark {
+    pub(crate) cpu: u64,
+    pub(crate) frames: u64,
+    pub(crate) steps: u64,
 }
 impl GapProbe {
-    /// A frame committed at `now` (seconds), drawn from thread CPU `cpu_start` to `cpu_end` (ns).
-    pub(crate) fn committed(&mut self, now: f64, cpu_start: u64, cpu_end: u64) {
-        if let Some((wall, cpu)) = self.last {
+    /// A frame committed at `now` (seconds), drawn from the mark `start` to the mark `end`; the
+    /// frame sum of `end` includes this frame, so the peers' share of a gap excludes it.
+    pub(crate) fn committed(&mut self, now: f64, start: CpuMark, end: CpuMark) {
+        if let Some((wall, last)) = self.last {
             let gap = now - wall;
             if gap > self.worst.0 {
-                self.worst = (gap, cpu_start.saturating_sub(cpu) as f64 / 1e6);
+                let ms = |now: u64, then: u64| now.saturating_sub(then) as f64 / 1e6;
+                self.worst = (
+                    gap,
+                    ms(start.cpu, last.cpu),
+                    ms(start.frames, last.frames),
+                    ms(start.steps, last.steps),
+                );
             }
         }
-        self.last = Some((now, cpu_end));
+        self.last = Some((now, end));
     }
     pub(crate) fn other_ms(&self) -> f64 {
         self.worst.1
+    }
+    /// Partner outputs' fade-frame CPU inside the largest gap.
+    pub(crate) fn peer_ms(&self) -> f64 {
+        self.worst.2
+    }
+    /// Palette-step CPU inside the largest gap.
+    pub(crate) fn step_ms(&self) -> f64 {
+        self.worst.3
     }
 }
 
@@ -223,6 +246,7 @@ pub(crate) fn transition_marker(
     setup: &SetupTimes,
     retarget_ms: f64,
     clock_s: f64,
+    (gap_peer_ms, gap_step_ms, step_max_ms): (f64, f64, f64),
 ) -> String {
     let render_top: Vec<String> = slide
         .render_top
@@ -235,7 +259,8 @@ pub(crate) fn transition_marker(
          first_frame_ms={:.1} max_gap_ms={:.1} gap_at={} render_top={} palette_steps={palette_steps} \
          gap_other_ms={gap_other_ms:.1} setup=read:{:.1},egl:{:.1},surface:{:.1},canvas:{:.1},\
          upload:{:.1},first:{:.1} retarget_ms={retarget_ms:.1} \
-         clock_s={clock_s:.3}",
+         clock_s={clock_s:.3} gap_peer_ms={gap_peer_ms:.1} gap_step_ms={gap_step_ms:.1} \
+         step_max_ms={step_max_ms:.1}",
         match kind {
             WallpaperFadeKind::Fade => "fade",
             WallpaperFadeKind::Grow { .. } => "grow",
@@ -316,6 +341,8 @@ pub(super) struct FadeRun {
     /// B0316 diagnostics: the start's phases and the costliest retarget of this run.
     setup: SetupTimes,
     retarget_ms: f64,
+    /// B0319: the costliest palette step (wall ms, host callback included) while this fade ran.
+    step_max_ms: f64,
     /// B0316: when the clock of this fade started (`None` while the first pose is held), when the
     /// hold began, and whether the last frame was drawn (the finish waits for the group).
     clock: Option<f64>,
@@ -463,7 +490,26 @@ impl App {
         {
             run.palette_steps += 1;
         }
+        let began = std::time::Instant::now();
+        let cpu = bead_core::profile::thread_cpu_ns();
         self.apply_palette_step(palette);
+        self.palette_step_cpu_ns += bead_core::profile::thread_cpu_ns().saturating_sub(cpu);
+        let ms = ms_since(began);
+        for run in self
+            .wallpaper_surfaces
+            .iter_mut()
+            .filter_map(|s| s.fade.as_mut())
+        {
+            run.step_max_ms = run.step_max_ms.max(ms);
+        }
+    }
+
+    fn cpu_mark(&self) -> CpuMark {
+        CpuMark {
+            cpu: bead_core::profile::thread_cpu_ns(),
+            frames: self.fade_frame_cpu_ns,
+            steps: self.palette_step_cpu_ns,
+        }
     }
 
     /// One palette step through the same recipients as a fenced change, without the fence.
@@ -590,7 +636,7 @@ impl App {
         surface.revision = frame.revision;
         let generation = surface.fade.as_ref().map_or(0, |run| run.generation);
         let now = self.started.elapsed().as_secs_f64();
-        let cpu_start = bead_core::profile::thread_cpu_ns();
+        let cpu_start = self.cpu_mark();
         // Replacing the motion restarts the curve at its held first pose.
         self.fade_animations.retain(|id| id != name);
         self.fade_animations.open_to(
@@ -702,6 +748,7 @@ impl App {
                 ..SetupTimes::default()
             },
             retarget_ms: 0.,
+            step_max_ms: 0.,
             clock: None,
             held_since: self.started.elapsed().as_secs_f64(),
             done: false,
@@ -755,7 +802,7 @@ impl App {
     /// While another output of the change is still being set up (B0316) the first pose stays held
     /// and the clock does not start: the commit that ends the hold starts every held fade, and
     /// the palette tween, at one instant.
-    fn fade_committed(&mut self, index: usize, drawn: f64, cpu_start: u64) {
+    fn fade_committed(&mut self, index: usize, drawn: f64, cpu_start: CpuMark) {
         let now = self.started.elapsed().as_secs_f64();
         let name = self.wallpaper_surfaces[index].name.clone();
         let run = self.wallpaper_surfaces[index].fade.as_ref();
@@ -786,10 +833,12 @@ impl App {
                 &bead_core::profile::NO_SPLITS,
             )
         };
+        let mut end = self.cpu_mark();
+        self.fade_frame_cpu_ns += end.cpu.saturating_sub(cpu_start.cpu);
+        end.frames = self.fade_frame_cpu_ns;
         let surface = &mut self.wallpaper_surfaces[index];
         if let Some(run) = surface.fade.as_mut().filter(|_| !holding) {
-            run.gaps
-                .committed(now, cpu_start, bead_core::profile::thread_cpu_ns());
+            run.gaps.committed(now, cpu_start, end);
         }
         if let (Some(slide), Some(run)) = (slide, &surface.fade) {
             println!(
@@ -802,7 +851,8 @@ impl App {
                     run.gaps.other_ms(),
                     &run.setup,
                     run.retarget_ms,
-                    run.clock.unwrap_or_default()
+                    run.clock.unwrap_or_default(),
+                    (run.gaps.peer_ms(), run.gaps.step_ms(), run.step_max_ms)
                 )
             );
         }
@@ -864,7 +914,7 @@ impl App {
         }
         let name = self.wallpaper_surfaces[index].name.clone();
         let drawn = self.started.elapsed().as_secs_f64();
-        let cpu_start = bead_core::profile::thread_cpu_ns();
+        let cpu_start = self.cpu_mark();
         let (blend, running) = self
             .fade_animations
             .value(&name, drawn)
@@ -1114,6 +1164,7 @@ mod tests {
             },
             4.2,
             12.3456,
+            (3.04, 0.25, 1.26),
         );
         assert!(line.starts_with("WALLPAPER_TRANSITION output=DP-1 kind=grow frames="));
         assert!(
@@ -1123,7 +1174,8 @@ mod tests {
         assert!(
             line.ends_with(
                 " palette_steps=10 gap_other_ms=3.5 setup=read:3.1,egl:0.0,surface:2.0,\
-                 canvas:20.4,upload:9.8,first:12.0 retarget_ms=4.2 clock_s=12.346"
+                 canvas:20.4,upload:9.8,first:12.0 retarget_ms=4.2 clock_s=12.346 \
+                 gap_peer_ms=3.0 gap_step_ms=0.2 step_max_ms=1.3"
             ),
             "{line}"
         );
@@ -1132,15 +1184,31 @@ mod tests {
     #[test]
     fn the_gap_probe_charges_the_largest_gap_with_the_other_cpu_time_before_its_frame() {
         let ms = 1_000_000;
+        let mark = |cpu, frames, steps| CpuMark {
+            cpu: cpu * ms,
+            frames: frames * ms,
+            steps: steps * ms,
+        };
         let mut p = GapProbe::default();
-        p.committed(0., 0, 2 * ms);
+        p.committed(0., mark(0, 0, 0), mark(2, 2, 0));
         // 8 ms gap, 0.5 ms of other work, the frame itself 2 ms.
-        p.committed(0.008, 2 * ms + ms / 2, 4 * ms);
+        p.committed(
+            0.008,
+            CpuMark {
+                cpu: 2 * ms + ms / 2,
+                ..mark(2, 2, 0)
+            },
+            mark(4, 4, 0),
+        );
         assert!((p.other_ms() - 0.5).abs() < 1e-9);
-        // A 16 ms gap with 9 ms of other work wins; a later shorter gap does not.
-        p.committed(0.024, 13 * ms, 15 * ms);
-        p.committed(0.032, 30 * ms, 31 * ms);
+        // A 16 ms gap with 9 ms of CPU: a partner's 3 ms frame and a 4 ms palette step; the
+        // frames sum includes this output's own frame (2 ms) once it committed.
+        p.committed(0.024, mark(13, 7, 4), mark(15, 9, 4));
         assert!((p.other_ms() - 9.).abs() < 1e-9);
+        assert!((p.peer_ms() - 3.).abs() < 1e-9 && (p.step_ms() - 4.).abs() < 1e-9);
+        // A later shorter gap does not replace it.
+        p.committed(0.032, mark(30, 20, 9), mark(31, 21, 9));
+        assert!((p.other_ms() - 9.).abs() < 1e-9 && (p.peer_ms() - 3.).abs() < 1e-9);
     }
     fn tween(from: u8, to: u8, started: f64) -> PaletteTween {
         PaletteTween::new(
