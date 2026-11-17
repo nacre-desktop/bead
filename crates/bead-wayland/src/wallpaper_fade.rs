@@ -182,6 +182,25 @@ impl GapProbe {
     }
 }
 
+/// B0316: main-thread wall milliseconds of each phase of a fade start (the first output of a
+/// change pays them all; the transport phase is 0 when another output already made it).
+#[derive(Clone, Copy, Default, Debug, PartialEq)]
+pub(crate) struct SetupTimes {
+    /// The shown image read from the attached buffer (or taken from the provider).
+    pub(crate) read: f64,
+    /// EGL display and context, made once per change and shared by its outputs.
+    pub(crate) egl: f64,
+    pub(crate) surface: f64,
+    /// Renderer and canvas, then the two texture uploads.
+    pub(crate) canvas: f64,
+    pub(crate) upload: f64,
+    /// The held first pose: draw and present.
+    pub(crate) first: f64,
+}
+fn ms_since(began: std::time::Instant) -> f64 {
+    began.elapsed().as_secs_f64() * 1e3
+}
+
 /// One journal line per finished fade, in the PANEL_SLIDE style: what the user saw.
 pub(crate) fn transition_marker(
     output: &str,
@@ -189,6 +208,8 @@ pub(crate) fn transition_marker(
     slide: &bead_core::animation::Slide,
     palette_steps: u32,
     gap_other_ms: f64,
+    setup: &SetupTimes,
+    retarget_ms: f64,
 ) -> String {
     let render_top: Vec<String> = slide
         .render_top
@@ -199,7 +220,8 @@ pub(crate) fn transition_marker(
     format!(
         "WALLPAPER_TRANSITION output={output} kind={} frames={} duration_ms={:.1} \
          first_frame_ms={:.1} max_gap_ms={:.1} gap_at={} render_top={} palette_steps={palette_steps} \
-         gap_other_ms={gap_other_ms:.1}",
+         gap_other_ms={gap_other_ms:.1} setup=read:{:.1},egl:{:.1},surface:{:.1},canvas:{:.1},\
+         upload:{:.1},first:{:.1} retarget_ms={retarget_ms:.1}",
         match kind {
             WallpaperFadeKind::Fade => "fade",
             WallpaperFadeKind::Grow { .. } => "grow",
@@ -209,7 +231,13 @@ pub(crate) fn transition_marker(
         slide.first_frame_ms,
         slide.max_gap_ms,
         slide.gap_at,
-        render_top.join(",")
+        render_top.join(","),
+        setup.read,
+        setup.egl,
+        setup.surface,
+        setup.canvas,
+        setup.upload,
+        setup.first,
     )
 }
 
@@ -240,6 +268,9 @@ pub(super) struct FadeRun {
     /// Palette tween steps applied while this fade ran, for the marker.
     palette_steps: u32,
     gaps: GapProbe,
+    /// B0316 diagnostics: the start's phases and the costliest retarget of this run.
+    setup: SetupTimes,
+    retarget_ms: f64,
 }
 
 #[cfg(feature = "native-gl")]
@@ -437,7 +468,10 @@ impl App {
             return Err(frame);
         };
         let size = (frame.width, frame.height);
-        if self.wallpaper_surfaces[index].fade.is_some() {
+        let began = std::time::Instant::now();
+        let retargeted = self.wallpaper_surfaces[index].fade.is_some();
+        let mut read_ms = 0.;
+        if retargeted {
             let surface = &mut self.wallpaper_surfaces[index];
             let run = surface.fade.as_mut().unwrap();
             let result = (|| -> Result<(), Box<dyn Error>> {
@@ -470,6 +504,7 @@ impl App {
             else {
                 return Err(frame);
             };
+            read_ms = ms_since(began);
             match self.create_fade_run(index, &frame, &old, spec) {
                 Ok(run) => self.wallpaper_surfaces[index].fade = Some(run),
                 Err(error) => {
@@ -499,13 +534,23 @@ impl App {
             f64::from(spec.duration_ms) / 1000.,
             spec.curve,
         );
+        let drawn_at = std::time::Instant::now();
         if let Err(error) = self.fade_draw(index, 0., true) {
             self.wallpaper_gl_failed = true;
             eprintln!("WALLPAPER_FADE_FALLBACK output={name} reason={error}");
             self.finish_wallpaper_fade(index);
             return Ok(());
         }
+        let first_ms = ms_since(drawn_at);
         self.fade_committed(index, now, cpu_start);
+        if let Some(run) = self.wallpaper_surfaces[index].fade.as_mut() {
+            if retargeted {
+                run.retarget_ms = run.retarget_ms.max(ms_since(began));
+            } else {
+                run.setup.read = read_ms;
+                run.setup.first = first_ms;
+            }
+        }
         self.schedule_fade_watchdog(&name, generation, spec.duration_ms);
         if let Some(target) = self.pending_palette_target.take() {
             self.start_palette_tween(target, spec);
@@ -534,19 +579,24 @@ impl App {
             NonNull::new(surface.layer.wl_surface().id().as_ptr().cast())
                 .ok_or("native surface missing")?,
         ));
+        let began = std::time::Instant::now();
         if self.gl.is_none() {
             // SAFETY: the retained connection outlives the EGL context and surfaces.
             self.gl = Some(unsafe { bead_render::gl::Transport::new(display) }?);
         }
+        let egl_ms = ms_since(began);
         let transport = self.gl.as_mut().unwrap();
+        let began = std::time::Instant::now();
         // SAFETY: FadeRun drops the EGL surface before the wallpaper layer surface.
         let gl = unsafe { transport.create_surface(window, width, height) }?;
+        let surface_ms = ms_since(began);
         let fader = bead_render::gl::WallpaperFader::new(
             &transport.display,
             (width, height),
             old,
             &frame.rgba,
         )?;
+        let fader_ms = fader.setup_ms;
         let logical = self
             .output
             .info(&surface.output)
@@ -573,6 +623,14 @@ impl App {
             generation: 1,
             palette_steps: 0,
             gaps: GapProbe::default(),
+            setup: SetupTimes {
+                egl: egl_ms,
+                surface: surface_ms,
+                canvas: fader_ms.0,
+                upload: fader_ms.1,
+                ..SetupTimes::default()
+            },
+            retarget_ms: 0.,
         })
     }
 
@@ -644,7 +702,9 @@ impl App {
                     run.spec.kind,
                     &slide,
                     run.palette_steps,
-                    run.gaps.other_ms()
+                    run.gaps.other_ms(),
+                    &run.setup,
+                    run.retarget_ms
                 )
             );
         }
@@ -718,6 +778,7 @@ impl App {
         let Some(run) = self.wallpaper_surfaces[index].fade.take() else {
             return;
         };
+        let began = std::time::Instant::now();
         let FadeRun {
             fader,
             gl,
@@ -786,6 +847,11 @@ impl App {
         unsafe {
             libc::malloc_trim(0);
         }
+        println!(
+            "WALLPAPER_FADE_FINISH output={} ms={:.1}",
+            self.wallpaper_surfaces[index].name,
+            ms_since(began)
+        );
     }
 
     /// Give the shared EGL transport back once no fade or other GL surface needs it.
@@ -907,6 +973,15 @@ mod tests {
             &slide,
             10,
             3.5,
+            &SetupTimes {
+                read: 3.1,
+                egl: 0.,
+                surface: 2.,
+                canvas: 20.4,
+                upload: 9.8,
+                first: 12.,
+            },
+            4.2,
         );
         assert!(line.starts_with("WALLPAPER_TRANSITION output=DP-1 kind=grow frames="));
         assert!(
@@ -914,7 +989,10 @@ mod tests {
             "{line}"
         );
         assert!(
-            line.ends_with(" palette_steps=10 gap_other_ms=3.5"),
+            line.ends_with(
+                " palette_steps=10 gap_other_ms=3.5 setup=read:3.1,egl:0.0,surface:2.0,\
+                 canvas:20.4,upload:9.8,first:12.0 retarget_ms=4.2"
+            ),
             "{line}"
         );
         assert!(line.contains(" render_top="));

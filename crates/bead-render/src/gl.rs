@@ -439,11 +439,14 @@ pub struct WallpaperFader {
     to: femtovg::ImageId,
     size: (u32, u32),
     last: (f32, WallpaperBlend),
+    /// Wall milliseconds of `new`: the renderer and canvas, then the two uploads (B0316).
+    pub setup_ms: (f64, f64),
 }
 impl WallpaperFader {
     /// The EGL context must be current (`Transport::activate`). Both uploads happen here, so the
     /// first moving frame costs like the others.
     pub fn new(display: &Display, size: (u32, u32), from: &[u8], to: &[u8]) -> Result<Self> {
+        let began = std::time::Instant::now();
         // SAFETY: the caller made the transport's context current on this thread.
         let renderer = unsafe {
             femtovg::renderer::OpenGl::new_from_function_cstr(|name| {
@@ -451,6 +454,7 @@ impl WallpaperFader {
             })
         }?;
         let mut canvas = femtovg::Canvas::new(renderer)?;
+        let canvas_ms = began.elapsed().as_secs_f64() * 1e3;
         let from = Self::upload(&mut canvas, size, from)?;
         let to = Self::upload(&mut canvas, size, to)?;
         Ok(Self {
@@ -459,6 +463,7 @@ impl WallpaperFader {
             to,
             size,
             last: (0., WallpaperBlend::Fade),
+            setup_ms: (canvas_ms, began.elapsed().as_secs_f64() * 1e3 - canvas_ms),
         })
     }
     fn upload(
