@@ -441,6 +441,7 @@ mod tests {
                 radius: 8.,
                 fill: [10, 20, 30, 255],
                 border: None,
+                radial: None,
             },
             clip,
             raster: None,
@@ -530,6 +531,7 @@ mod tests {
                 radius: 2.,
                 fill,
                 border: None,
+                radial: None,
             },
             clip: None,
             raster: None,
@@ -699,6 +701,7 @@ mod tests {
                 radius: 2.,
                 fill: [40, 40, 40, 255],
                 border: None,
+                radial: None,
             },
             clip: None,
             raster: None,
@@ -759,6 +762,7 @@ mod tests {
             radius: 2.,
             fill: [40, 40, 40, 255],
             border: None,
+            radial: None,
         };
         let mut frame = Frame {
             native_resource_budget: None,

@@ -1381,6 +1381,7 @@ mod tests {
                 radius: 0.,
                 fill: [20, 30, 40, 255],
                 border: None,
+                radial: None,
             }],
             offset: (0., 0.),
             bounds: bead_render::Rect::new(0., 0., 16., 16.),
@@ -1460,6 +1461,7 @@ mod tests {
             radius: 0.,
             fill: [80, 30, 40, 255],
             border: None,
+            radial: None,
         };
         cache.prepare(&newer_scene, 1.).unwrap();
         let newer = cache.frame.as_ref().unwrap().clone();

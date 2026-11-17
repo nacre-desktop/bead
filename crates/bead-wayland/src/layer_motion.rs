@@ -991,6 +991,7 @@ mod tests {
                 radius: 3.,
                 fill: [35, 80, 120, 255],
                 border: None,
+                radial: None,
             }],
             offset: (0., 0.),
             bounds: Rect::new(0., 0., 32., 32.),

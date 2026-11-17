@@ -75,6 +75,7 @@ mod layer_motion_renderer_tests {
                 radius: 0.,
                 fill: [20, 40, 80, 255],
                 border: None,
+                radial: None,
             }],
             offset: (0., 0.),
             bounds: bead_render::Rect::new(0., 0., 16., 16.),
@@ -4149,6 +4150,7 @@ mod repair_tests {
                         radius: 3.,
                         fill: color,
                         border: None,
+                        radial: None,
                     };
                     let scene = Scene {
                         opacity: 1.,
@@ -4328,12 +4330,14 @@ mod input_tests {
                     radius: 0.,
                     fill: [0; 4],
                     border: None,
+                    radial: None,
                 },
                 bead_render::Primitive::Rounded {
                     rect: body,
                     radius: 8.,
                     fill: [20; 4],
                     border: None,
+                    radial: None,
                 },
             ],
             offset: (32., 32.),

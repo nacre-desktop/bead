@@ -736,6 +736,7 @@ impl Session {
                 radius: 8.,
                 fill: [75, 20, 25, 250],
                 border: Some(([255, 140, 150, 255], 1.)),
+                radial: None,
             });
             scene.primitives.push(Primitive::Text {
                 rect: text_rect,

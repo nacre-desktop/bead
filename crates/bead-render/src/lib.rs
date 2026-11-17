@@ -178,11 +178,15 @@ pub enum Primitive {
         round_caps: bool,
         fill: Option<[u8; 4]>,
     },
+    /// A rounded box. `radial` layers (B0331) are drawn over `fill`, under `border`, clipped to the
+    /// shape; a box with layers is a cached raster item on every renderer (its border is drawn inside the edge).
     Rounded {
         rect: Rect,
         radius: f32,
         fill: [u8; 4],
         border: Option<([u8; 4], f32)>,
+        #[serde(default)]
+        radial: Option<std::sync::Arc<[RadialLayer]>>,
     },
     Text {
         #[serde(default = "normal_weight")]
@@ -259,7 +263,27 @@ pub struct TextShadow {
     pub blur: f32,
     pub offset_y: f32,
 }
+/// One elliptical radial gradient: centre `(cx, cy)` and radii `(rx, ry)` as fractions of the box,
+/// colour `stops` as (offset 0..1, straight RGBA); pad spread.
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct RadialLayer {
+    pub cx: f32,
+    pub cy: f32,
+    pub rx: f32,
+    pub ry: f32,
+    pub stops: Vec<(f32, [u8; 4])>,
+}
 impl Primitive {
+    /// A rounded box with no border or radial layers, so hosts never break on a new field.
+    pub fn rounded(rect: Rect, radius: f32, fill: [u8; 4]) -> Self {
+        Self::Rounded {
+            rect,
+            radius,
+            fill,
+            border: None,
+            radial: None,
+        }
+    }
     /// A text run with every other field at its default, so hosts never break on a new field.
     pub fn text(
         rect: Rect,
@@ -449,6 +473,15 @@ pub fn primitive_bytes(p: &Primitive) -> usize {
                         points.capacity() * std::mem::size_of::<[f32; 2]>()
                     })
             }
+            Primitive::Rounded {
+                radial: Some(layers),
+                ..
+            } => layers
+                .iter()
+                .map(|l| {
+                    std::mem::size_of::<RadialLayer>() + std::mem::size_of_val(l.stops.as_slice())
+                })
+                .sum(),
             _ => 0,
         }
 }
@@ -942,11 +975,13 @@ impl Scene {
                     radius,
                     fill,
                     border,
+                    radial,
                 } => Primitive::Rounded {
                     rect: follow(rect),
                     radius: *radius,
                     fill: *fill,
                     border: *border,
+                    radial: radial.clone(),
                 },
                 Primitive::Shadow {
                     rect,
@@ -1397,6 +1432,16 @@ fn key(p: &Primitive, scale: f32) -> String {
         } => {
             format!("s:{scale}:{}:{}:{radius}:{blur}:{alpha}", rect.w, rect.h)
         }
+        Primitive::Rounded {
+            rect,
+            radius,
+            fill,
+            border,
+            radial: Some(layers),
+        } => format!(
+            "r:{scale}:{}:{}:{radius}:{fill:?}:{border:?}:{layers:?}",
+            rect.w, rect.h
+        ),
         _ => String::new(),
     }
 }
@@ -1636,7 +1681,7 @@ impl Renderer for CpuRenderer {
         for p in &scene.primitives {
             if matches!(
                 p,
-                Primitive::Rounded { .. }
+                Primitive::Rounded { radial: None, .. }
                     | Primitive::Arc { .. }
                     | Primitive::Polyline { .. }
                     | Primitive::Graph { .. }
@@ -1796,6 +1841,13 @@ impl Renderer for CpuRenderer {
                     alpha,
                     ..
                 } => shadow_pixmap(*rect, *radius, *blur, *alpha, scale)?,
+                Primitive::Rounded {
+                    rect,
+                    radius,
+                    fill,
+                    border,
+                    radial: Some(layers),
+                } => radial_raster(*rect, *radius, *fill, *border, layers, scale)?,
                 _ => unreachable!(),
             };
             let stage = match p {
@@ -1814,7 +1866,7 @@ impl Renderer for CpuRenderer {
             .filter(|p| {
                 !matches!(
                     p,
-                    Primitive::Rounded { .. }
+                    Primitive::Rounded { radial: None, .. }
                         | Primitive::Arc { .. }
                         | Primitive::Polyline { .. }
                         | Primitive::Graph { .. }
@@ -2053,6 +2105,7 @@ impl Renderer for CpuRenderer {
                     radius,
                     fill,
                     border,
+                    radial: None,
                 } => {
                     if let Some(path) = rounded(*rect, *radius) {
                         let mut paint = Paint::default();
@@ -2079,6 +2132,7 @@ impl Renderer for CpuRenderer {
                     let rect = match p {
                         Primitive::Text { rect, .. }
                         | Primitive::Image { rect, .. }
+                        | Primitive::Rounded { rect, .. }
                         | Primitive::Shadow { rect, .. } => *rect,
                         _ => unreachable!(),
                     };
@@ -2169,6 +2223,72 @@ pub fn prewarm_shadows(boxes: &[(Rect, f32)], scale: f32) -> Result<()> {
     }
     *PINNED_SHADOWS.lock().map_err(|_| "shadow cache poisoned")? = pinned;
     Ok(())
+}
+/// B0331: a gradient box as one raster: fill, then each layer clipped to the rounded shape, then the
+/// border stroked inside the edge (the raster is the box, so an outer half stroke would be cut).
+fn radial_raster(
+    rect: Rect,
+    radius: f32,
+    fill: [u8; 4],
+    border: Option<([u8; 4], f32)>,
+    layers: &[RadialLayer],
+    scale: f32,
+) -> Result<Pixmap> {
+    let _span = bead_core::profile::Span::new("radial_raster");
+    let (w, h) = dimensions(rect, scale);
+    let mut pix = Pixmap::new(w, h).ok_or("radial allocation")?;
+    let transform = Transform::from_scale(scale, scale);
+    let local = Rect::new(0., 0., rect.w, rect.h);
+    let path = rounded(local, radius).ok_or("radial path")?;
+    let mut paint = Paint::default();
+    paint.set_color_rgba8(fill[0], fill[1], fill[2], fill[3]);
+    pix.fill_path(&path, &paint, FillRule::Winding, transform, None);
+    for layer in layers {
+        let stops = layer
+            .stops
+            .iter()
+            .map(|(at, c)| {
+                tiny_skia::GradientStop::new(
+                    *at,
+                    tiny_skia::Color::from_rgba8(c[0], c[1], c[2], c[3]),
+                )
+            })
+            .collect();
+        // The unit circle mapped onto the ellipse; fill_path applies `transform` to the shader too.
+        let center = tiny_skia::Point::from_xy(0., 0.);
+        paint.shader = tiny_skia::RadialGradient::new(
+            center,
+            0.,
+            center,
+            1.,
+            stops,
+            tiny_skia::SpreadMode::Pad,
+            Transform::from_row(
+                layer.rx * rect.w,
+                0.,
+                0.,
+                layer.ry * rect.h,
+                layer.cx * rect.w,
+                layer.cy * rect.h,
+            ),
+        )
+        .ok_or("radial gradient")?;
+        pix.fill_path(&path, &paint, FillRule::Winding, transform, None);
+    }
+    if let Some((c, line)) = border {
+        let inset = line / 2.;
+        let inner = Rect::new(inset, inset, rect.w - line, rect.h - line);
+        if let Some(path) = rounded(inner, (radius - inset).max(0.)) {
+            paint.shader =
+                tiny_skia::Shader::SolidColor(tiny_skia::Color::from_rgba8(c[0], c[1], c[2], c[3]));
+            let stroke = Stroke {
+                width: line,
+                ..Stroke::default()
+            };
+            pix.stroke_path(&path, &paint, &stroke, transform, None);
+        }
+    }
+    Ok(pix)
 }
 fn shadow_raster(rect: Rect, radius: f32, blur: f32, alpha: f32, scale: f32) -> Result<Pixmap> {
     let _span = bead_core::profile::Span::new("shadow_raster");
@@ -2995,6 +3115,7 @@ mod tests {
                 radius: 2.,
                 fill: [30, 40, 50, 255],
                 border: None,
+                radial: None,
             })
             .collect();
         let clip = Rect::new(40., 0., 20., 20.);
@@ -3085,6 +3206,7 @@ mod tests {
                 radius: 2.,
                 fill: [30, 40, 50, 255],
                 border: None,
+                radial: None,
             })
             .collect();
         scene.motion = Some(Motion {
@@ -3126,6 +3248,7 @@ mod tests {
                 radius: 2.,
                 fill: [30, 40, 50, 255],
                 border: None,
+                radial: None,
             })
             .collect();
         scene.clips.insert(1, Rect::new(20., 0., 20., 20.));
@@ -3351,6 +3474,7 @@ mod tests {
                 radius: 18.,
                 fill: [1, 2, 3, 255],
                 border: None,
+                radial: None,
             },
             Primitive::Text {
                 rect: Rect::new(40., 40., 100., 20.),
@@ -3419,6 +3543,7 @@ mod tests {
                 radius: 12.,
                 fill: [10, 20, 30, 255],
                 border: None,
+                radial: None,
             },
             Primitive::Text {
                 rect: Rect::new(40., 40., 40., 20.),
@@ -3534,6 +3659,7 @@ mod tests {
             radius: 18.,
             fill: [1, 2, 3, 255],
             border: None,
+            radial: None,
         }];
         let motion = |edge, reveal, slide_distance| Motion {
             id: "m".into(),
@@ -3604,6 +3730,7 @@ mod tests {
                     radius: 18.,
                     fill: [1, 2, 3, 255],
                     border: Some(([200, 100, 50, 255], 2.)),
+                    radial: None,
                 },
             ];
             scene.motion = Some(Motion {
@@ -3722,6 +3849,7 @@ mod tests {
                     radius: 12.,
                     fill: [1, 2, 3, 255],
                     border: None,
+                    radial: None,
                 },
                 Primitive::Text {
                     rect: Rect::new(48., 48., 120., 24.),
@@ -3739,6 +3867,7 @@ mod tests {
                     radius: 2.,
                     fill: [4, 5, 6, 255],
                     border: None,
+                    radial: None,
                 },
                 Primitive::Arc {
                     rect: Rect::new(270., 48., 20., 20.),
@@ -4093,12 +4222,14 @@ mod tests {
                     radius: 0.,
                     fill: [0, 255, 0, 255],
                     border: None,
+                    radial: None,
                 },
                 Primitive::Rounded {
                     rect: Rect::new(0., 0., 4., 4.),
                     radius: 0.,
                     fill: [255, 0, 0, 255],
                     border: None,
+                    radial: None,
                 },
             ],
             input_islands: None,
@@ -4185,6 +4316,7 @@ mod tests {
                             radius: 7.,
                             fill: [210, 20, 40, 180],
                             border: Some(([20, 190, 230, 255], 1.)),
+                            radial: None,
                         },
                         Primitive::Text {
                             rect: Rect::new(3., 3., 34., 20.),
@@ -4338,6 +4470,7 @@ mod tests {
                 radius: 18.,
                 fill: [1, 2, 3, 255],
                 border: None,
+                radial: None,
             },
         ];
         scene.motion = Some(Motion {

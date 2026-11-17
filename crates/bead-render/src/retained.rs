@@ -346,6 +346,7 @@ mod tests {
                 radius: 6.,
                 fill: [200, 30, 60, 255],
                 border: None,
+                radial: None,
             }],
             input_islands: None,
             key_repeat: None,

@@ -166,6 +166,7 @@ impl Feedback {
                 radius: config.radius,
                 fill: color,
                 border: None,
+                radial: None,
             });
             scene
                 .clips

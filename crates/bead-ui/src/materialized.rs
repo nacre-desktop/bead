@@ -1119,6 +1119,7 @@ impl Cached {
                             radius: hover.radius,
                             fill: if hot { hover.hot.0 } else { hover.idle.0 },
                             border: None,
+                            radial: None,
                         };
                         insert_primitive(&mut scene, at, layer, primitive);
                     }
@@ -1174,10 +1175,26 @@ fn mix(a: [u8; 4], b: [u8; 4], amount: f32) -> [u8; 4] {
 pub(super) fn fade(primitive: &mut Primitive, alpha: f32) {
     let fade = |c: &mut [u8; 4]| c[3] = (f32::from(c[3]) * alpha).round() as u8;
     match primitive {
-        Primitive::Rounded { fill, border, .. } => {
+        Primitive::Rounded {
+            fill,
+            border,
+            radial,
+            ..
+        } => {
             fade(fill);
             if let Some((c, _)) = border {
                 fade(c);
+            }
+            // The layers sit between the fill and the border, so they fade with them.
+            if let Some(layers) = radial {
+                *layers = layers
+                    .iter()
+                    .cloned()
+                    .map(|mut layer| {
+                        layer.stops.iter_mut().for_each(|(_, c)| fade(c));
+                        layer
+                    })
+                    .collect();
             }
         }
         Primitive::Text { color, shadow, .. } => {

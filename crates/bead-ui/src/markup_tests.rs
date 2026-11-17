@@ -1057,6 +1057,149 @@ fn shadow_table_defaults_extent_and_errors() {
     }
 }
 
+fn radial_scene(radial: &str) -> Result<Vec<Primitive>, Diagnostic> {
+    let f = fixture();
+    fs::write(
+        f.0.join("ui/main.luau"),
+        format!(
+            "local ui=require('bead.ui')\nreturn ui.Box{{id='b',width=48,height=48,radius=24,fill='surface',radial={radial}}}"
+        ),
+    )
+    .unwrap();
+    let mut session = f.session();
+    session.entry = "ui/main.luau".into();
+    session.reload().map(|scene| scene.primitives)
+}
+
+#[test]
+fn radial_layers_parse_into_the_box_and_every_bad_value_is_a_markup_error() {
+    let layers = |p: &[Primitive]| {
+        p.iter()
+            .find_map(|p| match p {
+                Primitive::Rounded { radial, .. } => radial.clone(),
+                _ => None,
+            })
+            .expect("a box with layers")
+    };
+    let stops = "{{0,'surface'},{0.6,{10,20,30,128}},{1,ui.alpha('surface',0.5)}}";
+    let one = |extra: &str, stops: &str| format!("{{{extra}stops={stops}}}");
+    let geometry = "cx=.5,cy=.5,rx=.5,ry=.5,";
+    let recipe = format!(
+        "{{{},{},{},{}}}",
+        one(geometry, stops),
+        one("cx=.3,cy=-1,rx=4,ry=.2,", stops),
+        one("cx=2,cy=1.1,rx=.1,ry=.1,", stops),
+        one(geometry, "{{0,'surface'},{1,'transparent'}}")
+    );
+    let parsed = layers(&radial_scene(&recipe).unwrap());
+    assert_eq!(parsed.len(), 4);
+    assert_eq!((parsed[1].cy, parsed[1].rx), (-1., 4.));
+    assert_eq!(parsed[0].stops.len(), 3);
+    assert_eq!(parsed[0].stops[1], (0.6, [10, 20, 30, 128]));
+    assert_eq!(parsed[3].stops[1].1, [0, 0, 0, 0]);
+    // Colours resolve like `fill`: the role and its alpha form agree.
+    assert_eq!(
+        parsed[0].stops[2].1[3],
+        (f64::from(parsed[0].stops[0].1[3]) * 0.5).round() as u8
+    );
+    // Absent is today's box: no layers, one plain fill.
+    let plain = fixture();
+    fs::write(
+        plain.0.join("ui/main.luau"),
+        "local ui=require('bead.ui')\nreturn ui.Box{id='b',width=48,height=48,radius=24,fill='surface'}",
+    )
+    .unwrap();
+    let mut session = plain.session();
+    session.entry = "ui/main.luau".into();
+    let scene = session.reload().unwrap().primitives;
+    assert!(scene.iter().all(|p| !matches!(
+        p,
+        Primitive::Rounded {
+            radial: Some(_),
+            ..
+        }
+    )));
+    let layer = |extra: &str, stops: &str| format!("{{{}}}", one(extra, stops));
+    let ok = "{{0,'surface'},{1,'surface'}}";
+    let seven = format!("{{{}}}", vec![one(geometry, ok); 7].join(","));
+    let nine = format!("{{{{0,'surface'}},{}}}", ["{1,'surface'}"; 8].join(","));
+    for (bad, message) in [
+        ("'x'".to_string(), "radial must be a list"),
+        (seven, "radial must be a list"),
+        ("{5}".into(), "radial[1] must be a table"),
+        (
+            layer("cx=.5,cy=.5,rx=.5,ry=.5,", "{{0,'surface'}}"),
+            "2..8 entries",
+        ),
+        (layer("cx=.5,cy=.5,rx=.5,ry=.5,", &nine), "2..8 entries"),
+        (
+            layer(
+                "cx=.5,cy=.5,rx=.5,ry=.5,",
+                "{{.5,'surface'},{.5,'surface'}}",
+            ),
+            "increasing offsets",
+        ),
+        (
+            layer(
+                "cx=.5,cy=.5,rx=.5,ry=.5,",
+                "{{.8,'surface'},{.2,'surface'}}",
+            ),
+            "increasing offsets",
+        ),
+        (
+            layer(
+                "cx=.5,cy=.5,rx=.5,ry=.5,",
+                "{{-.1,'surface'},{1,'surface'}}",
+            ),
+            "increasing offsets",
+        ),
+        (
+            layer(
+                "cx=.5,cy=.5,rx=.5,ry=.5,",
+                "{{0,'surface'},{1.5,'surface'}}",
+            ),
+            "increasing offsets",
+        ),
+        (
+            layer("cx=3,cy=.5,rx=.5,ry=.5,", ok),
+            "radial[1].cx must be a number",
+        ),
+        (
+            layer("cx=.5,cy=-1.5,rx=.5,ry=.5,", ok),
+            "radial[1].cy must be a number",
+        ),
+        (
+            layer("cx=.5,cy=.5,rx=0,ry=.5,", ok),
+            "radial[1].rx must be a number",
+        ),
+        (
+            layer("cx=.5,cy=.5,rx=.5,ry=5,", ok),
+            "radial[1].ry must be a number",
+        ),
+        (
+            layer("cx=.5,cy=.5,rx=.5,", ok),
+            "radial[1].ry must be a number",
+        ),
+        (
+            layer("cx=.5,cy=.5,rx=.5,ry=.5,glow=1,", ok),
+            "unknown radial[1] field glow",
+        ),
+        (
+            layer(
+                "cx=.5,cy=.5,rx=.5,ry=.5,",
+                "{{0,'nosuchrole'},{1,'surface'}}",
+            ),
+            "missing palette role nosuchrole",
+        ),
+    ] {
+        let error = radial_scene(&bad)
+            .err()
+            .unwrap_or_else(|| panic!("{bad} parsed"));
+        assert!(error.message.contains(message), "{bad}: {}", error.message);
+        assert_eq!(error.line, 2);
+    }
+}
+
 #[test]
 fn host_policy_resolves_staged_computed_values_and_reject_keeps_previous_state() {
     let f = fixture();
@@ -4678,6 +4821,7 @@ return ui.Column{id="gallery",width=420,height=520,gap=6,
                 radius,
                 fill,
                 border,
+                ..
             } if *rect == r => Some((*radius, *fill, *border)),
             _ => None,
         })

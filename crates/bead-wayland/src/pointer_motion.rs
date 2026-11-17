@@ -229,6 +229,7 @@ fn paint_child(
         radius,
         fill,
         border,
+        ..
     } = draw
     else {
         return Err("unsupported pointer paint".into());
@@ -317,12 +318,14 @@ fn same_skin(a: &bead_render::Primitive, b: &bead_render::Primitive) -> bool {
                 radius: ar,
                 fill: af,
                 border: ab,
+                radial: None,
             },
             bead_render::Primitive::Rounded {
                 rect: b,
                 radius: br,
                 fill: bf,
                 border: bb,
+                radial: None,
             },
         ) => a.y == b.y && a.w == b.w && a.h == b.h && ar == br && af == bf && ab == bb,
         _ => false,
@@ -831,6 +834,7 @@ mod tests {
             radius: 0.,
             fill,
             border: None,
+            radial: None,
         };
         // The retained parent starts at 100%; local label frames and delayed
         // service echoes do not necessarily update its slider geometry.
@@ -1024,6 +1028,7 @@ mod tests {
             radius: 3.,
             fill: [40, 220, 120, 255],
             border: None,
+            radial: None,
         };
         let spec = DragVisual {
             id: "slider.thumb".into(),
@@ -1103,6 +1108,7 @@ mod tests {
                 radius: 3.,
                 fill: [40, 180, 120, 255],
                 border: None,
+                radial: None,
             }],
             offset: (32., 32.),
             bounds: Rect::new(-32., -32., 500., 900.),

@@ -1572,6 +1572,7 @@ mod tests {
                 radius: 0.,
                 fill: [200, 0, 0, 255],
                 border: None,
+                radial: None,
             }],
             offset,
             bounds: Rect::new(-32., -32., 1984., 1144.),
@@ -1638,6 +1639,7 @@ mod tests {
             radius: 0.,
             fill: [200, 0, 0, 255],
             border: None,
+            radial: None,
         }];
         let unbounded = visible_bounds(&prepared, None).unwrap();
         let open = visible_bounds(&prepared, Some((1920, 1080))).unwrap();

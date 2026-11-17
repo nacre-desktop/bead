@@ -592,6 +592,7 @@ impl Renderer for GpuRenderer {
                 radius: 0.,
                 fill: [0; 4],
                 border: None,
+                radial: None,
             };
         };
         let mut below = scene.clone();
@@ -761,6 +762,7 @@ mod tests {
             radius: 0.,
             fill: [10, 200, 30, 255],
             border: None,
+            radial: None,
         });
         scene
     }

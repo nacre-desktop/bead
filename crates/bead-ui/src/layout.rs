@@ -128,6 +128,7 @@ pub const PROPERTIES: &[&str] = &[
     "scroll_steps",
     "scrollbar",
     "fill",
+    "radial",
     "color",
     "border_color",
     "border_width",
@@ -249,6 +250,8 @@ pub struct ViewSpec {
     /// The fill amount is an animation marker: draw the box even while it is transparent,
     /// so the paint patch has a primitive to recolour.
     pub animated_fill: bool,
+    /// B0331: gradient layers over `fill`; geometry is checked, stop colours resolve at layout.
+    pub radial: Vec<RadialSpec>,
     pub color: Option<Json>,
     pub border_color: Option<Json>,
     pub border_width: f32,
@@ -533,6 +536,76 @@ pub struct ShadowStyle {
     pub spread: f32,
     pub dy: f32,
     pub alpha: f32,
+}
+pub struct RadialSpec {
+    geometry: [f32; 4],
+    stops: Vec<(f32, Json)>,
+}
+/// The `radial` prop (B0331): up to 6 layers `{cx, cy, rx, ry, stops = {{offset, color}, ...}}`.
+fn radial_layers(p: &Props<'_>, source: &Source) -> Result<Vec<RadialSpec>, Diagnostic> {
+    let layers = match p.get("radial") {
+        None => return Ok(Vec::new()),
+        Some(Json::Array(layers)) if layers.len() <= 6 => layers,
+        Some(_) => return Err(source.error("radial must be a list of 1..6 layer tables")),
+    };
+    let mut out = Vec::with_capacity(layers.len());
+    for (n, layer) in layers.iter().enumerate() {
+        let n = n + 1;
+        let Json::Object(table) = layer else {
+            return Err(source.error(format!(
+                "radial[{n}] must be a table {{cx, cy, rx, ry, stops}}"
+            )));
+        };
+        if let Some(key) = table
+            .keys()
+            .find(|k| !matches!(k.as_str(), "cx" | "cy" | "rx" | "ry" | "stops"))
+        {
+            return Err(source.error(format!("unknown radial[{n}] field {key}")));
+        }
+        let mut geometry = [0.; 4];
+        for (slot, (key, range)) in geometry.iter_mut().zip([
+            ("cx", -1.0..=2.),
+            ("cy", -1.0..=2.),
+            ("rx", 0.0..=4.),
+            ("ry", 0.0..=4.),
+        ]) {
+            let radius = key.starts_with('r');
+            *slot = table
+                .get(key)
+                .and_then(Json::as_f64)
+                .filter(|v| range.contains(v) && !(radius && *v == 0.))
+                .ok_or_else(|| {
+                    source.error(format!(
+                        "radial[{n}].{key} must be a number {}",
+                        if radius { "above 0 up to 4" } else { "-1..2" }
+                    ))
+                })? as f32;
+        }
+        let bad = || {
+            source.error(format!("radial[{n}].stops must be 2..8 entries {{offset 0..1, color}} with increasing offsets"))
+        };
+        let Some(Json::Array(list)) = table.get("stops") else {
+            return Err(bad());
+        };
+        if !(2..=8).contains(&list.len()) {
+            return Err(bad());
+        }
+        let mut stops = Vec::with_capacity(list.len());
+        let mut previous = -1.;
+        for stop in list {
+            let [at, color] = stop.as_array().map(Vec::as_slice).unwrap_or_default() else {
+                return Err(bad());
+            };
+            let at = at
+                .as_f64()
+                .filter(|at| (0. ..=1.).contains(at) && *at > previous)
+                .ok_or_else(bad)?;
+            previous = at;
+            stops.push((at as f32, color.clone()));
+        }
+        out.push(RadialSpec { geometry, stops });
+    }
+    Ok(out)
 }
 fn shadow_style(
     p: &Props<'_>,
@@ -1175,6 +1248,7 @@ impl ViewSpec {
                     .and_then(|v| v.get("alpha"))
                     .and_then(marker)
                     .is_some(),
+                radial: radial_layers(p, source)?,
                 color: p.get("color").cloned(),
                 border_color: p.get("border_color").cloned(),
                 drag: boolean(p, "drag", false, source)?,
@@ -1654,7 +1728,32 @@ pub fn layout(
             })
             .map(|(c, w)| c.map(|c| (c, w)))
             .transpose()?;
-        if view.kind != Widget::Polyline && (fill[3] > 0 || border.is_some() || view.animated_fill)
+        let radial = if view.radial.is_empty() {
+            None
+        } else {
+            Some(
+                view.radial
+                    .iter()
+                    .map(|layer| {
+                        let [cx, cy, rx, ry] = layer.geometry;
+                        let stops = layer
+                            .stops
+                            .iter()
+                            .map(|(at, c)| Ok((*at, color(Some(c), [0; 4], palette, source)?)))
+                            .collect::<Result<_, Diagnostic>>()?;
+                        Ok(bead_render::RadialLayer {
+                            cx,
+                            cy,
+                            rx,
+                            ry,
+                            stops,
+                        })
+                    })
+                    .collect::<Result<std::sync::Arc<[_]>, Diagnostic>>()?,
+            )
+        };
+        if view.kind != Widget::Polyline
+            && (fill[3] > 0 || border.is_some() || view.animated_fill || radial.is_some())
         {
             emit(
                 Primitive::Rounded {
@@ -1662,6 +1761,7 @@ pub fn layout(
                     radius: view.radius,
                     fill,
                     border,
+                    radial,
                 },
                 Some(0.),
             );
@@ -1815,6 +1915,7 @@ pub fn layout(
                     radius: 0.,
                     fill: [0, 0, 0, 0],
                     border: None,
+                    radial: None,
                 },
                 bind: BTreeMap::new(),
                 visible: None,

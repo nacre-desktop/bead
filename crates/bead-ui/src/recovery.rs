@@ -21,6 +21,7 @@ pub fn safe_bar(palette: &Palette) -> Scene {
                 radius: 0.,
                 fill: palette.get("surface").unwrap_or([20, 20, 20, 255]),
                 border: None,
+                radial: None,
             },
             Primitive::Text {
                 rect: Rect::new(16., 8., 1000., 36.),

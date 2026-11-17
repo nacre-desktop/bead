@@ -858,12 +858,22 @@ pub(crate) fn hash_primitive(primitive: &Primitive, at_origin: bool, hash: &mut 
             radius,
             fill,
             border,
+            radial,
         } => {
             rect(r, hash);
             (radius.to_bits(), fill).hash(hash);
             border
                 .map(|(color, width)| (color, width.to_bits()))
                 .hash(hash);
+            // Absent layers hash nothing, so a plain box keeps its signature.
+            for layer in radial.iter().flat_map(|layers| layers.iter()) {
+                for value in [layer.cx, layer.cy, layer.rx, layer.ry] {
+                    value.to_bits().hash(hash);
+                }
+                for (offset, color) in &layer.stops {
+                    (offset.to_bits(), color).hash(hash);
+                }
+            }
         }
         Primitive::Text {
             weight,
@@ -2291,7 +2301,15 @@ impl TreeCache {
             } else {
                 None
             };
-            let raster = if kind == "fill"
+            // B0331: a box with radial layers is a raster item like text and shadows.
+            let gradient = matches!(
+                primitive,
+                Primitive::Rounded {
+                    radial: Some(_),
+                    ..
+                }
+            );
+            let raster = if (kind == "fill" && !gradient)
                 || kind == "arc"
                 || kind == "polyline"
                 || kind == "graph"
@@ -5239,12 +5257,14 @@ mod tests {
                 radius: 12.,
                 fill: [25, 40, 70, 112],
                 border: None,
+                radial: None,
             },
             Primitive::Rounded {
                 rect: Rect::new(80., 100., 260., 34.),
                 radius: 9999.,
                 fill: [210, 40, 70, 220],
                 border: Some(([255, 255, 255, 180], 2.)),
+                radial: None,
             },
         ];
         let mut cache = TreeCache::default();
@@ -5361,6 +5381,7 @@ mod tests {
                                     radius: 0.,
                                     fill: [20, 30, 40, 255],
                                     border: None,
+                                    radial: None,
                                 },
                                 clip: None,
                                 raster: None,
@@ -5513,6 +5534,7 @@ mod tests {
                 radius: 6.,
                 fill: [70, 80, 90, 255],
                 border: Some(([200, 30, 40, 255], 2.)),
+                radial: None,
             }],
             input_islands: None,
             key_repeat: None,
@@ -5603,6 +5625,7 @@ mod tests {
                 radius: 0.,
                 fill: color,
                 border: None,
+                radial: None,
             });
         }
         scene
@@ -5613,6 +5636,7 @@ mod tests {
             radius: 0.,
             fill: [0, 255, 255, 255],
             border: None,
+            radial: None,
         });
         let mut cache = TreeCache::default();
         cache.prepare(&scene, 1.).unwrap();
@@ -5632,6 +5656,7 @@ mod tests {
                     radius: 0.,
                     fill: [0; 4],
                     border: None,
+                    radial: None,
                 },
                 clip: None,
                 raster: Some(Arc::new(Raster {
@@ -6071,6 +6096,7 @@ mod tests {
                     radius: 12.,
                     fill: [30, 30, 40, 255],
                     border: None,
+                    radial: None,
                 },
             ],
             offset: (32., 32.),
@@ -6187,6 +6213,7 @@ mod tests {
                     radius: 12.,
                     fill: [30, 30, 40, 255],
                     border: None,
+                    radial: None,
                 },
             ],
             offset: (32., 32.),
@@ -6320,6 +6347,7 @@ mod tests {
             radius: 0.,
             fill: [41, 100, 30, 255],
             border: None,
+            radial: None,
         };
         assert!(!renderer.reusable_scene(&changed, 1.).unwrap());
         assert!(!renderer.reusable_scene(&scene, 1.5).unwrap());
@@ -6331,6 +6359,7 @@ mod tests {
             radius: 6.,
             fill,
             border,
+            radial: None,
         };
         let mut scene = Scene {
             opacity: 1.,
@@ -6646,6 +6675,7 @@ mod tests {
             radius: 6.,
             fill: [20, 160, 90, 255],
             border: None,
+            radial: None,
         };
         let mut stale = TreeCpuRenderer::default();
         draw_plain(&mut stale, &rest);
@@ -6694,6 +6724,7 @@ mod tests {
                 radius: 6.,
                 fill: [20, 160, 90, 255],
                 border: None,
+                radial: None,
             };
             let repaired = draw(&mut renderer, &changed);
             assert_eq!(renderer.slide_layer_builds, 1, "open={open}");
@@ -7190,6 +7221,7 @@ mod tests {
                         radius: 0.,
                         fill: [0; 4],
                         border: None,
+                        radial: None,
                     },
                     clip: None,
                     raster: Some(Arc::new(Raster {
@@ -7412,6 +7444,154 @@ mod tests {
         assert_eq!(after.items[1].raster.as_ref().unwrap().base_key, None);
     }
 
+    fn layer(cx: f32, cy: f32, rx: f32, ry: f32, from: [u8; 4], to: [u8; 4]) -> crate::RadialLayer {
+        crate::RadialLayer {
+            cx,
+            cy,
+            rx,
+            ry,
+            stops: vec![(0., from), (1., to)],
+        }
+    }
+    fn pixel(pix: &Pixmap, x: u32, y: u32) -> [u8; 4] {
+        let p = pix.pixel(x, y).unwrap().demultiply();
+        [p.red(), p.green(), p.blue(), p.alpha()]
+    }
+    const RED: [u8; 4] = [255, 0, 0, 255];
+    const RED_CLEAR: [u8; 4] = [255, 0, 0, 0];
+    fn radial(rect: Rect, radius: f32, layers: &[crate::RadialLayer]) -> Pixmap {
+        crate::radial_raster(rect, radius, [0; 4], None, layers, 1.).unwrap()
+    }
+    #[test]
+    fn a_radial_layer_fades_from_its_centre_and_is_clipped_to_the_radius() {
+        // 41 px: the centre is a pixel centre, so its pixel is exactly the first stop.
+        let rect = Rect::new(0., 0., 41., 41.);
+        let pix = radial(rect, 0., &[layer(0.5, 0.5, 0.5, 0.5, RED, RED_CLEAR)]);
+        let centre = pixel(&pix, 20, 20);
+        assert!(
+            centre[0] >= 254 && centre[1] <= 1 && centre[3] >= 254,
+            "{centre:?}"
+        );
+        assert!(pixel(&pix, 0, 20)[3] <= 8 && pixel(&pix, 40, 40)[3] == 0);
+        // The corner pixel of a rounded box is outside the shape even for a layer that covers it.
+        let solid = layer(0.5, 0.5, 4., 4., RED, RED);
+        let round = radial(rect, 12., std::slice::from_ref(&solid));
+        assert_eq!(pixel(&round, 0, 0)[3], 0);
+        assert_eq!(pixel(&round, 20, 20), RED);
+        assert_eq!(pixel(&radial(rect, 0., &[solid]), 0, 0), RED);
+    }
+    #[test]
+    fn an_elliptical_radial_layer_is_wider_than_tall_and_later_layers_paint_over_earlier_ones() {
+        let rect = Rect::new(0., 0., 60., 60.);
+        let pix = radial(rect, 0., &[layer(0.5, 0.5, 0.5, 0.2, RED, RED_CLEAR)]);
+        // 20 px from the centre: inside the 30 px horizontal radius, outside the 12 px vertical one.
+        assert!(pixel(&pix, 50, 30)[3] > 40);
+        assert!(pixel(&pix, 30, 50)[3] == 0);
+        let blue = [0, 0, 255, 255];
+        let both = radial(
+            rect,
+            0.,
+            &[
+                layer(0.5, 0.5, 4., 4., RED, RED),
+                layer(0.5, 0.5, 4., 4., blue, blue),
+            ],
+        );
+        assert_eq!(pixel(&both, 30, 30), blue);
+        let swapped = radial(
+            rect,
+            0.,
+            &[
+                layer(0.5, 0.5, 4., 4., blue, blue),
+                layer(0.5, 0.5, 4., 4., RED, RED),
+            ],
+        );
+        assert_eq!(pixel(&swapped, 30, 30), RED);
+        // A layer is drawn over the solid fill.
+        let filled = crate::radial_raster(
+            rect,
+            0.,
+            [0, 255, 0, 255],
+            None,
+            &[layer(0.5, 0.5, 0.2, 0.2, RED, RED_CLEAR)],
+            1.,
+        )
+        .unwrap();
+        assert_eq!(pixel(&filled, 0, 0), [0, 255, 0, 255]);
+        assert!(pixel(&filled, 30, 30)[0] > 230);
+    }
+    #[test]
+    fn a_pearl_sized_radial_raster_is_cheap() {
+        let rect = Rect::new(0., 0., 48., 48.);
+        let stops = |a: u8| {
+            vec![
+                (0., [255, 255, 255, a]),
+                (0.6, [200, 180, 220, a / 2]),
+                (1., [0, 0, 0, 0]),
+            ]
+        };
+        let layers: Vec<_> = (0..4)
+            .map(|i| crate::RadialLayer {
+                cx: 0.3 + 0.1 * i as f32,
+                cy: 0.3,
+                rx: 0.6,
+                ry: 0.5,
+                stops: stops(200 - 30 * i),
+            })
+            .collect();
+        let started = std::time::Instant::now();
+        for _ in 0..50 {
+            crate::radial_raster(
+                rect,
+                24.,
+                [20, 20, 30, 255],
+                Some(([255; 4], 1.)),
+                &layers,
+                1.,
+            )
+            .unwrap();
+        }
+        let each = started.elapsed().as_secs_f64() * 1000. / 50.;
+        eprintln!("RADIAL_RASTER_MS 48px 4 layers: {each:.3}");
+        assert!(each < 20., "{each} ms");
+    }
+    #[test]
+    fn radial_boxes_are_raster_items_keyed_by_stop_colour_and_identical_boxes_share_one() {
+        let mut view = scene();
+        view.layers.clear();
+        let make = |x: f32, to: [u8; 4]| Primitive::Rounded {
+            rect: Rect::new(x, 0., 20., 20.),
+            radius: 10.,
+            fill: [0; 4],
+            border: None,
+            radial: Some(Arc::from(vec![layer(0.5, 0.5, 0.5, 0.5, RED, to)])),
+        };
+        let plain = Primitive::rounded(Rect::new(0., 24., 20., 20.), 4., [1, 2, 3, 255]);
+        view.primitives = vec![make(0., RED_CLEAR), make(30., RED_CLEAR), plain];
+        let mut cache = TreeCache::default();
+        cache.prepare(&view, 1.).unwrap();
+        let frame = cache.frame.as_ref().unwrap().clone();
+        let (a, b) = (
+            frame.items[0].raster.as_ref().unwrap(),
+            frame.items[1].raster.as_ref().unwrap(),
+        );
+        assert_eq!(cache.builds, 1);
+        assert!(Arc::ptr_eq(&a.pixels, &b.pixels));
+        assert_eq!(a.key, b.key);
+        assert!(
+            frame.items[2].raster.is_none(),
+            "a plain box stays a direct fill"
+        );
+        view.primitives[1] = make(30., [255, 0, 0, 128]);
+        cache.prepare(&view, 1.).unwrap();
+        let after = cache.frame.as_ref().unwrap();
+        let (a2, b2) = (
+            after.items[0].raster.as_ref().unwrap(),
+            after.items[1].raster.as_ref().unwrap(),
+        );
+        assert_ne!(a2.key, b2.key);
+        assert!(!Arc::ptr_eq(&a2.pixels, &b2.pixels));
+        assert_eq!(a2.key, a.key);
+    }
     #[test]
     fn scroll_thumb_frames_reuse_the_content_and_equal_a_full_prepare() {
         // Content: an image row, an unowned fill, a clipped child text; then one thumb layer.
@@ -7443,6 +7623,7 @@ mod tests {
                     radius: 1.5,
                     fill: [200, 200, 200, alpha],
                     border: None,
+                    radial: None,
                 });
                 scene.clips.insert(3, Rect::new(0., 0., 24., 20.));
                 scene.layers.push(crate::SceneLayer {
@@ -7740,6 +7921,7 @@ mod tests {
                     radius: 0.,
                     fill: [40, 100, 30, 255],
                     border: None,
+                    radial: None,
                 },
             ],
             offset: (0., 0.),
@@ -8386,6 +8568,7 @@ mod tests {
                 radius: 1.,
                 fill: [20, 40, 80, 255],
                 border: None,
+                radial: None,
             },
             Primitive::Text {
                 rect: Rect::new(2., 12., 18., 8.),
@@ -8727,12 +8910,14 @@ mod tests {
             radius: 0.,
             fill: [1, 2, 3, 255],
             border: None,
+            radial: None,
         };
         let last = Primitive::Rounded {
             rect: Rect::new(1., 1., 3., 2.),
             radius: 0.,
             fill: [4, 5, 6, 255],
             border: None,
+            radial: None,
         };
         pose.motion = Some(crate::Motion {
             id: "fingerprint-reveal".into(),
@@ -8805,6 +8990,7 @@ mod tests {
                 radius: 0.,
                 fill: [20, 25, 35, 160],
                 border: None,
+                radial: None,
             },
         );
         scene.offset = (0., 0.);
@@ -8955,12 +9141,14 @@ mod tests {
                 radius: 9.,
                 fill: [40, 70, 100, 255],
                 border: Some(([200, 30, 40, 180], 2.)),
+                radial: None,
             },
             Primitive::Rounded {
                 rect: Rect::new(30., 20., 20., 16.),
                 radius: 4.,
                 fill: [80, 20, 140, 100],
                 border: None,
+                radial: None,
             },
         ];
         for scale in [1_f32, 1.25, 1.5, 2.] {
@@ -9695,12 +9883,14 @@ mod tests {
                 radius,
                 fill: [30, 30, 40, 255],
                 border: None,
+                radial: None,
             },
             Primitive::Rounded {
                 rect: Rect::new(body.x + 16., body.y + 16., 80., 24.),
                 radius: 6.,
                 fill: [200, 80, 80, 255],
                 border: None,
+                radial: None,
             },
         ];
         scene.clips = BTreeMap::from([

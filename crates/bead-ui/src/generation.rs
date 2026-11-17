@@ -1012,6 +1012,7 @@ impl Generation {
                     radius: 8.,
                     fill: [0, 0, 0, 0],
                     border: Some((palette.get("primary").unwrap_or([200, 200, 200, 255]), 1.)),
+                    radial: None,
                 });
                 if let Some(clip) = node.clip {
                     result.scene.clips.insert(index, clip);

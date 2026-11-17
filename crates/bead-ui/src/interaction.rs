@@ -1266,6 +1266,7 @@ impl Session {
                     radius: 1.,
                     fill: highlight_fill,
                     border: None,
+                    radial: None,
                 },
             );
             for layer in &mut scene.layers {
@@ -1299,6 +1300,7 @@ impl Session {
                 .get("onSurface")
                 .unwrap_or([220, 220, 220, 255]),
             border: None,
+            radial: None,
         });
         Ok(())
     }

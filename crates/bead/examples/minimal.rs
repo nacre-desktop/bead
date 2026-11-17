@@ -19,6 +19,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             radius: 12.,
             fill: [40, 70, 90, 255],
             border: None,
+            radial: None,
         }],
         input_islands: None,
         key_repeat: None,

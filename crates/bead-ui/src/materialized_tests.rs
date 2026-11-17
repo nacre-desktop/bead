@@ -717,6 +717,33 @@ fn fade_scales_an_untinted_image_opacity_and_a_shadow_alpha_but_leaves_a_tint_to
 }
 
 #[test]
+fn fade_scales_every_radial_stop_alpha_with_the_fill() {
+    let stops = vec![(0., [255, 0, 0, 200]), (1., [0, 0, 255, 100])];
+    let layer = bead_render::RadialLayer {
+        cx: 0.5,
+        cy: 0.5,
+        rx: 0.5,
+        ry: 0.5,
+        stops,
+    };
+    let mut primitive =
+        Primitive::rounded(bead_render::Rect::new(0., 0., 8., 8.), 2., [9, 9, 9, 100]);
+    if let Primitive::Rounded { radial, .. } = &mut primitive {
+        *radial = Some(std::sync::Arc::from(vec![layer]));
+    }
+    crate::materialized::fade(&mut primitive, 0.5);
+    let Primitive::Rounded { fill, radial, .. } = primitive else {
+        unreachable!()
+    };
+    assert_eq!(fill[3], 50);
+    let stops = &radial.unwrap()[0].stops;
+    assert_eq!(
+        (stops[0].1, stops[1].1),
+        ([255, 0, 0, 100], [0, 0, 255, 50])
+    );
+}
+
+#[test]
 fn pressed_view_scales_and_deepens_its_fill_until_release_without_luau() {
     let view = r#"local ui=require('bead.ui')
 return ui.Column{id='root',width=200,height=100,fill='surface',

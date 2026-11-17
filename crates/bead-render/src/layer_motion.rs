@@ -196,6 +196,7 @@ fn inferred_reveal_contour(
                 radius,
                 fill,
                 border,
+                ..
             } => Some((*index, *rect, *radius, *fill, *border)),
             _ => None,
         });
@@ -212,6 +213,7 @@ fn inferred_reveal_contour(
                     radius,
                     fill,
                     border,
+                    ..
                 } if rect.w > 0. && rect.h > 0. => Some((index, *rect, *radius, *fill, *border)),
                 _ => None,
             });
@@ -1061,6 +1063,7 @@ mod tests {
                 radius: 6.,
                 fill: [35, 80, 120, 255],
                 border: None,
+                radial: None,
             }],
             offset: (0., 0.),
             bounds: Rect::new(0., 0., 96., 72.),
@@ -1881,6 +1884,7 @@ mod tests {
             radius: 1.,
             fill: [220, 70, 30, 255],
             border: None,
+            radial: None,
         }];
 
         // A 32x32 open-pose atlas clips this item completely, while the CPU
@@ -1920,6 +1924,7 @@ mod tests {
             radius: 1.,
             fill: [220, 70, 30, 255],
             border: Some(([255, 255, 255, 255], 4.)),
+            radial: None,
         }];
 
         let ink = scene_ink_bounds(&scene, 1., scene.offset).unwrap();
@@ -1995,6 +2000,7 @@ mod tests {
             radius: 1.,
             fill: [255; 4],
             border: None,
+            radial: None,
         }];
         assert!(scene_ink_bounds(&scene, 1., scene.offset).is_none());
 
@@ -2004,12 +2010,14 @@ mod tests {
                 radius: 1.,
                 fill: [255; 4],
                 border: None,
+                radial: None,
             },
             Primitive::Rounded {
                 rect: Rect::new(f32::MAX * 0.75, 0., 0., 8.),
                 radius: 1.,
                 fill: [255; 4],
                 border: None,
+                radial: None,
             },
         ];
         assert!(scene_ink_bounds(&scene, 1., scene.offset).is_none());
@@ -2112,6 +2120,7 @@ mod tests {
             radius: 1.,
             fill: [220, 70, 30, 255],
             border: None,
+            radial: None,
         }];
         let mut renderer = CountPaint {
             renderer: TreeCpuRenderer::default(),
