@@ -106,12 +106,60 @@ pub(crate) struct PaletteTween {
     steps: Vec<(f64, f32)>,
     next: usize,
     generation: u64,
+    /// Clock times (seconds): the tween's start and the last fade frame that served it.
+    started: f64,
+    last_frame: f64,
+}
+/// Fade frames arrive every refresh; a gap this long means they stopped (hidden surface).
+const FRAMES_STOPPED_AFTER: f64 = 0.05;
+impl PaletteTween {
+    pub(crate) fn new(
+        from: PaletteMap,
+        to: PaletteMap,
+        spec: WallpaperFade,
+        started: f64,
+        generation: u64,
+    ) -> Self {
+        Self {
+            from,
+            to,
+            steps: palette_schedule(f64::from(spec.duration_ms) / 1000., spec.curve),
+            next: 0,
+            generation,
+            started,
+            last_frame: f64::NEG_INFINITY,
+        }
+    }
+    /// The palette to show at clock `now` and the wait until the following step (`None`: it was the
+    /// last). A step that is overdue is skipped for the newest due one: it shows the colour the
+    /// wallpaper has reached. `None` when no step is due.
+    fn advance(&mut self, now: f64) -> Option<(PaletteMap, Option<f64>)> {
+        let elapsed = now - self.started;
+        let due = self.next
+            + self.steps[self.next..]
+                .iter()
+                .rposition(|(at, _)| *at <= elapsed)?;
+        self.next = due + 1;
+        let wait = self
+            .steps
+            .get(self.next)
+            .map(|(at, _)| (at - elapsed).max(0.));
+        Some((mix_palette(&self.from, &self.to, self.steps[due].1), wait))
+    }
+    /// Fade frames are flowing: they apply the steps, the timer only backs them up.
+    fn frames_flow(&self, now: f64) -> bool {
+        now - self.last_frame < FRAMES_STOPPED_AFTER
+    }
+    /// Seconds until the next step is due, at least a refresh while frames serve it.
+    fn retry_after(&self, now: f64) -> f64 {
+        (self.steps[self.next].0 + self.started - now).max(0.01)
+    }
 }
 
 /// B0315: what the main thread did between fade frames. For the largest gap between two commits
 /// it keeps the thread CPU time spent outside the fade frames (bar and panel repaints, palette
-/// steps, any other callback): near the gap means our main thread, near 0 means the compositor
-/// or the GPU. Two clock reads per frame, no allocation.
+/// steps, any other callback): near the gap means our main thread, near 0 means waiting
+/// (compositor, GPU or a blocking call). Two clock reads per frame, no allocation.
 #[derive(Default)]
 pub(crate) struct GapProbe {
     last: Option<(f64, u64)>,
@@ -258,39 +306,58 @@ impl App {
         let from = self.wallpaper_palette.clone().unwrap_or_else(|| to.clone());
         self.palette_tween_generation += 1;
         let generation = self.palette_tween_generation;
-        let steps = palette_schedule(f64::from(spec.duration_ms) / 1000., spec.curve);
-        let first = steps[0].0;
-        self.palette_tween = Some(PaletteTween {
-            from,
-            to,
-            steps,
-            next: 0,
-            generation,
-        });
+        let now = self.started.elapsed().as_secs_f64();
+        let tween = PaletteTween::new(from, to, spec, now, generation);
+        let first = tween.steps[0].0;
+        self.palette_tween = Some(tween);
         self.schedule_palette_step(first, generation);
     }
 
     fn schedule_palette_step(&self, after: f64, generation: u64) {
         let _ = self.loop_handle.clone().insert_source(
             Timer::from_duration(Duration::from_secs_f64(after)),
-            move |_, _, app| match app.palette_tween_step(generation) {
+            move |_, _, app| match app.palette_tween_timer(generation) {
                 Some(wait) => TimeoutAction::ToDuration(Duration::from_secs_f64(wait)),
                 None => TimeoutAction::Drop,
             },
         );
     }
 
-    /// Apply the next step; the wait until the one after it, if any.
-    fn palette_tween_step(&mut self, generation: u64) -> Option<f64> {
+    /// The timer drives the steps when no fade frame does (a cut on another output, a hidden
+    /// surface); while frames flow it only waits. The wait until it looks again, if any.
+    fn palette_tween_timer(&mut self, generation: u64) -> Option<f64> {
+        let now = self.started.elapsed().as_secs_f64();
         let tween = self
             .palette_tween
             .as_mut()
             .filter(|t| t.generation == generation)?;
-        let (at, mix) = tween.steps[tween.next];
-        let palette = mix_palette(&tween.from, &tween.to, mix);
-        tween.next += 1;
-        let wait = tween.steps.get(tween.next).map(|(next, _)| next - at);
-        if wait.is_none() {
+        let Some((palette, wait)) = (!tween.frames_flow(now))
+            .then(|| tween.advance(now))
+            .flatten()
+        else {
+            return Some(tween.retry_after(now));
+        };
+        self.apply_tween_step(palette, wait.is_none());
+        wait
+    }
+
+    /// B0315: a due step runs right after a fade frame was submitted, so its repaint uses the
+    /// slack of the frame budget instead of competing with the next frame. The last frame of the
+    /// last fade completes the tween.
+    pub(super) fn palette_step_after_frame(&mut self) {
+        let now = self.started.elapsed().as_secs_f64();
+        let fading = self.wallpaper_surfaces.iter().any(|s| s.fade.is_some());
+        let Some(tween) = self.palette_tween.as_mut() else {
+            return;
+        };
+        tween.last_frame = now;
+        if let Some((palette, wait)) = tween.advance(if fading { now } else { f64::INFINITY }) {
+            self.apply_tween_step(palette, wait.is_none());
+        }
+    }
+
+    fn apply_tween_step(&mut self, palette: PaletteMap, last: bool) {
+        if last {
             self.palette_tween = None;
         }
         self.palette_tween_until = self.started.elapsed().as_secs_f64() + 1.;
@@ -302,7 +369,6 @@ impl App {
             run.palette_steps += 1;
         }
         self.apply_palette_step(palette);
-        wait
     }
 
     /// One palette step through the same recipients as a fenced change, without the fence.
@@ -624,6 +690,7 @@ impl App {
         if !running {
             self.finish_wallpaper_fade(index);
         }
+        self.palette_step_after_frame();
         true
     }
 
@@ -864,6 +931,82 @@ mod tests {
         p.committed(0.024, 13 * ms, 15 * ms);
         p.committed(0.032, 30 * ms, 31 * ms);
         assert!((p.other_ms() - 9.).abs() < 1e-9);
+    }
+    fn tween(from: u8, to: u8, started: f64) -> PaletteTween {
+        PaletteTween::new(
+            palette([from, 0, 0, 255]),
+            palette([to, 0, 0, 255]),
+            WallpaperFade::default(),
+            started,
+            1,
+        )
+    }
+    #[test]
+    fn a_step_due_during_a_fade_is_applied_after_a_frame_not_by_the_timer() {
+        let mut t = tween(0, 200, 10.);
+        assert!(t.advance(10.06).is_none(), "the first step is due at 70 ms");
+        t.last_frame = 10.065;
+        assert!(t.frames_flow(10.07), "frames flow: the timer defers");
+        assert!(t.retry_after(10.07) >= 0.01, "and looks again soon");
+        let (colour, wait) = t.advance(10.073).expect("the frame applies the due step");
+        assert!(colour["accent"][0] > 0 && colour["accent"][0] < 100);
+        assert!(
+            (wait.unwrap() - 0.067).abs() < 1e-6,
+            "wait for the second step"
+        );
+        assert!(t.advance(10.074).is_none(), "applied once");
+        assert!(!t.frames_flow(10.2), "frames stopped: the timer takes over");
+    }
+    #[test]
+    fn without_a_fade_the_timer_runs_every_step_and_ends_exactly_on_the_target() {
+        let mut t = tween(0, 200, 0.);
+        let times: Vec<f64> = t.steps.iter().map(|(at, _)| *at).collect();
+        let mut applied = Vec::new();
+        for (k, at) in times.iter().enumerate() {
+            let (colour, wait) = t.advance(*at).expect("a step is due at its time");
+            assert_eq!(wait.is_none(), k == PALETTE_STEPS - 1);
+            applied.push(colour["accent"][0]);
+        }
+        assert_eq!(applied.len(), PALETTE_STEPS);
+        assert!(applied.windows(2).all(|w| w[0] < w[1] || w[1] == 200));
+        assert_eq!(applied[PALETTE_STEPS - 1], 200, "exactly the new palette");
+    }
+    #[test]
+    fn a_late_step_skips_the_overdue_ones_and_the_last_frame_completes_the_tween() {
+        let mut t = tween(0, 200, 0.);
+        let (_, wait) = t.advance(0.5).unwrap();
+        assert_eq!(
+            t.next, 7,
+            "steps 1 to 6 were overdue, the one at 490 ms ran"
+        );
+        assert!((wait.unwrap() - 0.06).abs() < 1e-6);
+        let (colour, wait) = t.advance(f64::INFINITY).unwrap();
+        assert_eq!(colour, palette([200, 0, 0, 255]));
+        assert!(wait.is_none());
+    }
+    #[test]
+    fn a_retarget_mid_tween_continues_from_the_colour_on_screen() {
+        let mut first = tween(0, 200, 0.);
+        let (shown, _) = first.advance(0.35).unwrap();
+        let mid = shown["accent"][0];
+        assert!(mid > 0 && mid < 200);
+        // start_palette_tween builds the next tween from the palette that is applied.
+        let mut next = PaletteTween::new(
+            shown,
+            palette([50, 0, 0, 255]),
+            WallpaperFade::default(),
+            0.35,
+            2,
+        );
+        let (step, _) = next.advance(0.35 + 0.071).unwrap();
+        let moved = i32::from(step["accent"][0]) - i32::from(mid);
+        let towards = 50 - i32::from(mid);
+        assert!(
+            (towards..=0).contains(&moved),
+            "the first step moves from the shown colour towards the target"
+        );
+        let (last, _) = next.advance(f64::INFINITY).unwrap();
+        assert_eq!(last, palette([50, 0, 0, 255]));
     }
     #[test]
     fn a_staged_or_live_change_tweens_only_when_a_fade_runs_and_nothing_older_waits() {
