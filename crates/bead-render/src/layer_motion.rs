@@ -1039,6 +1039,7 @@ mod tests {
             offset: (0., 0.),
             bounds: Rect::new(0., 0., 96., 72.),
             input_islands: None,
+            key_repeat: None,
         }
     }
 

@@ -150,6 +150,7 @@ pub const PROPERTIES: &[&str] = &[
     "transition",
     "duration",
     "return_duration",
+    "key_repeat",
     "return_transition",
     "slide_distance",
     "fade",
@@ -249,6 +250,8 @@ pub struct ViewSpec {
     pub body: Option<String>,
     /// Root only, `input = "children"` (B0321): the surface takes input on the root's direct children only.
     pub input_children: bool,
+    /// Root `Panel` only (B0322): the held-key repeat schedule.
+    pub key_repeat: Option<bead_render::KeyRepeat>,
     /// The edge this box is attached to: its two corners there are square at `join` = 1.
     pub join_edge: Option<bead_core::Edge>,
     pub join: f32,
@@ -396,6 +399,53 @@ fn boolean(p: &Props<'_>, name: &str, default: bool, source: &Source) -> Result<
             .as_bool()
             .ok_or_else(|| source.error(format!("{name} must be boolean"))),
     }
+}
+/// The `key_repeat` prop (B0322): `{delay, interval, min_interval, ramp_ms}` in whole ms, all optional.
+fn key_repeat(
+    p: &Props<'_>,
+    source: &Source,
+) -> Result<Option<bead_render::KeyRepeat>, Diagnostic> {
+    let table = match p.get("key_repeat") {
+        None => return Ok(None),
+        Some(Json::Object(table)) => table,
+        // An empty Luau table may arrive as an empty array: all defaults.
+        Some(Json::Array(items)) if items.is_empty() => return Ok(Some(Default::default())),
+        Some(_) => {
+            return Err(
+                source.error("key_repeat must be a table {delay, interval, min_interval, ramp_ms}")
+            );
+        }
+    };
+    let mut out = bead_render::KeyRepeat::default();
+    for (key, value) in table {
+        let (lo, hi) = match key.as_str() {
+            "delay" | "ramp_ms" => (0, if key == "delay" { 2000 } else { 5000 }),
+            "interval" | "min_interval" => (16, 1000),
+            _ => return Err(source.error(format!("unknown key_repeat field {key}"))),
+        };
+        let ms = value
+            .as_f64()
+            .filter(|n| n.fract() == 0. && (f64::from(lo)..=f64::from(hi)).contains(n))
+            .ok_or_else(|| {
+                source.error(format!(
+                    "key_repeat.{key} must be a whole number {lo}..{hi}"
+                ))
+            })? as u32;
+        match key.as_str() {
+            "delay" => out.delay = Some(ms),
+            "interval" => out.interval = Some(ms),
+            "min_interval" => out.min_interval = Some(ms),
+            _ => out.ramp_ms = ms,
+        }
+    }
+    if out
+        .interval
+        .zip(out.min_interval)
+        .is_some_and(|(i, m)| m > i)
+    {
+        return Err(source.error("key_repeat.min_interval must not exceed interval"));
+    }
+    Ok(Some(out))
 }
 /// The `shadow` prop (B0320): `true` is the surface shadow (blur 10, spread 0, no offset, full strength).
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -936,6 +986,9 @@ impl ViewSpec {
                     return Err(source.error("input is only valid on the root, as \"children\""));
                 }
             };
+            if p.contains_key("key_repeat") && (raw.kind != Widget::Panel || path != "view") {
+                return Err(source.error("key_repeat is only valid on the root Panel"));
+            }
             if p.contains_key("body") && (raw.kind != Widget::Panel || path != "view") {
                 return Err(source.error("body is only valid on the root Panel"));
             }
@@ -1058,6 +1111,7 @@ impl ViewSpec {
                     .map(|_| text(p, "body", "", source).map(|id| format!("{child_scope}{id}")))
                     .transpose()?,
                 input_children,
+                key_repeat: key_repeat(p, source)?,
                 join_edge: p
                     .get("join_edge")
                     .map(|value| {
@@ -1364,10 +1418,12 @@ pub fn layout(
             offset: (32., 32.),
             bounds: Rect::new(-32., -32., root_size.width + 64., root_size.height + 64.),
             input_islands: None,
+            key_repeat: None,
         },
         nodes: vec![],
     };
     output.scene.motion = view.motion.clone();
+    output.scene.key_repeat = view.key_repeat;
     let hover = resolve("bead.hovered")
         .ok()
         .and_then(|v| {

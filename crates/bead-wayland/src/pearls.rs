@@ -316,6 +316,9 @@ impl Group {
     pub(crate) fn owns(&self, surface: &wl_surface::WlSurface) -> bool {
         self.surfaces.iter().any(|s| s.owns_surface(surface))
     }
+    pub(crate) fn key_repeat(&self) -> Option<bead_render::KeyRepeat> {
+        self.companion.as_ref()?.0.key_repeat
+    }
     pub(crate) fn alive(&self) -> bool {
         self.runtime.is_some() && !self.surfaces.is_empty()
     }

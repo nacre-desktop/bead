@@ -345,6 +345,7 @@ mod tests {
                 border: None,
             }],
             input_islands: None,
+            key_repeat: None,
         }
     }
     #[test]

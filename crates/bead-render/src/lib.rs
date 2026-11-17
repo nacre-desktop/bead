@@ -504,6 +504,18 @@ pub struct Scene {
     /// `input = "children"` (B0321): layout-space rects of the root's interactive or painted direct
     /// children. A bar surface takes input there only; None leaves its input untouched.
     pub input_islands: Option<Vec<Rect>>,
+    /// `Panel{key_repeat=...}` (B0322): this panel's held-key schedule, None for the system repeat.
+    pub key_repeat: Option<KeyRepeat>,
+}
+/// A panel's key-repeat schedule in milliseconds; an unset field follows the system repeat.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct KeyRepeat {
+    /// Press to first repeat.
+    pub delay: Option<u32>,
+    /// Gap after the first repeat, easing to `min_interval` over `ramp_ms` of holding.
+    pub interval: Option<u32>,
+    pub min_interval: Option<u32>,
+    pub ramp_ms: u32,
 }
 impl Scene {
     /// A fully opaque scene of this size with nothing in it.
@@ -523,6 +535,7 @@ impl Scene {
             offset: (0., 0.),
             bounds: Rect::new(0., 0., width, height),
             input_islands: None,
+            key_repeat: None,
         }
     }
     /// Pose a panel motion. Revealing panels grow from their dock while opening
@@ -3616,6 +3629,7 @@ mod tests {
             offset: (0., 0.),
             bounds: Rect::new(0., 0., 364., 264.),
             input_islands: None,
+            key_repeat: None,
         };
         let original = scene.primitives.clone();
         let mut animations = bead_core::animation::Animations::default();
@@ -3700,6 +3714,7 @@ mod tests {
                 shadow: None,
             }],
             input_islands: None,
+            key_repeat: None,
         }
     }
     #[test]
@@ -3912,6 +3927,7 @@ mod tests {
                 },
             ],
             input_islands: None,
+            key_repeat: None,
         };
         let mut renderer = CpuRenderer::default();
         let mut bytes = vec![0; 64];
@@ -4024,6 +4040,7 @@ mod tests {
                         },
                     ],
                     input_islands: None,
+                    key_repeat: None,
                 };
                 // Include fractional scaling and abrupt movement / erasure.
                 if frame % 7 == 0 {
@@ -4501,6 +4518,7 @@ mod symbol_ink_tests {
                     offset: (0., 0.),
                     bounds: Rect::new(0., 0., 80., 80.),
                     input_islands: None,
+                    key_repeat: None,
                 };
                 let width = (80. * scale) as u32;
                 let mut pixels = vec![0; width as usize * width as usize * 4];

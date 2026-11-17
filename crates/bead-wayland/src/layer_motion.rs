@@ -993,6 +993,7 @@ mod tests {
             offset: (0., 0.),
             bounds: Rect::new(0., 0., 32., 32.),
             input_islands: None,
+            key_repeat: None,
         }
     }
 

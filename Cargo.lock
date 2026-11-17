@@ -456,6 +456,7 @@ dependencies = [
  "wayland-protocols",
  "wayland-scanner",
  "wayland-server",
+ "xkbcommon",
 ]
 
 [[package]]

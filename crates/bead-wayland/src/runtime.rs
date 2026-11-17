@@ -10,6 +10,12 @@ pub(super) struct App {
     pub(super) clipboard: clipboard::Clipboard,
     pub(super) capture: Option<capture::Capturer>,
     pub(super) last_input_serial: u32,
+    /// A panel's own key repeat (B0322): the held key, its calloop timer, the system (delay, interval)
+    /// in ms and the keymap's non-repeating raw codes.
+    pub(super) key_repeat: protocols::KeyRepeatState,
+    pub(super) repeat_token: Option<calloop::RegistrationToken>,
+    pub(super) repeat_info: (u32, u32),
+    pub(super) non_repeating: Vec<u32>,
     pub(super) event_sender: Option<calloop::channel::Sender<UiEvent>>,
     pub(super) dismiss: Option<panel::Dismiss>,
     pub(super) hidden: bool,
@@ -387,6 +393,10 @@ pub fn run_runtime(
             .clone()
             .map(|hub| capture::Capturer::new(hub, &globals, &qh)),
         last_input_serial: 0,
+        key_repeat: Default::default(),
+        repeat_token: None,
+        repeat_info: (600, 40),
+        non_repeating: Vec::new(),
         event_sender: None,
         dismiss: None,
         hidden: false,

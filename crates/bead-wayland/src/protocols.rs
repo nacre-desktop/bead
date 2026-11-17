@@ -1724,12 +1724,101 @@ impl KeyboardHandler for App {
         _: &wl_surface::WlSurface,
         _: u32,
     ) {
+        self.stop_key_repeat();
         self.keyboard_surface = None;
         if let Some(bridge) = &mut self.accessibility {
             bridge.adapter.update_window_focus_state(false);
         }
     }
     fn press_key(
+        &mut self,
+        conn: &Connection,
+        qh: &QueueHandle<Self>,
+        keyboard: &wl_keyboard::WlKeyboard,
+        serial: u32,
+        event: KeyEvent,
+    ) {
+        self.deliver_key(conn, qh, keyboard, serial, event.clone());
+        self.start_key_repeat(&event);
+    }
+    fn repeat_key(
+        &mut self,
+        c: &Connection,
+        qh: &QueueHandle<Self>,
+        k: &wl_keyboard::WlKeyboard,
+        s: u32,
+        event: KeyEvent,
+    ) {
+        // A panel with `key_repeat` runs its own schedule: system and compositor repeats are dropped.
+        if self.key_repeat.is_active() {
+            return;
+        }
+        self.deliver_key(c, qh, k, s, event);
+    }
+    fn release_key(
+        &mut self,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+        _: &wl_keyboard::WlKeyboard,
+        _: u32,
+        event: KeyEvent,
+    ) {
+        if self.key_repeat.holds(event.raw_code) {
+            self.stop_key_repeat();
+        }
+    }
+    fn update_repeat_info(
+        &mut self,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+        _: &wl_keyboard::WlKeyboard,
+        info: RepeatInfo,
+    ) {
+        // Disabled system repeat leaves a panel's own schedule the X-style defaults.
+        self.repeat_info = match info {
+            RepeatInfo::Repeat { rate, delay } => (delay, 1000 / rate.get()),
+            RepeatInfo::Disable => (600, 40),
+        };
+    }
+    fn update_keymap(
+        &mut self,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+        _: &wl_keyboard::WlKeyboard,
+        keymap: Keymap<'_>,
+    ) {
+        use xkbcommon::xkb;
+        // SCTK exposes only the keymap text: read the per-key repeat flag from a private copy.
+        self.non_repeating = xkb::Keymap::new_from_string(
+            &xkb::Context::new(xkb::CONTEXT_NO_FLAGS),
+            keymap.as_string(),
+            xkb::KEYMAP_FORMAT_TEXT_V1,
+            xkb::KEYMAP_COMPILE_NO_FLAGS,
+        )
+        .map(|map| {
+            (map.min_keycode().raw()..=map.max_keycode().raw())
+                .filter(|code| !map.key_repeats(xkb::Keycode::new(*code)))
+                .map(|code| code.saturating_sub(8))
+                .collect()
+        })
+        .unwrap_or_default();
+    }
+    fn update_modifiers(
+        &mut self,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+        _: &wl_keyboard::WlKeyboard,
+        _: u32,
+        modifiers: Modifiers,
+        _: RawModifiers,
+        _: u32,
+    ) {
+        self.modifiers = modifiers;
+    }
+}
+
+impl App {
+    fn deliver_key(
         &mut self,
         conn: &Connection,
         qh: &QueueHandle<Self>,
@@ -1750,7 +1839,7 @@ impl KeyboardHandler for App {
             .clone()
             .and_then(|surface| self.slot_of_surface(&surface))
         {
-            self.in_slot(id, |app| app.press_key(conn, qh, keyboard, serial, event));
+            self.in_slot(id, |app| app.deliver_key(conn, qh, keyboard, serial, event));
             return;
         }
         if self.pearl.is_some() && self.modifiers.ctrl && event.keysym == Keysym::w {
@@ -1826,36 +1915,134 @@ impl KeyboardHandler for App {
             }
         }
     }
-    fn repeat_key(
-        &mut self,
-        c: &Connection,
-        qh: &QueueHandle<Self>,
-        k: &wl_keyboard::WlKeyboard,
-        s: u32,
-        event: KeyEvent,
-    ) {
-        self.press_key(c, qh, k, s, event);
+    /// The `key_repeat` of the panel that owns `surface`, if any (B0322).
+    fn surface_key_repeat(
+        &self,
+        surface: &wl_surface::WlSurface,
+    ) -> Option<bead_render::KeyRepeat> {
+        if self.surfaces.iter().any(|s| s.wl_surface() == surface) {
+            return self.companion.as_ref()?.0.key_repeat;
+        }
+        self.slots.iter().find(|g| g.owns(surface))?.key_repeat()
     }
-    fn release_key(
-        &mut self,
-        _: &Connection,
-        _: &QueueHandle<Self>,
-        _: &wl_keyboard::WlKeyboard,
-        _: u32,
-        _: KeyEvent,
-    ) {
+    fn stop_key_repeat(&mut self) {
+        self.key_repeat.stop();
+        if let Some(token) = self.repeat_token.take() {
+            self.loop_handle.remove(token);
+        }
     }
-    fn update_modifiers(
-        &mut self,
-        _: &Connection,
-        _: &QueueHandle<Self>,
-        _: &wl_keyboard::WlKeyboard,
-        _: u32,
-        modifiers: Modifiers,
-        _: RawModifiers,
-        _: u32,
-    ) {
-        self.modifiers = modifiers;
+    /// A repeatable key pressed on a panel with `key_repeat` starts that panel's own timer.
+    fn start_key_repeat(&mut self, event: &KeyEvent) {
+        let Some(surface) = self.keyboard_surface.clone() else {
+            return;
+        };
+        let Some(spec) = self.surface_key_repeat(&surface) else {
+            return;
+        };
+        if self.non_repeating.contains(&event.raw_code) {
+            return;
+        }
+        self.stop_key_repeat();
+        let plan = RepeatPlan::resolve(spec, self.repeat_info);
+        let delay = Duration::from_millis(plan.delay.into());
+        self.key_repeat.press(event.clone(), plan, Instant::now());
+        self.repeat_token = self
+            .loop_handle
+            .insert_source(Timer::from_duration(delay), |_, _, app| {
+                match app.fire_key_repeat() {
+                    Some(gap) => TimeoutAction::ToDuration(gap),
+                    None => {
+                        app.repeat_token = None;
+                        TimeoutAction::Drop
+                    }
+                }
+            })
+            .ok();
+    }
+    /// One own repeat: delivered like a press, never after the key, focus or panel is gone.
+    fn fire_key_repeat(&mut self) -> Option<Duration> {
+        let (event, gap) = self.key_repeat.fire(Instant::now())?;
+        // Focus loss stops the run in `leave`; this also covers a surface that died without one.
+        let keyboard = self.keyboard.clone().filter(|_| {
+            self.keyboard_surface
+                .as_ref()
+                .is_some_and(|s| s.is_alive() && self.surface_key_repeat(s).is_some())
+        });
+        let Some(keyboard) = keyboard else {
+            self.key_repeat.stop();
+            return None;
+        };
+        let (conn, qh) = (self.conn.clone(), self.qh.clone());
+        self.deliver_key(&conn, &qh, &keyboard, self.last_input_serial, event);
+        self.key_repeat.is_active().then_some(gap)
+    }
+}
+
+/// A resolved repeat schedule in ms: unset `key_repeat` fields follow the system repeat.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct RepeatPlan {
+    delay: u32,
+    interval: u32,
+    min_interval: u32,
+    ramp_ms: u32,
+}
+impl RepeatPlan {
+    pub(crate) fn resolve(spec: bead_render::KeyRepeat, (delay, interval): (u32, u32)) -> Self {
+        let interval = spec.interval.unwrap_or(interval);
+        Self {
+            delay: spec.delay.unwrap_or(delay),
+            interval,
+            min_interval: spec.min_interval.unwrap_or(interval).min(interval),
+            ramp_ms: spec.ramp_ms,
+        }
+    }
+    /// The gap before the next repeat once `held_ms` have passed since the first repeat: eases linearly from `interval`
+    /// to `min_interval` over `ramp_ms`, then stays there (no ramp: `min_interval` at once).
+    pub(crate) fn gap_ms(&self, held_ms: f64) -> f64 {
+        let t = if self.ramp_ms == 0 {
+            1.
+        } else {
+            (held_ms / f64::from(self.ramp_ms)).min(1.)
+        };
+        f64::from(self.interval) + (f64::from(self.min_interval) - f64::from(self.interval)) * t
+    }
+}
+struct KeyRun {
+    event: KeyEvent,
+    plan: RepeatPlan,
+    since: Instant,
+}
+/// The held key a panel's own repeat is running for (B0322); the timer lives in `App`.
+#[derive(Default)]
+pub(crate) struct KeyRepeatState(Option<KeyRun>);
+impl KeyRepeatState {
+    fn press(&mut self, event: KeyEvent, plan: RepeatPlan, now: Instant) {
+        self.0 = Some(KeyRun {
+            event,
+            plan,
+            since: now,
+        });
+    }
+    pub(crate) fn stop(&mut self) {
+        self.0 = None;
+    }
+    pub(crate) fn is_active(&self) -> bool {
+        self.0.is_some()
+    }
+    pub(crate) fn holds(&self, raw_code: u32) -> bool {
+        self.0
+            .as_ref()
+            .is_some_and(|run| run.event.raw_code == raw_code)
+    }
+    /// The event to deliver now and the gap to the next one.
+    fn fire(&self, now: Instant) -> Option<(KeyEvent, Duration)> {
+        let run = self.0.as_ref()?;
+        let held = now.saturating_duration_since(run.since);
+        let mut event = run.event.clone();
+        event.time = event.time.wrapping_add(held.as_millis() as u32);
+        let since_first = held.as_secs_f64() * 1000. - f64::from(run.plan.delay);
+        let gap = Duration::from_secs_f64(run.plan.gap_ms(since_first.max(0.)) / 1000.);
+        Some((event, gap))
     }
 }
 
@@ -1975,5 +2162,80 @@ impl Dispatch<wayland_client::protocol::wl_callback::WlCallback, FrameData> for 
             }
             CompositorHandler::frame(state, conn, qh, &data.surface, callback_data);
         }
+    }
+}
+
+#[cfg(test)]
+mod key_repeat_tests {
+    use super::*;
+    fn key(raw_code: u32) -> KeyEvent {
+        KeyEvent {
+            time: 0,
+            raw_code,
+            keysym: Keysym::a,
+            utf8: None,
+        }
+    }
+    fn plan() -> RepeatPlan {
+        let spec = bead_render::KeyRepeat {
+            delay: Some(260),
+            interval: Some(95),
+            min_interval: Some(62),
+            ramp_ms: 600,
+        };
+        RepeatPlan::resolve(spec, (600, 40))
+    }
+    #[test]
+    fn schedule_starts_at_delay_and_eases_to_min_interval() {
+        let p = plan();
+        assert_eq!(p.delay, 260);
+        assert_eq!(p.gap_ms(0.), 95.);
+        assert_eq!(p.gap_ms(300.), 78.5);
+        assert_eq!(p.gap_ms(600.), 62.);
+        assert_eq!(p.gap_ms(5000.), 62.);
+    }
+    #[test]
+    fn unset_fields_follow_the_system_repeat_and_no_ramp_is_flat() {
+        let p = RepeatPlan::resolve(Default::default(), (500, 33));
+        assert_eq!(
+            (p.delay, p.interval, p.min_interval, p.ramp_ms),
+            (500, 33, 33, 0)
+        );
+        assert_eq!(p.gap_ms(0.), 33.);
+        assert_eq!(p.gap_ms(9999.), 33.);
+        // A min_interval above the interval is clamped; one without a ramp applies at once.
+        let spec = bead_render::KeyRepeat {
+            min_interval: Some(20),
+            ..Default::default()
+        };
+        assert_eq!(RepeatPlan::resolve(spec, (500, 33)).gap_ms(0.), 20.);
+        let spec = bead_render::KeyRepeat {
+            min_interval: Some(90),
+            ..Default::default()
+        };
+        assert_eq!(RepeatPlan::resolve(spec, (500, 33)).min_interval, 33);
+    }
+    #[test]
+    fn run_follows_press_release_restart_and_stop() {
+        let t0 = Instant::now();
+        let mut run = KeyRepeatState::default();
+        // No schedule: system and compositor repeats pass.
+        assert!(!run.is_active());
+        run.press(key(30), plan(), t0);
+        // While it runs, system repeats are dropped (`repeat_key` checks is_active).
+        assert!(run.is_active() && run.holds(30) && !run.holds(31));
+        let (event, gap) = run.fire(t0 + Duration::from_millis(260)).unwrap();
+        assert_eq!((event.raw_code, event.time), (30, 260));
+        assert_eq!(gap, Duration::from_millis(95));
+        let (_, gap) = run.fire(t0 + Duration::from_millis(560)).unwrap();
+        assert!((gap.as_secs_f64() - 0.0785).abs() < 1e-9);
+        // Another key restarts the schedule for the new key.
+        run.press(key(31), plan(), t0 + Duration::from_millis(400));
+        assert!(run.holds(31) && !run.holds(30));
+        let (_, gap) = run.fire(t0 + Duration::from_millis(400)).unwrap();
+        assert_eq!(gap, Duration::from_millis(95));
+        // Focus loss or release stops it: nothing fires afterwards.
+        run.stop();
+        assert!(!run.is_active() && run.fire(t0 + Duration::from_secs(2)).is_none());
     }
 }

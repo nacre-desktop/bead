@@ -34,5 +34,6 @@ pub fn safe_bar(palette: &Palette) -> Scene {
             },
         ],
         input_islands: None,
+        key_repeat: None,
     }
 }

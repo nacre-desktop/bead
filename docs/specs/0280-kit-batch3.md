@@ -47,3 +47,9 @@ after the slide the rows sit at 188, 268, 348, 428.
 `shadow` is `true`, `false` or `{blur, spread, dy, alpha}` (defaults 10, 0, 0, 1). The old 30 px margin was exactly `3 * blur` (the Gaussian's 3 sigma at blur 10) with spread 0, so `true` emits the same primitive and pixels as before.
 `Primitive::Shadow` gains `spread`, `dy` and `alpha` (serde defaults 0, 0, 1). Its rect is the box grown by `3 * blur + spread`, then moved down by `dy`; its radius is the box radius plus `spread`; alpha scales the `.32` opacity and is part of every raster and cache key.
 Reveal, retained edge bands and clip margins read the margin and offset from the primitive, so a reveal panel with a table shadow follows its real extent.
+
+## Key repeat schedule (B0322)
+
+- `Panel{key_repeat={delay, interval, min_interval, ramp_ms}}` (root only) lands in `Scene::key_repeat`. While a surface of that panel has keyboard focus the app ignores SCTK's repeats and compositor-sent ones (`KeyboardHandler::repeat_key` drops them while a run is active) and runs one calloop timer for the last pressed key that the keymap repeats (the keymap's repeat flag is read from `Keymap::as_string` at `update_keymap`).
+- The first repeat comes at press + `delay`; each next gap is `interval` eased to `min_interval` by time since the first repeat over `ramp_ms` (the first gap is exactly `interval`) (`RepeatPlan::gap_ms`, pure). Each repeat goes through the same `deliver_key` path as a press. Another repeatable key's press restarts it; release of the key, `leave` and a dead or panel-less surface stop it.
+- Without the prop nothing changes: SCTK's timer and `repeat_key` are untouched. The bar, other panels and windows keep the system repeat.

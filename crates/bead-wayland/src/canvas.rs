@@ -1576,6 +1576,7 @@ mod tests {
             offset,
             bounds: Rect::new(-32., -32., 1984., 1144.),
             input_islands: None,
+            key_repeat: None,
         }
     }
     #[test]

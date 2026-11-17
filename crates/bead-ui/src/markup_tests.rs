@@ -4819,3 +4819,53 @@ fn children_input_is_root_only_and_needs_children() {
         assert!(s.reload().is_err(), "{props}{child}");
     }
 }
+/// B0322: `key_repeat` defaults, ranges and where it is allowed.
+#[test]
+fn key_repeat_prop_parses_and_validates() {
+    let f = fixture();
+    let load = |root: &str, props: &str| {
+        fs::write(
+            f.0.join("ui/main.luau"),
+            format!(
+                "local ui=require('bead.ui')\nreturn ui.{root}{{id='r',width=50,height=20,{props} ui.Box{{id='k',width=5,height=5}}}}"
+            ),
+        )
+        .unwrap();
+        let mut s = f.session();
+        s.entry = "ui/main.luau".into();
+        s.reload().map(|scene| scene.key_repeat)
+    };
+    assert_eq!(load("Panel", "").unwrap(), None);
+    assert!(load("Panel", "key_repeat={},").is_ok());
+    assert_eq!(
+        load(
+            "Panel",
+            "key_repeat={delay=260,interval=95,min_interval=62,ramp_ms=600},"
+        )
+        .unwrap(),
+        Some(bead_render::KeyRepeat {
+            delay: Some(260),
+            interval: Some(95),
+            min_interval: Some(62),
+            ramp_ms: 600,
+        })
+    );
+    for bad in [
+        "key_repeat={delay=2001}",
+        "key_repeat={interval=15}",
+        "key_repeat={interval=1001}",
+        "key_repeat={min_interval=15}",
+        "key_repeat={interval=60,min_interval=61}",
+        "key_repeat={ramp_ms=5001}",
+        "key_repeat={delay=-1}",
+        "key_repeat={delay=1.5}",
+        "key_repeat={speed=1}",
+        "key_repeat=true",
+    ] {
+        assert!(load("Panel", &format!("{bad},")).is_err(), "{bad}");
+    }
+    assert!(
+        load("Box", "key_repeat={delay=1},").is_err(),
+        "root Panel only"
+    );
+}

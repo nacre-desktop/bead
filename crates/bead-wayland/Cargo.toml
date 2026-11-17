@@ -19,6 +19,7 @@ bead-services = { path = "../bead-services" }
 image = { version = "0.25", default-features = false, features = ["png"] }
 wayland-protocols = { version = "=0.32.13", features = ["client", "staging", "unstable"] }
 wayland-scanner = "=0.31.11"
+xkbcommon = "0.8"
 
 raw-window-handle = {version="=0.6.2",optional=true}
 
