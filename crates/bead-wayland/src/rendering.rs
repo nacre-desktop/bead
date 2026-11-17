@@ -1059,7 +1059,7 @@ impl App {
                                             app.draw(index, &qh);
                                         }
                                     } else {
-                                        eprintln!("UI_ERROR CPU snapshot: {detail}");
+                                        eprintln!("UI_ERROR CPU snapshot: {}", bead_core::cache::explain_refusal(&detail));
                                     }
                                 }
                             }
@@ -1078,7 +1078,7 @@ impl App {
                                         app.draw(index, &qh);
                                     }
                                 } else {
-                                    eprintln!("UI_ERROR CPU snapshot: {error}");
+                                    eprintln!("UI_ERROR CPU snapshot: {}", bead_core::cache::explain_refusal(&error));
                                 }
                             }
                         }
@@ -3879,7 +3879,7 @@ impl App {
                 }
                 return;
             }
-            self.fail(e);
+            self.fail(bead_core::cache::explain_refusal(&e.to_string()));
         }
     }
 }

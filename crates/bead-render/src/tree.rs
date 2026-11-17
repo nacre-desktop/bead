@@ -17,6 +17,8 @@ use tiny_skia::{
 // The 136 MiB per-owner overlap cap leaves the independent process-wide cap unchanged.
 pub(crate) const STEADY_RASTER_LIMIT: usize = 68 * bead_core::cache::MIB;
 const LIVE_RASTER_LIMIT: usize = 2 * STEADY_RASTER_LIMIT;
+/// B0318: rasters one prepare may hold uncharged after admission refused them (one 4K-class image).
+const TRANSIENT_RASTER_LIMIT: usize = 24 * bead_core::cache::MIB;
 
 fn validate_frame_rasters(items: &[Item]) -> Result<()> {
     let bytes = items
@@ -2067,6 +2069,8 @@ impl TreeCache {
         }
         let (tail_start, tail_layer) = fill_tail(scene);
         let mut tail_hash = None;
+        // B0318: rasters kept for this frame only, because admission refused them.
+        let mut transient = (0usize, Vec::new());
         for (index, primitive) in scene.primitives.iter().enumerate() {
             if index == tail_start {
                 tail_hash = Some(frame_hash.clone());
@@ -2329,10 +2333,11 @@ impl TreeCache {
                     let budget = self.raster_budget.get_or_insert_with(|| {
                         bead_core::cache::Budget::new("retained-cpu-rasters", LIVE_RASTER_LIMIT)
                     });
+                    let mut skipped = false;
                     let charge = loop {
                         match budget.reserve(bytes) {
                             Ok(c) => break c,
-                            Err(e) => {
+                            Err(_) => {
                                 let previous_variant = self
                                     .entries
                                     .iter()
@@ -2353,10 +2358,30 @@ impl TreeCache {
                                 if let Some(victim) = victim {
                                     self.entries.remove(&victim);
                                 } else {
-                                    return Err(e.into());
+                                    // B0318: nothing left to evict. Keep the raster for this frame
+                                    // without admission, up to a small bound; else skip it.
+                                    let (owner, cap) = budget.refusal(bytes);
+                                    skipped = transient.0 + bytes > TRANSIENT_RASTER_LIMIT;
+                                    let action = if skipped { "skipped" } else { "uncached" };
+                                    bead_core::cache::report_degrade(owner, bytes, cap, action);
+                                    if !skipped {
+                                        transient.0 += bytes;
+                                        transient.1.push(slot.clone());
+                                    }
+                                    break bead_core::cache::Charge::untracked(if skipped {
+                                        0
+                                    } else {
+                                        bytes
+                                    });
                                 }
                             }
                         }
+                    };
+                    let (pixels, origin, changed) = if skipped {
+                        let blank = Pixmap::new(1, 1).ok_or("skipped raster placeholder")?;
+                        (Arc::new(blank), (0, 0), Damage::full(1, 1))
+                    } else {
+                        (pixels, origin, changed)
                     };
                     let raster = Arc::new(Raster {
                         _charge: charge,
@@ -2464,6 +2489,9 @@ impl TreeCache {
             };
             self.nodes.remove(&victim);
         }
+        for slot in &transient.1 {
+            self.entries.remove(slot);
+        }
         let frame = self.finish_frame(scene, scale, items, layers, assets, frame_hash.finish())?;
         self.fill_tail = Some(FillTail {
             frame: (Arc::as_ptr(&frame) as usize, frame.key),
@@ -2546,6 +2574,8 @@ struct RepairScratch {
     charge: Option<bead_core::cache::Charge>,
     used: Option<std::time::Instant>,
     timer: bool,
+    /// Lowers `CAP` for tests; zero keeps `CAP`.
+    limit: usize,
 }
 impl RepairScratch {
     const CAP: usize = 16 * bead_core::cache::MIB;
@@ -2568,8 +2598,18 @@ impl RepairScratch {
             .max(pixels.capacity())
             .checked_add(len.max(mask.capacity()))
             .ok_or("repair scratch overflow")?;
-        if total > Self::CAP {
-            return Err("repair scratch exceeds budget".into());
+        let cap = if self.limit == 0 {
+            Self::CAP
+        } else {
+            self.limit
+        };
+        if total > cap {
+            // B0318: every caller paints directly into the strip instead.
+            bead_core::cache::report_degrade("cpu-repair-scratch", total, cap, "direct");
+            return Err(format!(
+                "repair scratch exceeds budget: owner=cpu-repair-scratch need={total} cap={cap}"
+            )
+            .into());
         }
         if self.charge.as_ref().is_none_or(|c| c.bytes() != total) {
             self.charge = None;
@@ -2796,6 +2836,41 @@ fn paint_with_scratch(
     repair_scratch: &mut RepairScratch,
 ) -> Result<()> {
     paint_items(&frame.items, offset, target, damage, repair_scratch)
+}
+/// A polyline's fill (closed paths only) then its round-joined stroke, onto `target`.
+fn draw_polyline(
+    target: &mut PixmapMut<'_>,
+    (path, closed, fill, stroke_width, color): (
+        &tiny_skia::Path,
+        bool,
+        Option<[u8; 4]>,
+        f32,
+        [u8; 4],
+    ),
+    round_caps: bool,
+    transform: Transform,
+    mask: Option<&Mask>,
+) {
+    if let Some(fill) = fill.filter(|_| closed) {
+        let mut paint = Paint::default();
+        paint.set_color_rgba8(fill[0], fill[1], fill[2], fill[3]);
+        target.fill_path(path, &paint, FillRule::Winding, transform, mask);
+    }
+    if stroke_width > 0. && color[3] != 0 {
+        let mut paint = Paint::default();
+        paint.set_color_rgba8(color[0], color[1], color[2], color[3]);
+        let stroke = Stroke {
+            width: stroke_width,
+            line_cap: if round_caps {
+                tiny_skia::LineCap::Round
+            } else {
+                tiny_skia::LineCap::Butt
+            },
+            line_join: tiny_skia::LineJoin::Round,
+            ..Stroke::default()
+        };
+        target.stroke_path(path, &paint, &stroke, transform, mask);
+    }
 }
 fn paint_items(
     items: &[Item],
@@ -3051,21 +3126,33 @@ fn paint_items(
                     .saturating_add(padding)
                     .min(height);
                 let (w, h) = (right - x, bottom - y);
-                let (scratch, _) = repair_scratch.obtain(w, h)?;
-                scratch.data_mut().fill(0);
-                let transform = Transform::from_scale(scale, scale)
-                    .post_translate(offset.0 * scale - x as f32, offset.1 * scale - y as f32);
-                scratch.stroke_path(&path, &paint, &stroke, transform, None);
                 let mut strip = PixmapMut::from_bytes(&mut bytes[begin..end], width, damage.h)
                     .ok_or("invalid arc SHM strip")?;
-                strip.draw_pixmap(
-                    x as i32,
-                    y as i32 - damage.y as i32,
-                    scratch.as_ref(),
-                    &PixmapPaint::default(),
-                    Transform::identity(),
-                    mask_needed.then_some(&mask),
-                );
+                if let Ok((scratch, _)) = repair_scratch.obtain(w, h) {
+                    scratch.data_mut().fill(0);
+                    let transform = Transform::from_scale(scale, scale)
+                        .post_translate(offset.0 * scale - x as f32, offset.1 * scale - y as f32);
+                    scratch.stroke_path(&path, &paint, &stroke, transform, None);
+                    strip.draw_pixmap(
+                        x as i32,
+                        y as i32 - damage.y as i32,
+                        scratch.as_ref(),
+                        &PixmapPaint::default(),
+                        Transform::identity(),
+                        mask_needed.then_some(&mask),
+                    );
+                } else {
+                    // B0318: over the scratch cap, stroke straight into the masked strip.
+                    let transform = Transform::from_scale(scale, scale)
+                        .post_translate(offset.0 * scale, offset.1 * scale - damage.y as f32);
+                    strip.stroke_path(
+                        &path,
+                        &paint,
+                        &stroke,
+                        transform,
+                        mask_needed.then_some(&mask),
+                    );
+                }
                 painted = true;
             }
         } else if let Primitive::Graph {
@@ -3126,45 +3213,35 @@ fn paint_items(
                 let y = bounds.y.saturating_sub(2);
                 let right = (bounds.x + bounds.w).saturating_add(2).min(width);
                 let bottom = (bounds.y + bounds.h).saturating_add(2).min(height);
-                let (scratch, _) = repair_scratch.obtain(right - x, bottom - y)?;
-                scratch.data_mut().fill(0);
-                let transform = Transform::from_scale(scale, scale)
-                    .post_translate(offset.0 * scale - x as f32, offset.1 * scale - y as f32);
-                if let Some(fill) = fill.filter(|c| *closed && c[3] != 0) {
-                    let mut paint = Paint::default();
-                    paint.set_color_rgba8(fill[0], fill[1], fill[2], fill[3]);
-                    scratch.fill_path(&path, &paint, FillRule::Winding, transform, None);
-                }
-                if *stroke_width > 0. && color[3] != 0 {
-                    let mut paint = Paint::default();
-                    paint.set_color_rgba8(color[0], color[1], color[2], color[3]);
-                    scratch.stroke_path(
-                        &path,
-                        &paint,
-                        &Stroke {
-                            width: *stroke_width,
-                            line_cap: if *round_caps {
-                                tiny_skia::LineCap::Round
-                            } else {
-                                tiny_skia::LineCap::Butt
-                            },
-                            line_join: tiny_skia::LineJoin::Round,
-                            ..Stroke::default()
-                        },
-                        transform,
-                        None,
-                    );
-                }
                 let mut strip = PixmapMut::from_bytes(&mut bytes[begin..end], width, damage.h)
                     .ok_or("invalid polyline SHM strip")?;
-                strip.draw_pixmap(
-                    x as i32,
-                    y as i32 - damage.y as i32,
-                    scratch.as_ref(),
-                    &PixmapPaint::default(),
-                    Transform::identity(),
-                    mask_needed.then_some(&mask),
+                let vector = (
+                    &path,
+                    *closed,
+                    fill.filter(|c| c[3] != 0),
+                    *stroke_width,
+                    *color,
                 );
+                if let Ok((scratch, _)) = repair_scratch.obtain(right - x, bottom - y) {
+                    scratch.data_mut().fill(0);
+                    let transform = Transform::from_scale(scale, scale)
+                        .post_translate(offset.0 * scale - x as f32, offset.1 * scale - y as f32);
+                    draw_polyline(&mut scratch.as_mut(), vector, *round_caps, transform, None);
+                    strip.draw_pixmap(
+                        x as i32,
+                        y as i32 - damage.y as i32,
+                        scratch.as_ref(),
+                        &PixmapPaint::default(),
+                        Transform::identity(),
+                        mask_needed.then_some(&mask),
+                    );
+                } else {
+                    // B0318: over the scratch cap, paint straight into the masked strip.
+                    let transform = Transform::from_scale(scale, scale)
+                        .post_translate(offset.0 * scale, offset.1 * scale - damage.y as f32);
+                    let over = mask_needed.then_some(&mask);
+                    draw_polyline(&mut strip, vector, *round_caps, transform, over);
+                }
                 painted = true;
             }
         } else if let Primitive::Rounded {
@@ -9194,6 +9271,118 @@ mod tests {
             "partial repair must exactly match the clipped full frame"
         );
     }
+    #[test]
+    fn over_budget_image_degrades_to_an_uncached_raster_with_one_marker() {
+        let scene = scene();
+        let mut full = TreeCache::default();
+        full.prepare(&scene, 1.).unwrap();
+        let want = full.frame.as_ref().unwrap().items[0]
+            .raster
+            .clone()
+            .unwrap();
+        let budget = bead_core::cache::Budget::new("test-b0318-image", 256);
+        let mut cache = TreeCache {
+            raster_budget: Some(budget.clone()),
+            ..TreeCache::default()
+        };
+        cache.prepare(&scene, 1.).unwrap();
+        let got = cache.frame.as_ref().unwrap().items[0]
+            .raster
+            .clone()
+            .unwrap();
+        assert_eq!(
+            got.pixels.data(),
+            want.pixels.data(),
+            "same pixels, not retained"
+        );
+        assert_eq!(budget.used(), 0);
+        assert!(
+            cache.entries.is_empty(),
+            "uncached rasters are not retained"
+        );
+        assert!(
+            !bead_core::cache::report_degrade("test-b0318-image", 1, 1, "uncached"),
+            "prepare already printed this owner's marker"
+        );
+    }
+
+    #[test]
+    fn image_beyond_the_transient_bound_is_skipped_not_fatal() {
+        let _serial = LARGE_RASTER_TESTS.lock().unwrap_or_else(|p| p.into_inner());
+        let mut scene = scene();
+        scene.primitives.truncate(1);
+        scene.layers[0].bounds = Rect::new(0., 0., 8., 8.);
+        let budget = bead_core::cache::Budget::new("test-b0318-skip", 256);
+        let mut cache = TreeCache {
+            raster_budget: Some(budget.clone()),
+            ..TreeCache::default()
+        };
+        // 8 x 8 at scale 400 is a 3200 x 3200 raster, past the 24 MiB transient bound.
+        cache.prepare(&scene, 400.).unwrap();
+        let raster = cache.frame.as_ref().unwrap().items[0]
+            .raster
+            .clone()
+            .unwrap();
+        assert_eq!((raster.pixels.width(), raster.pixels.height()), (1, 1));
+        assert_eq!(budget.used(), 0);
+    }
+
+    #[test]
+    fn over_cap_repair_scratch_paints_the_same_pixels_directly() {
+        use crate::{PixelFormat, Renderer, ShmTarget};
+        let mut scene = scene();
+        scene.bounds = Rect::new(0., 0., 48., 42.);
+        scene.layers.clear();
+        scene.primitives = vec![Primitive::Polyline {
+            rect: Rect::new(5., 4., 32., 28.),
+            points: vec![[0.05, 0.1], [0.48, 0.9], [0.95, 0.08]],
+            closed: true,
+            stroke_width: 4.,
+            color: [240, 80, 20, 255],
+            round_caps: true,
+            fill: Some([20, 100, 220, 140]),
+        }];
+        let (w, h, scale) = (72, 63, 1.5);
+        let render = |limit: usize| {
+            let mut bytes = vec![0; (w * h * 4) as usize];
+            let mut tree = TreeCpuRenderer::default();
+            tree.repair_scratch.limit = limit;
+            tree.prepare(&scene, scale).unwrap();
+            tree.render(
+                &scene,
+                ShmTarget {
+                    bytes: &mut bytes,
+                    width: w,
+                    height: h,
+                    scale,
+                    format: PixelFormat::Rgba,
+                },
+                Damage::full(w, h),
+            )
+            .unwrap();
+            bytes
+        };
+        let scratch = render(0);
+        let direct = render(1024);
+        assert!(scratch.iter().any(|b| *b != 0));
+        let worst = scratch
+            .iter()
+            .zip(&direct)
+            .map(|(a, b)| a.abs_diff(*b))
+            .max();
+        assert!(worst <= Some(2), "direct paint differs by {worst:?}/255");
+        let mut spent = RepairScratch {
+            limit: 1024,
+            ..RepairScratch::default()
+        };
+        let error = spent.obtain(72, 63).err().unwrap().to_string();
+        assert!(
+            error.contains("cpu-repair-scratch")
+                && error.contains("need=")
+                && error.contains("cap=1024")
+        );
+    }
+
     /// A panel scene whose root is a transparent max-size surface and whose body (joined to the
     /// top edge, with its shadow) is `body`: what `Panel.body` + `join_edge="top"` lay out.
     fn body_scene(body: Rect) -> Scene {

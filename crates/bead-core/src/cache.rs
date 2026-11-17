@@ -12,6 +12,8 @@ pub const PROCESS_LIMIT: usize = 256 * MIB;
 struct State {
     used: usize,
     next: u64,
+    /// The latest refusal (owner, need, cap, used): routine, so recorded silently.
+    refused: Option<(&'static str, usize, usize, usize)>,
     owners: BTreeMap<u64, Owner>,
 }
 struct Owner {
@@ -56,6 +58,14 @@ impl Budget {
             .get(&self.0.0)
             .ok_or("cache registration missing")?;
         if bytes > o.limit.saturating_sub(o.used) || bytes > PROCESS_LIMIT.saturating_sub(s.used) {
+            let cap = if bytes > o.limit.saturating_sub(o.used) {
+                o.limit
+            } else {
+                PROCESS_LIMIT
+            };
+            let used = if cap == o.limit { o.used } else { s.used };
+            let name = o.name;
+            s.refused = Some((name, bytes, cap, used));
             return Err("retained cache byte budget exceeded");
         }
         s.owners
@@ -64,9 +74,17 @@ impl Budget {
             .used += bytes;
         s.used += bytes;
         Ok(Charge(Arc::new(Allocation {
-            budget: self.clone(),
+            budget: Some(self.clone()),
             bytes,
         })))
+    }
+    /// The owner name and the cap (its own limit or the process limit) that refuses `bytes` now.
+    pub fn refusal(&self, bytes: usize) -> (&'static str, usize) {
+        let s = state().lock().unwrap_or_else(|p| p.into_inner());
+        s.owners.get(&self.0.0).map_or(("unregistered", 0), |o| {
+            let own = bytes > o.limit.saturating_sub(o.used);
+            (o.name, if own { o.limit } else { PROCESS_LIMIT })
+        })
     }
     pub fn used(&self) -> usize {
         state()
@@ -83,24 +101,73 @@ pub struct Charge(Arc<Allocation>);
 impl Charge {
     /// Related CPU/GPU allocations share the original owner's byte ceiling.
     pub fn reserve_related(&self, bytes: usize) -> Result<Charge, &'static str> {
-        self.0.budget.reserve(bytes)
+        self.0
+            .budget
+            .as_ref()
+            .ok_or("untracked charge has no budget")?
+            .reserve(bytes)
+    }
+    /// B0318: bytes already allocated past admission (a degrade keeps them for one frame). They
+    /// count against no budget, so the caller bounds them itself.
+    pub fn untracked(bytes: usize) -> Charge {
+        Charge(Arc::new(Allocation {
+            budget: None,
+            bytes,
+        }))
     }
     pub fn bytes(&self) -> usize {
         self.0.bytes
     }
 }
 struct Allocation {
-    budget: Budget,
+    budget: Option<Budget>,
     bytes: usize,
 }
 impl Drop for Allocation {
     fn drop(&mut self) {
+        let Some(budget) = &self.budget else {
+            return;
+        };
         let mut s = state().lock().unwrap_or_else(|p| p.into_inner());
         s.used -= self.bytes;
-        if let Some(o) = s.owners.get_mut(&self.budget.0.0) {
+        if let Some(o) = s.owners.get_mut(&budget.0.0) {
             o.used -= self.bytes;
         }
     }
+}
+/// ` owner=.. need=.. cap=.. used=..` of the latest refusal, to append where a budget error
+/// surfaces (empty when none); `error` is returned unchanged unless it is budget pressure.
+pub fn explain_refusal(error: &str) -> String {
+    let lower = error.to_ascii_lowercase();
+    let refused = state().lock().unwrap_or_else(|p| p.into_inner()).refused;
+    match refused {
+        Some((owner, need, cap, used)) if lower.contains("budget") => {
+            format!("{error} owner={owner} need={need} cap={cap} used={used}")
+        }
+        _ => error.to_string(),
+    }
+}
+/// Print one stderr line per (kind, owner) every five seconds. True when it printed.
+fn log_limited(kind: &'static str, owner: &'static str, line: impl FnOnce() -> String) -> bool {
+    static LAST: Mutex<BTreeMap<(&str, &str), std::time::Instant>> = Mutex::new(BTreeMap::new());
+    let now = std::time::Instant::now();
+    let mut last = LAST.lock().unwrap_or_else(|p| p.into_inner());
+    if last
+        .get(&(kind, owner))
+        .is_some_and(|at| now.duration_since(*at) < std::time::Duration::from_secs(5))
+    {
+        return false;
+    }
+    last.insert((kind, owner), now);
+    eprintln!("{}", line());
+    true
+}
+/// B0318: a budget overrun was absorbed instead of failing the frame. One rate-limited marker
+/// per owner; true when it printed. `action` is uncached, scaled, skipped or direct.
+pub fn report_degrade(owner: &'static str, need: usize, cap: usize, action: &str) -> bool {
+    log_limited("render-budget", owner, || {
+        format!("RENDER_BUDGET owner={owner} need={need} cap={cap} action={action}")
+    })
 }
 #[derive(Serialize)]
 pub struct Report {
@@ -253,6 +320,25 @@ impl<K: Ord, V> Lru<K, V> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn refusal_names_owner_need_and_cap_and_degrade_is_rate_limited() {
+        let b = Budget::new("test-refusal-text", 100);
+        assert_eq!(b.refusal(101), ("test-refusal-text", 100));
+        // The refusal is silent; the surfaced error names owner, need and cap. Parallel tests
+        // also refuse, so retry until this refusal is the latest one.
+        let named = (0..1000).any(|_| {
+            assert!(b.reserve(101).is_err());
+            explain_refusal("retained cache byte budget exceeded")
+                .ends_with("owner=test-refusal-text need=101 cap=100 used=0")
+        });
+        assert!(named);
+        assert_eq!(explain_refusal("invalid image"), "invalid image");
+        assert!(report_degrade("test-degrade-once", 5, 4, "uncached"));
+        assert!(!report_degrade("test-degrade-once", 5, 4, "uncached"));
+        let held = Charge::untracked(7);
+        assert_eq!(held.bytes(), 7);
+        assert!(held.reserve_related(1).is_err());
+    }
     use super::*;
     #[test]
     fn charges_survive_eviction_and_release_with_last_reference() {
