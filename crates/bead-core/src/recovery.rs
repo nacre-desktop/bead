@@ -279,6 +279,15 @@ impl Run {
         Ok(())
     }
 }
+impl Drop for Run {
+    // A fork()ed child holds a dup of the descriptor until it execs, so closing it is not
+    // enough to release the lock: unlock explicitly.
+    fn drop(&mut self) {
+        use std::os::fd::AsRawFd;
+        // SAFETY: a live owned descriptor; releases only this run's lock.
+        unsafe { libc::flock(self.lock.as_raw_fd(), libc::LOCK_UN) };
+    }
+}
 /// Pure deadline policy, also used by deterministic headless replay tests.
 pub fn stalled(last_ns: u64, now_ns: u64, limit_ns: u64) -> bool {
     now_ns.saturating_sub(last_ns) > limit_ns
@@ -373,7 +382,7 @@ impl Drop for Watchdog {
 
 #[cfg(test)]
 mod tests {
-    use super::{Bundle, write_json};
+    use super::{Bundle, Run, write_json};
     use std::io::{self, Write};
 
     struct CountingWriter {
@@ -395,6 +404,21 @@ mod tests {
         fn flush(&mut self) -> io::Result<()> {
             Ok(())
         }
+    }
+
+    #[test]
+    fn dropping_a_run_releases_the_lock_even_while_the_descriptor_is_duplicated() {
+        let dir = std::env::temp_dir().join(format!("bead-run-drop-{}", std::process::id()));
+        let path = dir.join("health.json");
+        for now in 0..50 {
+            let run = Run::begin(path.clone(), now).unwrap();
+            let child_copy = run.lock.try_clone().unwrap(); // what a forked child holds
+            assert!(Run::begin(path.clone(), now).is_err());
+            drop(run);
+            let again = Run::begin(path.clone(), now).unwrap();
+            drop((again, child_copy));
+        }
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]
