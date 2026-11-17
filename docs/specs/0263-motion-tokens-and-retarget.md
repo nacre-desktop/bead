@@ -227,3 +227,7 @@ Measured on dev-1 (headless sway, 2880x1800 at scale 1.5, Mesa llvmpipe through 
 
 A host with `primary_factory` stages wallpaper frames in steady state (`prepare_staged`, applied on its confirmation). While a fade runs, a staged frame whose palette differs waits for the confirmation without building the palette group and, once accepted, installs through the tween (`install_with_palette_tween`): image fade and 10 palette steps together. A rejected confirmation installs nothing and calls `discarded`; the palette is unchanged. Outputs of the same change tween once together; frames of an older change still waiting, a palette group, reduced motion, a failed GL setup or no fade keep the fence (`tween_route`). A tween waits without a staged CPU buffer, which the fade would throw away.
 `WALLPAPER_TRANSITION` ends with `palette_steps=<n>`: the tween steps applied while that fade ran (0 for an unchanged palette or the fence).
+
+### Fade frames and palette steps (B0315)
+
+`WALLPAPER_TRANSITION` ends with `gap_other_ms=<ms>`: the main-thread CPU time spent outside fade frames before the frame that ended the largest gap (two thread-CPU clock reads per frame, no allocation). Close to `max_gap_ms` the gap was our own main thread (repaints, palette steps, decoration or edge art); near 0 it was the compositor or the GPU.

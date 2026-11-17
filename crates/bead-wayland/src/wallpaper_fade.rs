@@ -108,12 +108,39 @@ pub(crate) struct PaletteTween {
     generation: u64,
 }
 
+/// B0315: what the main thread did between fade frames. For the largest gap between two commits
+/// it keeps the thread CPU time spent outside the fade frames (bar and panel repaints, palette
+/// steps, any other callback): near the gap means our main thread, near 0 means the compositor
+/// or the GPU. Two clock reads per frame, no allocation.
+#[derive(Default)]
+pub(crate) struct GapProbe {
+    last: Option<(f64, u64)>,
+    /// (gap seconds, other main-thread ms) of the largest gap so far.
+    worst: (f64, f64),
+}
+impl GapProbe {
+    /// A frame committed at `now` (seconds), drawn from thread CPU `cpu_start` to `cpu_end` (ns).
+    pub(crate) fn committed(&mut self, now: f64, cpu_start: u64, cpu_end: u64) {
+        if let Some((wall, cpu)) = self.last {
+            let gap = now - wall;
+            if gap > self.worst.0 {
+                self.worst = (gap, cpu_start.saturating_sub(cpu) as f64 / 1e6);
+            }
+        }
+        self.last = Some((now, cpu_end));
+    }
+    pub(crate) fn other_ms(&self) -> f64 {
+        self.worst.1
+    }
+}
+
 /// One journal line per finished fade, in the PANEL_SLIDE style: what the user saw.
 pub(crate) fn transition_marker(
     output: &str,
     kind: WallpaperFadeKind,
     slide: &bead_core::animation::Slide,
     palette_steps: u32,
+    gap_other_ms: f64,
 ) -> String {
     let render_top: Vec<String> = slide
         .render_top
@@ -123,7 +150,8 @@ pub(crate) fn transition_marker(
         .collect();
     format!(
         "WALLPAPER_TRANSITION output={output} kind={} frames={} duration_ms={:.1} \
-         first_frame_ms={:.1} max_gap_ms={:.1} gap_at={} render_top={} palette_steps={palette_steps}",
+         first_frame_ms={:.1} max_gap_ms={:.1} gap_at={} render_top={} palette_steps={palette_steps} \
+         gap_other_ms={gap_other_ms:.1}",
         match kind {
             WallpaperFadeKind::Fade => "fade",
             WallpaperFadeKind::Grow { .. } => "grow",
@@ -163,6 +191,7 @@ pub(super) struct FadeRun {
     generation: u64,
     /// Palette tween steps applied while this fade ran, for the marker.
     palette_steps: u32,
+    gaps: GapProbe,
 }
 
 #[cfg(feature = "native-gl")]
@@ -358,6 +387,7 @@ impl App {
             let run = self.wallpaper_surfaces[index].fade.as_mut().unwrap();
             run.target = std::mem::take(&mut frame.rgba);
             run.generation += 1;
+            run.gaps = GapProbe::default();
             run.spec = spec;
             run.palette = frame.palette.clone();
             let replaced = run
@@ -393,6 +423,7 @@ impl App {
         surface.revision = frame.revision;
         let generation = surface.fade.as_ref().map_or(0, |run| run.generation);
         let now = self.started.elapsed().as_secs_f64();
+        let cpu_start = bead_core::profile::thread_cpu_ns();
         // Replacing the motion restarts the curve at its held first pose.
         self.fade_animations.retain(|id| id != name);
         self.fade_animations.open_to(
@@ -408,7 +439,7 @@ impl App {
             self.finish_wallpaper_fade(index);
             return Ok(());
         }
-        self.fade_committed(index, now);
+        self.fade_committed(index, now, cpu_start);
         self.schedule_fade_watchdog(&name, generation, spec.duration_ms);
         if let Some(target) = self.pending_palette_target.take() {
             self.start_palette_tween(target, spec);
@@ -475,6 +506,7 @@ impl App {
             palette: frame.palette.clone(),
             generation: 1,
             palette_steps: 0,
+            gaps: GapProbe::default(),
         })
     }
 
@@ -522,7 +554,7 @@ impl App {
     }
 
     /// A fade frame reached the compositor: the first one starts the clock and reports the commit.
-    fn fade_committed(&mut self, index: usize, drawn: f64) {
+    fn fade_committed(&mut self, index: usize, drawn: f64, cpu_start: u64) {
         let now = self.started.elapsed().as_secs_f64();
         let name = self.wallpaper_surfaces[index].name.clone();
         let slide = self.fade_animations.committed_timed(
@@ -534,10 +566,20 @@ impl App {
             &bead_core::profile::NO_SPLITS,
         );
         let surface = &mut self.wallpaper_surfaces[index];
+        if let Some(run) = surface.fade.as_mut() {
+            run.gaps
+                .committed(now, cpu_start, bead_core::profile::thread_cpu_ns());
+        }
         if let (Some(slide), Some(run)) = (slide, &surface.fade) {
             println!(
                 "{}",
-                transition_marker(&name, run.spec.kind, &slide, run.palette_steps)
+                transition_marker(
+                    &name,
+                    run.spec.kind,
+                    &slide,
+                    run.palette_steps,
+                    run.gaps.other_ms()
+                )
             );
         }
         if let Some((revision, token)) = surface.fade.as_mut().and_then(|run| run.commit.take()) {
@@ -568,6 +610,7 @@ impl App {
         }
         let name = self.wallpaper_surfaces[index].name.clone();
         let drawn = self.started.elapsed().as_secs_f64();
+        let cpu_start = bead_core::profile::thread_cpu_ns();
         let (blend, running) = self
             .fade_animations
             .value(&name, drawn)
@@ -577,7 +620,7 @@ impl App {
             self.finish_wallpaper_fade(index);
             return true;
         }
-        self.fade_committed(index, drawn);
+        self.fade_committed(index, drawn, cpu_start);
         if !running {
             self.finish_wallpaper_fade(index);
         }
@@ -796,14 +839,31 @@ mod tests {
             WallpaperFadeKind::Grow { origin: (0.5, 0.5) },
             &slide,
             10,
+            3.5,
         );
         assert!(line.starts_with("WALLPAPER_TRANSITION output=DP-1 kind=grow frames="));
         assert!(
             line.contains("first_frame_ms=52.0") && line.contains("max_gap_ms=2"),
             "{line}"
         );
-        assert!(line.ends_with(" palette_steps=10"), "{line}");
+        assert!(
+            line.ends_with(" palette_steps=10 gap_other_ms=3.5"),
+            "{line}"
+        );
         assert!(line.contains(" render_top="));
+    }
+    #[test]
+    fn the_gap_probe_charges_the_largest_gap_with_the_other_cpu_time_before_its_frame() {
+        let ms = 1_000_000;
+        let mut p = GapProbe::default();
+        p.committed(0., 0, 2 * ms);
+        // 8 ms gap, 0.5 ms of other work, the frame itself 2 ms.
+        p.committed(0.008, 2 * ms + ms / 2, 4 * ms);
+        assert!((p.other_ms() - 0.5).abs() < 1e-9);
+        // A 16 ms gap with 9 ms of other work wins; a later shorter gap does not.
+        p.committed(0.024, 13 * ms, 15 * ms);
+        p.committed(0.032, 30 * ms, 31 * ms);
+        assert!((p.other_ms() - 9.).abs() < 1e-9);
     }
     #[test]
     fn a_staged_or_live_change_tweens_only_when_a_fade_runs_and_nothing_older_waits() {
