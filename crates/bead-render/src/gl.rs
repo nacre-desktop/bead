@@ -32,6 +32,8 @@ pub struct Transport {
         *const i32,
         i32,
     ) -> u32,
+    /// EGL_KHR_surfaceless_context: the upload thread's shared context needs it (B0317).
+    surfaceless: bool,
 }
 /// EGL display/config/context setup that can be created on a worker thread and
 /// handed to the render thread before any window surface exists.
@@ -48,6 +50,7 @@ pub struct PreparedTransport {
     config: Config,
     pub display: Display,
     swap_damage: DamageSwap,
+    surfaceless: bool,
 }
 fn assert_send<T: Send>() {}
 const _: fn() = assert_send::<PreparedTransport>;
@@ -116,6 +119,7 @@ impl PreparedTransport {
             config,
             display,
             swap_damage,
+            surfaceless: supports_surfaceless,
         })
     }
 
@@ -132,6 +136,7 @@ impl PreparedTransport {
             config: self.config,
             context: Some(context),
             swap_damage: self.swap_damage,
+            surfaceless: self.surfaceless,
         }
     }
 
@@ -291,13 +296,32 @@ impl Transport {
     /// # Safety
     /// Display must remain alive until the context and all surfaces are destroyed.
     pub unsafe fn new(display: RawDisplayHandle) -> Result<Self> {
-        let (display, config, swap_damage, _) = unsafe { initialize_display(display) }?;
+        let (display, config, swap_damage, surfaceless) = unsafe { initialize_display(display) }?;
         Ok(Self {
             display,
             config,
             context: None,
             swap_damage,
+            surfaceless,
         })
+    }
+    /// B0317: start the upload thread on a context shared with this transport's. It lives until
+    /// `Uploader::shutdown`, which must run before the transport is shut down.
+    pub fn uploader(&self, done: impl Fn(Uploaded) + Send + 'static) -> Result<Uploader> {
+        // shortcut: no pbuffer fallback for drivers without surfaceless contexts, the caller
+        // keeps uploading on the main thread; add one if such a driver shows up.
+        if !self.surfaceless {
+            return Err("EGL_KHR_surfaceless_context missing".into());
+        }
+        let shared = self.context.as_ref().ok_or("missing EGL context")?;
+        let attrs = ContextAttributesBuilder::new()
+            .with_context_api(ContextApi::OpenGl(Some(Version::new(3, 3))))
+            .with_sharing(shared)
+            .build(None);
+        // SAFETY: config belongs to this display; the context is moved to the upload thread,
+        // which is joined before the display is terminated.
+        let context = unsafe { self.display.create_context(&self.config, &attrs) }?;
+        Uploader::spawn(self.display.clone(), context, Box::new(done))
     }
     /// # Safety
     /// Window must outlive the returned surface, and belong to this display.
@@ -668,6 +692,217 @@ impl Drop for WallpaperFader {
     }
 }
 
+/// One finished upload of the worker: the pixels come back so the caller keeps them.
+pub struct Uploaded {
+    pub token: u64,
+    pub rgba: Vec<u8>,
+    pub texture: std::result::Result<u32, String>,
+    pub ms: f64,
+}
+enum Job {
+    Upload {
+        token: u64,
+        size: (u32, u32),
+        rgba: Vec<u8>,
+    },
+    /// The main thread took the texture over and deletes it.
+    Adopt(u32),
+    /// A texture nobody wants any more (a superseded frame).
+    Delete(u32),
+}
+/// The one upload thread (B0317): a context shared with the transport's, current on it without a
+/// surface. It owns every texture it made until the main thread adopts it, and deletes the ones
+/// never adopted when it stops (drop).
+pub struct Uploader {
+    jobs: Option<std::sync::mpsc::Sender<Job>>,
+    thread: Option<std::thread::JoinHandle<()>>,
+}
+struct UploadGl {
+    gen_textures: unsafe extern "system" fn(i32, *mut u32),
+    bind: unsafe extern "system" fn(u32, u32),
+    parameter: unsafe extern "system" fn(u32, u32, i32),
+    image: unsafe extern "system" fn(
+        u32,
+        i32,
+        i32,
+        i32,
+        i32,
+        i32,
+        u32,
+        u32,
+        *const std::ffi::c_void,
+    ),
+    finish: unsafe extern "system" fn(),
+    error: unsafe extern "system" fn() -> u32,
+    delete: GlDelete,
+}
+impl UploadGl {
+    fn load(display: &Display) -> Result<Self> {
+        Ok(Self {
+            gen_textures: gl_proc(display, c"glGenTextures")?,
+            bind: gl_proc(display, c"glBindTexture")?,
+            parameter: gl_proc(display, c"glTexParameteri")?,
+            image: gl_proc(display, c"glTexImage2D")?,
+            finish: gl_proc(display, c"glFinish")?,
+            error: gl_proc(display, c"glGetError")?,
+            delete: gl_proc(display, c"glDeleteTextures")?,
+        })
+    }
+    /// Upload and wait until it is done (glFinish), so the main thread can sample the texture.
+    fn upload(&self, (w, h): (u32, u32), rgba: &[u8]) -> std::result::Result<u32, String> {
+        const TEXTURE_2D: u32 = 0x0DE1;
+        // LINEAR filters and CLAMP_TO_EDGE: femtovg's defaults for ImageFlags::empty().
+        const PARAMETERS: [(u32, i32); 4] = [
+            (0x2801, 0x2601),
+            (0x2800, 0x2601),
+            (0x2802, 0x812F),
+            (0x2803, 0x812F),
+        ];
+        if rgba.len() != w as usize * h as usize * 4 {
+            return Err("wallpaper texture size mismatch".into());
+        }
+        let mut texture = 0;
+        // SAFETY: this thread's context is current; `rgba` holds w*h RGBA pixels.
+        let error = unsafe {
+            (self.gen_textures)(1, &mut texture);
+            (self.bind)(TEXTURE_2D, texture);
+            for (name, value) in PARAMETERS {
+                (self.parameter)(TEXTURE_2D, name, value);
+            }
+            (self.image)(
+                TEXTURE_2D,
+                0,
+                0x8058,
+                w as i32,
+                h as i32,
+                0,
+                0x1908,
+                0x1401,
+                rgba.as_ptr().cast(),
+            );
+            (self.bind)(TEXTURE_2D, 0);
+            (self.finish)();
+            (self.error)()
+        };
+        count(1);
+        if error != 0 {
+            self.delete(texture);
+            return Err(format!("glTexImage2D error {error:#x}"));
+        }
+        Ok(texture)
+    }
+    fn delete(&self, texture: u32) {
+        // SAFETY: this thread's context is current.
+        unsafe { (self.delete)(1, &texture) };
+        count(-1);
+    }
+}
+impl Uploader {
+    fn spawn(
+        display: Display,
+        context: NotCurrentContext,
+        done: Box<dyn Fn(Uploaded) + Send>,
+    ) -> Result<Self> {
+        let (jobs, queue) = std::sync::mpsc::channel::<Job>();
+        let thread = std::thread::Builder::new()
+            .name("bead-wallpaper-upload".into())
+            .spawn(move || {
+                // A setup failure is not fatal: every upload then answers with its reason and the
+                // main thread falls back.
+                let setup = (|| -> Result<_> {
+                    let context = match context {
+                        NotCurrentContext::Egl(context) => context,
+                        #[allow(unreachable_patterns)]
+                        _ => return Err("upload context requires EGL".into()),
+                    };
+                    let current = context.make_current_surfaceless()?;
+                    Ok((current, UploadGl::load(&display)?))
+                })();
+                let mut outstanding = std::collections::BTreeSet::new();
+                for job in queue {
+                    match (job, &setup) {
+                        (Job::Upload { token, size, rgba }, setup) => {
+                            let began = std::time::Instant::now();
+                            let texture = match setup {
+                                Ok((_, gl)) => std::panic::catch_unwind(
+                                    std::panic::AssertUnwindSafe(|| gl.upload(size, &rgba)),
+                                )
+                                .unwrap_or_else(|_| Err("upload panicked".into())),
+                                Err(error) => Err(error.to_string()),
+                            };
+                            if let Ok(texture) = texture {
+                                outstanding.insert(texture);
+                            }
+                            done(Uploaded {
+                                token,
+                                rgba,
+                                texture,
+                                ms: began.elapsed().as_secs_f64() * 1e3,
+                            });
+                        }
+                        (Job::Adopt(texture), _) => {
+                            outstanding.remove(&texture);
+                        }
+                        (Job::Delete(texture), Ok((_, gl))) => {
+                            if outstanding.remove(&texture) {
+                                gl.delete(texture);
+                            }
+                        }
+                        (Job::Delete(_), Err(_)) => {}
+                    }
+                }
+                if let Ok((current, gl)) = setup {
+                    for texture in outstanding {
+                        gl.delete(texture);
+                    }
+                    // SAFETY: still this thread's context.
+                    unsafe { (gl.finish)() };
+                    if let Err(error) = current.make_not_current() {
+                        eprintln!("GL_RELEASE_ERROR {error}");
+                    }
+                }
+            })?;
+        Ok(Self {
+            jobs: Some(jobs),
+            thread: Some(thread),
+        })
+    }
+    /// Queue an upload. The pixels come back when the thread is gone.
+    pub fn upload(
+        &self,
+        token: u64,
+        size: (u32, u32),
+        rgba: Vec<u8>,
+    ) -> std::result::Result<(), Vec<u8>> {
+        let job = Job::Upload { token, size, rgba };
+        match self.jobs.as_ref().map(|jobs| jobs.send(job)) {
+            Some(Err(std::sync::mpsc::SendError(Job::Upload { rgba, .. }))) => Err(rgba),
+            _ => Ok(()),
+        }
+    }
+    /// The texture of a finished upload now belongs to the caller.
+    pub fn adopt(&self, texture: u32) {
+        if let Some(jobs) = &self.jobs {
+            let _ = jobs.send(Job::Adopt(texture));
+        }
+    }
+    /// Drop a finished upload nobody uses.
+    pub fn discard(&self, texture: u32) {
+        if let Some(jobs) = &self.jobs {
+            let _ = jobs.send(Job::Delete(texture));
+        }
+    }
+}
+impl Drop for Uploader {
+    /// Close the queue and join: the thread deletes what was never adopted and releases its
+    /// context, so the transport can terminate the display afterwards.
+    fn drop(&mut self) {
+        self.jobs = None;
+        if let Some(thread) = self.thread.take() {
+            let _ = thread.join();
+        }
+    }
+}
 struct Texture {
     key: u64,
     image: femtovg::ImageId,

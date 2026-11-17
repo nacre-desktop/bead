@@ -303,22 +303,62 @@ pub(crate) enum FadeEnd {
     /// Not warm (or GL failed): attach the final SHM buffer and release the run.
     Release,
 }
-pub(crate) fn fade_end(warm: bool, gl_failed: bool) -> FadeEnd {
-    if warm && !gl_failed {
+pub(crate) fn fade_end(warm: bool, gl_failed: bool, upload_pending: bool) -> FadeEnd {
+    if upload_pending || (warm && !gl_failed) {
         FadeEnd::Rest
     } else {
         FadeEnd::Release
     }
 }
-/// A run at rest is released when warm mode ends or GL failed; a fade (or an upload for it) that
-/// is still going releases through `fade_end` when it ends.
-pub(crate) fn release_idle(warm: bool, gl_failed: bool, resting: bool) -> bool {
-    (!warm || gl_failed) && resting
+/// A run at rest is released when warm mode ends or GL failed, unless a frame still waits for its
+/// upload (that fade runs and ends through `fade_end`); a running fade releases when it ends.
+pub(crate) fn release_idle(
+    warm: bool,
+    gl_failed: bool,
+    resting: bool,
+    upload_pending: bool,
+) -> bool {
+    (!warm || gl_failed) && resting && !upload_pending
 }
-/// Warm mode's host switch.
+/// Warm mode may use the upload thread.
+pub(crate) fn worker_wanted(warm: bool, gl_failed: bool, worker_failed: bool) -> bool {
+    warm && !gl_failed && !worker_failed
+}
+/// An upload answer belongs to the run's newest waiting frame (last wins: older ones are deleted).
+pub(crate) fn upload_current(waiting: Option<u64>, token: u64) -> bool {
+    waiting == Some(token)
+}
+/// Warm mode's state: the host's switch, and the upload thread while it is wanted.
 #[derive(Default)]
 pub(crate) struct Warm {
     pub(crate) on: bool,
+    /// The upload thread failed: uploads stay on the main thread until warm mode changes.
+    failed: bool,
+    next_token: u64,
+    #[cfg(feature = "native-gl")]
+    upload: Option<UploadThread>,
+}
+#[cfg(feature = "native-gl")]
+struct UploadThread {
+    uploader: bead_render::gl::Uploader,
+    source: calloop::RegistrationToken,
+}
+/// A frame whose pixels the upload thread is turning into a texture; its fade starts on the answer.
+#[cfg(feature = "native-gl")]
+pub(super) struct PendingUpload {
+    token: u64,
+    spec: WallpaperFade,
+    tween: Option<PaletteMap>,
+    /// Everything but the pixels, which travel with the job.
+    frame: WallpaperFrame,
+}
+/// What a fade start carries besides the frame.
+#[cfg(feature = "native-gl")]
+struct Launch {
+    began: std::time::Instant,
+    /// The adopted texture of the frame's pixels, when the upload thread made one.
+    texture: Option<u32>,
+    tween: Option<PaletteMap>,
 }
 
 /// B0316: the first outputs of a change show their first pose (the old image) at most this long
@@ -379,6 +419,8 @@ pub(super) struct FadeRun {
     /// B0317: the fade ended warm: only the shown texture is left, nothing is drawn until the
     /// next change starts from here.
     resting: bool,
+    /// B0317: the newest frame waiting for the upload thread; the run keeps its image meanwhile.
+    upload: Option<PendingUpload>,
 }
 
 #[cfg(feature = "native-gl")]
@@ -613,76 +655,129 @@ impl App {
             self.release_wallpaper_run(index);
             return Err(frame);
         };
-        let size = (frame.width, frame.height);
         let began = std::time::Instant::now();
-        // A run at rest (warm) starts a new fade; a running one is retargeted.
-        let resting = self.wallpaper_surfaces[index]
-            .fade
-            .as_ref()
-            .is_some_and(|run| run.resting);
-        let retargeted = self.wallpaper_surfaces[index].fade.is_some() && !resting;
-        let mut read_ms = 0.;
         if self.wallpaper_surfaces[index].fade.is_some() {
-            let surface = &mut self.wallpaper_surfaces[index];
-            let run = surface.fade.as_mut().unwrap();
-            let upload = std::time::Instant::now();
-            let result = (|| -> Result<(), Box<dyn Error>> {
-                let transport = self.gl.as_ref().ok_or("GL transport missing")?;
-                transport.activate(&run.gl, size.0, size.1)?;
-                run.fader
-                    .retarget(bead_render::gl::Pixels::Rgba(&frame.rgba))
-            })();
-            if result.is_err() {
-                if let Some(run) = self.wallpaper_surfaces[index].fade.take() {
-                    self.drop_fade_run(run);
+            // A run (fading or at rest) takes the new image, uploaded by the worker when warm.
+            if self.upload_on_worker() {
+                match self.queue_upload(index, frame, spec) {
+                    None => return Ok(()),
+                    Some(back) => frame = back,
                 }
+            }
+            let launch = Launch {
+                began,
+                texture: None,
+                tween: self.pending_palette_target.take(),
+            };
+            return self.launch_on_run(index, frame, spec, launch);
+        }
+        let Some(old) = self
+            .shown_wallpaper_rgba(index)
+            .or_else(|| frame.previous_rgba.take())
+            .filter(|old| old.len() == frame.rgba.len())
+        else {
+            return Err(frame);
+        };
+        let read_ms = ms_since(began);
+        match self.create_fade_run(index, &mut frame, &old, spec) {
+            Ok(run) => self.wallpaper_surfaces[index].fade = Some(run),
+            Err(error) => {
+                self.wallpaper_gl_failed = true;
+                eprintln!("WALLPAPER_FADE_FALLBACK output={name} reason={error}");
                 self.release_wallpaper_gl();
                 return Err(frame);
             }
-            let run = self.wallpaper_surfaces[index].fade.as_mut().unwrap();
-            if resting {
-                // The run lives on across fades: this one's marker starts from zero.
-                run.palette_steps = 0;
-                run.retarget_ms = 0.;
-                run.step_max_ms = 0.;
-                run.setup = SetupTimes {
-                    upload: ms_since(upload),
-                    ..SetupTimes::default()
-                };
-                run.resting = false;
-            }
-            run.target = std::mem::take(&mut frame.rgba);
-            run.generation += 1;
-            run.gaps = GapProbe::default();
-            (run.clock, run.held_since, run.done) =
-                (None, self.started.elapsed().as_secs_f64(), false);
-            run.spec = spec;
-            run.palette = frame.palette.clone();
-            let replaced = run
-                .commit
-                .replace((frame.revision, frame.commit_token.clone()));
-            if let (Some((revision, _)), Some(provider)) = (replaced, &self.options.wallpaper) {
-                provider.discarded(&name, revision);
-            }
-        } else {
-            let Some(old) = self
-                .shown_wallpaper_rgba(index)
-                .or_else(|| frame.previous_rgba.take())
-                .filter(|old| old.len() == frame.rgba.len())
-            else {
-                return Err(frame);
-            };
-            read_ms = ms_since(began);
-            match self.create_fade_run(index, &mut frame, &old, spec) {
-                Ok(run) => self.wallpaper_surfaces[index].fade = Some(run),
-                Err(error) => {
-                    self.wallpaper_gl_failed = true;
-                    eprintln!("WALLPAPER_FADE_FALLBACK output={name} reason={error}");
-                    self.release_wallpaper_gl();
-                    return Err(frame);
-                }
-            }
         }
+        let uploader = std::time::Instant::now();
+        self.start_upload_thread(&name);
+        if let Some(run) = self.wallpaper_surfaces[index].fade.as_mut() {
+            run.setup.egl += ms_since(uploader);
+        }
+        let launch = Launch {
+            began,
+            texture: None,
+            tween: self.pending_palette_target.take(),
+        };
+        self.fade_launched(index, frame, spec, false, read_ms, launch);
+        Ok(())
+    }
+
+    /// The resident run takes `frame`: the texture the upload thread made from its pixels, or the
+    /// pixels themselves. A GL error drops the run and gives the frame back as a cut.
+    fn launch_on_run(
+        &mut self,
+        index: usize,
+        mut frame: WallpaperFrame,
+        spec: WallpaperFade,
+        launch: Launch,
+    ) -> Result<(), WallpaperFrame> {
+        let name = frame.output.clone();
+        let size = (frame.width, frame.height);
+        let Some(run) = self.wallpaper_surfaces[index].fade.as_mut() else {
+            return Err(frame);
+        };
+        let upload = std::time::Instant::now();
+        let result = (|| -> Result<(), Box<dyn Error>> {
+            let transport = self.gl.as_ref().ok_or("GL transport missing")?;
+            transport.activate(&run.gl, size.0, size.1)?;
+            run.fader.retarget(match launch.texture {
+                Some(texture) => bead_render::gl::Pixels::Texture(texture),
+                None => bead_render::gl::Pixels::Rgba(&frame.rgba),
+            })
+        })();
+        if result.is_err() {
+            if let Some(run) = self.wallpaper_surfaces[index].fade.take() {
+                self.drop_fade_run(run);
+            }
+            self.release_wallpaper_gl();
+            return Err(frame);
+        }
+        let run = self.wallpaper_surfaces[index].fade.as_mut().unwrap();
+        // A frame still waiting for its upload is superseded: its texture is deleted on arrival.
+        if let (Some(old), Some(provider)) = (run.upload.take(), &self.options.wallpaper) {
+            provider.discarded(&name, old.frame.revision);
+        }
+        let retargeted = !run.resting;
+        if run.resting {
+            // The run lives on across fades: this one's marker starts from zero.
+            run.palette_steps = 0;
+            run.retarget_ms = 0.;
+            run.step_max_ms = 0.;
+            run.setup = SetupTimes {
+                upload: ms_since(upload),
+                ..SetupTimes::default()
+            };
+            run.resting = false;
+        }
+        run.target = std::mem::take(&mut frame.rgba);
+        run.generation += 1;
+        run.gaps = GapProbe::default();
+        (run.clock, run.held_since, run.done) =
+            (None, self.started.elapsed().as_secs_f64(), false);
+        run.spec = spec;
+        run.palette = frame.palette.clone();
+        let replaced = run
+            .commit
+            .replace((frame.revision, frame.commit_token.clone()));
+        if let (Some((revision, _)), Some(provider)) = (replaced, &self.options.wallpaper) {
+            provider.discarded(&name, revision);
+        }
+        self.fade_launched(index, frame, spec, retargeted, 0., launch);
+        Ok(())
+    }
+
+    /// The run holds the new image: take the frame's state, draw the held first pose and start
+    /// the clock's wait, the watchdog and the palette tween.
+    fn fade_launched(
+        &mut self,
+        index: usize,
+        frame: WallpaperFrame,
+        spec: WallpaperFade,
+        retargeted: bool,
+        read_ms: f64,
+        launch: Launch,
+    ) {
+        let name = frame.output.clone();
         let surface = &mut self.wallpaper_surfaces[index];
         surface.staged = None;
         surface.transition = None;
@@ -707,13 +802,13 @@ impl App {
             self.wallpaper_gl_failed = true;
             eprintln!("WALLPAPER_FADE_FALLBACK output={name} reason={error}");
             self.finish_wallpaper_fade(index);
-            return Ok(());
+            return;
         }
         let first_ms = ms_since(drawn_at);
         self.fade_committed(index, now, cpu_start);
         if let Some(run) = self.wallpaper_surfaces[index].fade.as_mut() {
             if retargeted {
-                run.retarget_ms = run.retarget_ms.max(ms_since(began));
+                run.retarget_ms = run.retarget_ms.max(ms_since(launch.began));
             } else {
                 run.setup.read = read_ms;
                 run.setup.first = first_ms;
@@ -724,10 +819,169 @@ impl App {
             self.finish_completed_fades();
         }
         self.schedule_fade_watchdog(&name, generation, spec.duration_ms);
-        if let Some(target) = self.pending_palette_target.take() {
+        // Outputs of one change tween once together: another one may have started it already.
+        if let Some(target) = launch.tween
+            && self.palette_tween.as_ref().is_none_or(|t| t.to != target)
+        {
             self.start_palette_tween(target, spec);
         }
-        Ok(())
+    }
+
+    /// Whether this fade's pixels are uploaded by the worker thread (warm mode, thread alive).
+    fn upload_on_worker(&self) -> bool {
+        worker_wanted(self.warm.on, self.wallpaper_gl_failed, self.warm.failed)
+            && self.warm.upload.is_some()
+    }
+
+    /// Hand the frame's pixels to the upload thread; the fade starts when it answers
+    /// (`upload_done`). A frame still waiting for its upload is superseded (last wins). The frame
+    /// comes back when the thread is gone.
+    fn queue_upload(
+        &mut self,
+        index: usize,
+        mut frame: WallpaperFrame,
+        spec: WallpaperFade,
+    ) -> Option<WallpaperFrame> {
+        let Some(thread) = &self.warm.upload else {
+            return Some(frame);
+        };
+        self.warm.next_token += 1;
+        let token = self.warm.next_token;
+        let size = (frame.width, frame.height);
+        if let Err(rgba) = thread
+            .uploader
+            .upload(token, size, std::mem::take(&mut frame.rgba))
+        {
+            frame.rgba = rgba;
+            self.warm_upload_failed(&frame.output, "upload thread gone");
+            return Some(frame);
+        }
+        let pending = PendingUpload {
+            token,
+            spec,
+            tween: self.pending_palette_target.take(),
+            frame,
+        };
+        let run = self.wallpaper_surfaces[index].fade.as_mut()?;
+        if let (Some(old), Some(provider)) = (run.upload.replace(pending), &self.options.wallpaper)
+        {
+            provider.discarded(&old.frame.output, old.frame.revision);
+        }
+        None
+    }
+
+    /// The upload thread answered: start the fade from the texture, if its frame is still the
+    /// run's newest. A failure starts it from the pixels on this thread.
+    pub(super) fn upload_done(&mut self, done: bead_render::gl::Uploaded) {
+        let waiting = self.wallpaper_surfaces.iter().position(|s| {
+            s.fade.as_ref().is_some_and(|run| {
+                upload_current(run.upload.as_ref().map(|pending| pending.token), done.token)
+            })
+        });
+        let Some(index) = waiting else {
+            // Superseded, or its output went away: nobody wants the texture.
+            if let (Ok(texture), Some(thread)) = (done.texture, &self.warm.upload) {
+                thread.uploader.discard(texture);
+            }
+            self.stop_upload_thread_if_idle();
+            return;
+        };
+        let Some(PendingUpload {
+            spec,
+            tween,
+            mut frame,
+            ..
+        }) = self.wallpaper_surfaces[index]
+            .fade
+            .as_mut()
+            .and_then(|run| run.upload.take())
+        else {
+            return;
+        };
+        frame.rgba = done.rgba;
+        let texture = match (done.texture, &self.warm.upload) {
+            (Ok(texture), Some(thread)) => {
+                // From here the fader owns the texture and deletes it.
+                thread.uploader.adopt(texture);
+                Some(texture)
+            }
+            (Ok(texture), None) => {
+                // Unreachable while the source is registered: the thread is gone with it.
+                let _ = texture;
+                None
+            }
+            (Err(reason), _) => {
+                self.warm_upload_failed(&frame.output, reason);
+                None
+            }
+        };
+        let launch = Launch {
+            began: std::time::Instant::now(),
+            texture,
+            tween,
+        };
+        if let Err(frame) = self.launch_on_run(index, frame, spec, launch) {
+            // The run is gone (GL error): the new image replaces the old one as a cut.
+            self.install_wallpaper(frame);
+        }
+        self.stop_upload_thread_if_idle();
+    }
+
+    /// The first warm fade made its run: start the upload thread on a context shared with the
+    /// transport's. It lives until warm mode ends (or the transport goes).
+    fn start_upload_thread(&mut self, name: &str) {
+        if !worker_wanted(self.warm.on, self.wallpaper_gl_failed, self.warm.failed)
+            || self.warm.upload.is_some()
+        {
+            return;
+        }
+        let Some(transport) = &self.gl else {
+            return;
+        };
+        let (sender, receiver) = calloop::channel::channel::<bead_render::gl::Uploaded>();
+        let uploader = match transport.uploader(move |done| {
+            let _ = sender.send(done);
+        }) {
+            Ok(uploader) => uploader,
+            Err(error) => return self.warm_upload_failed(name, error),
+        };
+        let source = self
+            .loop_handle
+            .insert_source(receiver, |event, _, app| {
+                if let calloop::channel::Event::Msg(done) = event {
+                    app.upload_done(done);
+                }
+            });
+        match source {
+            Ok(source) => self.warm.upload = Some(UploadThread { uploader, source }),
+            Err(error) => self.warm_upload_failed(name, error),
+        }
+    }
+
+    /// The upload thread cannot be used: uploads stay on the main thread until warm mode ends.
+    fn warm_upload_failed(&mut self, name: &str, reason: impl std::fmt::Display) {
+        self.warm.failed = true;
+        eprintln!("WALLPAPER_FADE_FALLBACK output={name} reason={reason}");
+        self.stop_upload_thread_if_idle();
+    }
+
+    /// Stop and join the thread (it deletes the textures nobody adopted) once it is not wanted and
+    /// no frame waits for its answer.
+    fn stop_upload_thread_if_idle(&mut self) {
+        let waiting = self
+            .wallpaper_surfaces
+            .iter()
+            .any(|s| s.fade.as_ref().is_some_and(|run| run.upload.is_some()));
+        if !waiting && !worker_wanted(self.warm.on, self.wallpaper_gl_failed, self.warm.failed) {
+            self.stop_upload_thread();
+        }
+    }
+
+    fn stop_upload_thread(&mut self) {
+        if let Some(thread) = self.warm.upload.take() {
+            self.loop_handle.remove(thread.source);
+            drop(thread.uploader);
+        }
     }
 
     fn create_fade_run(
@@ -809,6 +1063,7 @@ impl App {
             held_since: self.started.elapsed().as_secs_f64(),
             done: false,
             resting: false,
+            upload: None,
         })
     }
 
@@ -925,7 +1180,10 @@ impl App {
             self.wallpaper_surfaces
                 .iter()
                 .map(|s| (s.name.as_str(), s.attached.is_some() || s.fade.is_some())),
-        )
+        ) || self.wallpaper_surfaces.iter().any(|s| {
+            // An output whose frame waits for its upload fades with this change too.
+            s.name != own && s.fade.as_ref().is_some_and(|run| run.upload.is_some())
+        })
     }
 
     /// Finish every fade that drew its last frame once all fades of its clock have.
@@ -1016,7 +1274,11 @@ impl App {
         match self.wallpaper_surfaces[index].fade.as_ref() {
             None => {}
             Some(run) if run.resting => {}
-            Some(_) => match fade_end(self.warm.on, self.wallpaper_gl_failed) {
+            Some(run) => match fade_end(
+                self.warm.on,
+                self.wallpaper_gl_failed,
+                run.upload.is_some(),
+            ) {
                 FadeEnd::Rest => self.rest_wallpaper_fade(index),
                 FadeEnd::Release => self.release_wallpaper_run(index),
             },
@@ -1054,6 +1316,8 @@ impl App {
             self.wallpaper_committed(&name, revision, &token, false);
         }
         self.schedule_wallpaper_release_poll(name.clone());
+        // Warm mode began during this fade: the thread starts now, before the next change.
+        self.start_upload_thread(&name);
         println!(
             "WALLPAPER_FADE_FINISH output={name} ms={:.1}",
             ms_since(began)
@@ -1064,8 +1328,16 @@ impl App {
     /// current, the context unbound, then the window surface.
     pub(super) fn drop_fade_run(&self, run: FadeRun) {
         let FadeRun {
-            fader, gl, size, ..
+            fader,
+            gl,
+            size,
+            upload,
+            ..
         } = run;
+        // A frame that never got its fade is dropped: the provider hears it was discarded.
+        if let (Some(pending), Some(provider)) = (upload, &self.options.wallpaper) {
+            provider.discarded(&pending.frame.output, pending.frame.revision);
+        }
         if let Some(transport) = &self.gl {
             let _ = transport.activate(&gl, size.0, size.1);
         }
@@ -1159,6 +1431,7 @@ impl App {
             return;
         }
         self.warm.on = on;
+        self.warm.failed = false;
         if !on {
             self.release_wallpaper_gl();
         }
@@ -1169,12 +1442,18 @@ impl App {
     pub(super) fn release_wallpaper_gl(&mut self) {
         for index in 0..self.wallpaper_surfaces.len() {
             let idle = self.wallpaper_surfaces[index].fade.as_ref().is_some_and(|run| {
-                release_idle(self.warm.on, self.wallpaper_gl_failed, run.resting)
+                release_idle(
+                    self.warm.on,
+                    self.wallpaper_gl_failed,
+                    run.resting,
+                    run.upload.is_some(),
+                )
             });
             if idle {
                 self.release_run_objects(index);
             }
         }
+        self.stop_upload_thread_if_idle();
         let fading = self.wallpaper_surfaces.iter().any(|s| s.fade.is_some());
         if !transport_releasable(
             fading,
@@ -1183,6 +1462,8 @@ impl App {
         ) {
             return;
         }
+        // The upload thread's context shares the transport's: it ends before the display does.
+        self.stop_upload_thread();
         if let Some(transport) = self.gl.take() {
             // SAFETY: no fade, bar or companion owns an EGL surface or renderer any more.
             if let Err(error) = unsafe { transport.shutdown_exclusive() } {
@@ -1237,19 +1518,36 @@ mod tests {
     }
     #[test]
     fn a_fade_ends_at_rest_only_while_warm_and_gl_works() {
-        assert_eq!(fade_end(true, false), FadeEnd::Rest);
-        assert_eq!(fade_end(false, false), FadeEnd::Release);
-        assert_eq!(fade_end(true, true), FadeEnd::Release, "GL failure releases");
+        assert_eq!(fade_end(true, false, false), FadeEnd::Rest);
+        assert_eq!(fade_end(false, false, false), FadeEnd::Release);
+        assert_eq!(fade_end(true, true, false), FadeEnd::Release, "GL failure releases");
+        assert_eq!(
+            fade_end(false, false, true),
+            FadeEnd::Rest,
+            "a frame waiting for its upload still gets its fade"
+        );
     }
     #[test]
     fn warm_off_releases_runs_at_rest_at_once_and_running_ones_when_they_end() {
-        // (warm, gl_failed, resting)
-        assert!(!release_idle(true, false, true), "warm keeps the run");
-        assert!(release_idle(false, false, true), "off and idle: right away");
-        assert!(!release_idle(false, false, false), "off but fading: at its end");
-        assert!(release_idle(true, true, true), "GL failure releases a run at rest");
+        // (warm, gl_failed, resting, upload waiting)
+        assert!(!release_idle(true, false, true, false), "warm keeps the run");
+        assert!(release_idle(false, false, true, false), "off and idle: right away");
+        assert!(!release_idle(false, false, false, false), "off but fading: at its end");
+        assert!(!release_idle(false, false, true, true), "off, upload waiting: after its fade");
+        assert!(release_idle(true, true, true, false), "GL failure releases a run at rest");
         // The running fade then ends through `fade_end`, with warm off: released.
-        assert_eq!(fade_end(false, false), FadeEnd::Release);
+        assert_eq!(fade_end(false, false, false), FadeEnd::Release);
+    }
+    #[test]
+    fn the_upload_thread_serves_warm_mode_only_and_the_newest_frame_wins() {
+        // (warm, gl_failed, worker_failed)
+        assert!(worker_wanted(true, false, false));
+        assert!(!worker_wanted(false, false, false), "not warm: today's main-thread upload");
+        assert!(!worker_wanted(true, true, false));
+        assert!(!worker_wanted(true, false, true), "a failed thread falls back");
+        assert!(upload_current(Some(7), 7));
+        assert!(!upload_current(Some(8), 7), "superseded: the texture is deleted");
+        assert!(!upload_current(None, 7), "the run is gone or fell back");
     }
     fn palette(colour: [u8; 4]) -> PaletteMap {
         [("accent".to_owned(), colour)].into()
