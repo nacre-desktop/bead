@@ -12,7 +12,7 @@ This index contains current framework contracts and repository-boundary decision
 | [0186 — Markup budget](0186-markup-budget.md) | Markup execution limits and recovery behavior |
 | [0203 — Plugins v1](0203-plugins-v1.md) | Plugin format, capabilities, and lifecycle |
 | [0214 — Framework split](0214-framework-split.md) | Ownership boundary and migration completion |
-| [0218 — Compositor-driven layer motion](0218-layer-motion.md) | Optional grouped atlas-plane animation for layer surfaces |
+| [0218 — Compositor-driven layer motion](0218-layer-motion.md) | Optional grouped atlas-plane animation for layer surfaces; `scale_from` as a destination-size transform (B0324) |
 | [0219 — Native layer promotion](0219-native-layer-promotion.md) | Optional compositor-owned floating placement for the existing layer surface |
 | [0232 — GraphCanvas feasibility](0232-graph-canvas.md) | Draft: renderer/layout measurements and general canvas architecture |
 | [0234 — General folder host](0234-general-host.md) | Run and CPU-check Luau application folders with the `bead` CLI |
@@ -38,9 +38,9 @@ This index contains current framework contracts and repository-boundary decision
 | [0275 — Clock resync](0275-clock-resync.md) | The clock republishes at once after resume, wall-clock steps and timezone switches without the system bus (Linux timerfd + `/etc/localtime` watch) |
 | [0263 — Slide pacing and terminal pose (B0283)](0263-motion-tokens-and-retarget.md#slide-pacing-and-terminal-pose-b0283) | A CPU motion commits its terminal pose on the first frame callback after its end (no unrelated redraw needed); start pacing findings |
 | [0263 — Desktop pass (B0273)](0263-motion-tokens-and-retarget.md#desktop-pass-b0273) | Real-GPU 120 Hz frame gaps per phase: client vs compositor reveal under nested niri and labwc; B0277 close strips; lip tab arm; B0267 held |
-| [0263 — Wallpaper crossfade (B0313)](0263-motion-tokens-and-retarget.md#wallpaper-crossfade-b0313) | GPU fade or grow of a wallpaper change at display rate with a 10-step palette tween; GL held only for the change |
+| [0263 — Wallpaper crossfade (B0313)](0263-motion-tokens-and-retarget.md#wallpaper-crossfade-b0313) | GPU fade or grow of a wallpaper change at display rate with a frame-rate palette tween (B0327, also for palette-only frames); GL held only for the change, or resident and primed while the host asks for warm mode (B0317, B0325) |
 | [0278 — Lip open continuity](0278-lip-open-continuity.md) | An edge lip holds its completed-dwell look from fire until its panel is active instead of flashing to the rest bar |
-| [0280 — Kit batch 3](0280-kit-batch3.md) | Paint-only interaction poses (`visible_on_hover`, `press_scale`/`pressed_fill`, `reflow`), `shadow` on any surface, `prewarm_shadows` |
+| [0280 — Kit batch 3](0280-kit-batch3.md) | Paint-only interaction poses (`visible_on_hover`, `press_scale`/`pressed_fill`, `reflow`), `shadow` on any surface and its parameters, `prewarm_shadows`, key repeat schedules, image `opacity` and `bake_size`, `font_features`, `scroll_steps` |
 | [0284 — Mirror validates once](0284-mirror-validate-once.md) | A mirrored snapshot is validated once per patch; `Publisher::publish_mirror` republishes it; one compare per publication |
 | [0281 — Cleanup and bloat pass](0281-cleanup-pass.md) | One snapshot hub for the event services, unused probes and dependency, stale spec text; deferred cleanup by owner |
 | [0285 — UI package](0285-ui-package.md) | `UiPackage` reads a UI root once; `FolderView::from_package` builds more views from memory (a lock screen survives a package upgrade) |
