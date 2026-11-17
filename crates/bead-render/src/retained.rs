@@ -202,8 +202,10 @@ fn content_key(scene: &Scene, scale: f32) -> u64 {
                 family,
                 size,
                 color,
+                features,
                 ..
             } => {
+                features.hash(&mut h);
                 weight.hash(&mut h);
                 text.hash(&mut h);
                 family.hash(&mut h);

@@ -4926,3 +4926,70 @@ fn key_repeat_prop_parses_and_validates() {
         "root Panel only"
     );
 }
+
+#[test]
+fn font_features_parse_validate_and_reach_text_and_measurement() {
+    use crate::layout::font_features;
+    assert_eq!(font_features("").unwrap(), vec![]);
+    assert_eq!(font_features("tnum").unwrap(), vec![(*b"tnum", 1)]);
+    assert_eq!(
+        font_features("tnum ss01,liga=0").unwrap(),
+        vec![(*b"tnum", 1), (*b"ss01", 1), (*b"liga", 0)]
+    );
+    for bad in ["tnu", "tnums", "tn\u{e9}m", "tnum=", "tnum=65536", "tnum=x"] {
+        assert!(font_features(bad).is_err(), "{bad}");
+    }
+    let many = (0..17)
+        .map(|i| format!("ss{i:02}"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    assert!(font_features(&many).is_err());
+    let f = fixture();
+    let build = |props: &str, call: &str| {
+        fs::write(
+            f.0.join("ui/main.luau"),
+            format!(
+                "local ui=require('bead.ui'); return ui.Row{{id='row',width=300,height=40,ui.Text{{id='t',text='Hamburgefons 1234',family='IBM Plex Sans',font_size=16,width={call},height=24{props}}}}}"
+            ),
+        )
+        .unwrap();
+        let mut session = f.session();
+        session.entry = "ui/main.luau".into();
+        let fonts =
+            vec![Path::new(env!("CARGO_MANIFEST_DIR")).join("../bead-test/fonts/IBMPlexSans.ttf")];
+        session.set_font_picker_if_missing(std::sync::Arc::new(move |_| fonts.clone()));
+        session.reload()
+    };
+    let text = |scene: &bead_render::Scene| {
+        scene
+            .primitives
+            .iter()
+            .find_map(|primitive| match primitive {
+                Primitive::Text { features, rect, .. } => Some((features.clone(), rect.w)),
+                _ => None,
+            })
+    };
+    assert_eq!(text(&build("", "100").unwrap()).unwrap().0, vec![]);
+    let (features, _) = text(&build(",font_features='sups'", "100").unwrap()).unwrap();
+    assert_eq!(features, vec![(*b"sups", 1)]);
+    assert!(build(",font_features='bad'", "100").is_err());
+    assert!(build(",font_features=3", "100").is_err());
+    // Content width and ui.text_width agree at the node's own weight and features.
+    let content = |extra: &str| text(&build(extra, "'content'").unwrap()).unwrap().1;
+    let measured = |args: &str| {
+        text(
+            &build(
+                "",
+                &format!("ui.text_width('Hamburgefons 1234','IBM Plex Sans',16{args})"),
+            )
+            .unwrap(),
+        )
+        .unwrap()
+        .1
+    };
+    assert_eq!(content(",font_weight=700"), measured(",700"));
+    assert_ne!(measured(",700"), measured(""));
+    assert_eq!(content(",font_features='sups'"), measured(",400,'sups'"));
+    assert_ne!(measured(",400,'sups'"), measured(",400"));
+    assert_eq!(measured(",nil,nil"), measured(""));
+}

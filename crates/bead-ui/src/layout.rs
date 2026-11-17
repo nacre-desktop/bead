@@ -138,6 +138,7 @@ pub const PROPERTIES: &[&str] = &[
     "join",
     "font_size",
     "font_weight",
+    "font_features",
     "text_shadow_blur",
     "text_shadow_y",
     "text_shadow_color",
@@ -276,6 +277,7 @@ pub struct ViewSpec {
     pub drop_argument: Option<Value>,
     pub font_size: f32,
     pub font_weight: u16,
+    pub font_features: bead_render::FontFeatures,
     pub text_shadow_blur: f32,
     pub text_shadow_y: f32,
     pub text_shadow_color: Option<Json>,
@@ -353,6 +355,24 @@ fn number(p: &Props<'_>, name: &str, default: f32, source: &Source) -> Result<f3
             .map(|n| n as f32)
             .ok_or_else(|| source.error(format!("{name} must be a finite number within 20000"))),
     }
+}
+/// `"tnum ss01, liga=0"`: 4 printable ASCII chars per tag, optional `=0..65535` (bare means 1), at most 16.
+pub(crate) fn font_features(list: &str) -> Result<bead_render::FontFeatures, &'static str> {
+    let mut features = Vec::new();
+    for item in list.split([' ', ',']).filter(|item| !item.is_empty()) {
+        let (tag, setting) = item.split_once('=').unwrap_or((item, "1"));
+        let tag: [u8; 4] = tag
+            .as_bytes()
+            .try_into()
+            .ok()
+            .filter(|tag: &[u8; 4]| tag.iter().all(|b| (0x20..0x7f).contains(b)))
+            .ok_or("tags are 4 printable ASCII characters")?;
+        features.push((tag, setting.parse().map_err(|_| "values are 0..65535")?));
+    }
+    if features.len() > 16 {
+        return Err("takes at most 16 tags");
+    }
+    Ok(features)
 }
 fn polygon(value: Option<&Json>, source: &Source) -> Result<Option<Vec<[f32; 2]>>, Diagnostic> {
     let Some(value) = value else { return Ok(None) };
@@ -646,6 +666,8 @@ impl ViewSpec {
                 return Err(source.error("font_weight must be an integer 1..1000"));
             }
             let font_weight = font_weight as u16;
+            let font_features = font_features(text(p, "font_features", "", source)?)
+                .map_err(|reason| source.error(format!("font_features {reason}")))?;
             let opacity = number(p, "opacity", 1., source)?;
             if !(0. ..=1.).contains(&opacity) {
                 return Err(source.error("opacity must be 0..1"));
@@ -1131,6 +1153,7 @@ impl ViewSpec {
                 join,
                 font_size,
                 font_weight,
+                font_features,
                 text_shadow_blur,
                 text_shadow_y,
                 text_shadow_color: p.get("text_shadow_color").cloned(),
@@ -1597,6 +1620,7 @@ pub fn layout(
                     },
                     family: view.family.clone(),
                     weight: view.font_weight,
+                    features: view.font_features.clone(),
                     align: view.text_align,
                     size: view.font_size,
                     color: if input_empty { muted } else { foreground },

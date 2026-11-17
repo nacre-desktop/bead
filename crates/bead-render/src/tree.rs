@@ -872,6 +872,7 @@ pub(crate) fn hash_primitive(primitive: &Primitive, at_origin: bool, hash: &mut 
             size,
             color,
             shadow,
+            features,
         } => {
             rect(r, hash);
             let shadow = shadow.map(|shadow| {
@@ -881,7 +882,17 @@ pub(crate) fn hash_primitive(primitive: &Primitive, at_origin: bool, hash: &mut 
                     shadow.offset_y.to_bits(),
                 )
             });
-            (weight, align, text, family, size.to_bits(), color, shadow).hash(hash);
+            (
+                weight,
+                align,
+                text,
+                family,
+                size.to_bits(),
+                color,
+                shadow,
+                features,
+            )
+                .hash(hash);
         }
         Primitive::Image {
             blur,
@@ -5345,6 +5356,7 @@ mod tests {
                                 weight: 400,
                                 align: Some(crate::TextAlign::Left),
                                 shadow: None,
+                                features: Vec::new(),
                             },
                             clip: Some(Rect::new(4., 3., 20., 14.)),
                             raster: Some(Arc::new(Raster {
@@ -7340,6 +7352,7 @@ mod tests {
             weight: 400,
             align: None,
             shadow: None,
+            features: Vec::new(),
         };
         let mut other = text.clone();
         if let Primitive::Text { rect, .. } = &mut other {
@@ -7387,6 +7400,7 @@ mod tests {
                 weight: 400,
                 align: None,
                 shadow: None,
+                features: Vec::new(),
             });
             scene.clips.insert(2, Rect::new(0., 0., 24., 20.));
             scene.layers[0].subtree_end = 3;
@@ -7816,6 +7830,7 @@ mod tests {
             weight: 400,
             align: None,
             shadow: None,
+            features: Vec::new(),
         });
         scene.clips.insert(count, Rect::new(0., 0., 24., 24.));
         let length = scene.primitives.len();
@@ -8306,6 +8321,7 @@ mod tests {
                 weight: 400,
                 align: None,
                 shadow: None,
+                features: Vec::new(),
             },
             Primitive::Text {
                 rect: Rect::new(2., 2., 18., 8.),
@@ -8316,6 +8332,7 @@ mod tests {
                 weight: 400,
                 align: None,
                 shadow: None,
+                features: Vec::new(),
             },
         ];
         source.font_files = vec![

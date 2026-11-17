@@ -31,6 +31,7 @@ pub fn safe_bar(palette: &Palette) -> Scene {
                 weight: 400,
                 align: None,
                 shadow: None,
+                features: Vec::new(),
             },
         ],
         input_islands: None,

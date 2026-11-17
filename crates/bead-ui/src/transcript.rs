@@ -150,6 +150,7 @@ impl Meter {
                         size: 16.,
                         color: [0; 4],
                         shadow: None,
+                        features: Vec::new(),
                     });
                 }
                 picker(&scene)
@@ -183,18 +184,26 @@ impl Meter {
         measured
     }
     /// Unwrapped label width, using the same selected fonts and text-size offset as painting.
-    pub fn width(&self, text: &str, family: &str, size: f32) -> f32 {
+    pub fn width(
+        &self,
+        text: &str,
+        family: &str,
+        size: f32,
+        weight: u16,
+        features: &[([u8; 4], u16)],
+    ) -> f32 {
         self.prepare(text, [family, family]);
         let family = crate::text_style::family(family);
         let size = crate::text_style::size(size, &family);
         let mut hash = std::collections::hash_map::DefaultHasher::new();
-        (text, &family, size.to_bits()).hash(&mut hash);
+        (text, &family, size.to_bits(), weight, features).hash(&mut hash);
         let key = hash.finish();
         if let Some(width) = self.widths.borrow().get(&key) {
             return *width;
         }
         let width = self.scene.borrow().as_ref().map_or(0., |scene| {
-            bead_render::text_width(scene, text, &family, size).unwrap_or(0.)
+            bead_render::text_width_styled(scene, text, (&family, weight, features), size)
+                .unwrap_or(0.)
         });
         let mut cache = self.widths.borrow_mut();
         let _ = cache.insert(key, width, 64);
@@ -484,7 +493,8 @@ fn lay(meter: &Meter, style: &Style, entry: &Entry, blocks: &[Block]) -> Laid {
     let mut button_y = end + s.xs + 1.;
     if !buttons.is_empty() {
         for (label, action) in buttons {
-            let width = (meter.width(&label, &style.sans, body) + s.xxl + s.sm).min(style.width);
+            let width =
+                (meter.width(&label, &style.sans, body, 400, &[]) + s.xxl + s.sm).min(style.width);
             if x > 0. && x + width > style.width {
                 x = 0.;
                 button_y += button_h + s.xs + 1.;
@@ -582,7 +592,8 @@ fn measure(meter: &Meter, style: &Style, entry: &Entry, blocks: &[Block]) -> f32
                 .iter()
                 .flat_map(|(label, _)| std::iter::repeat_n(label.as_str(), code_buttons)),
         ) {
-            let width = (meter.width(label, &style.sans, body) + s.xxl + s.sm).min(style.width);
+            let width =
+                (meter.width(label, &style.sans, body, 400, &[]) + s.xxl + s.sm).min(style.width);
             if x > 0. && x + width > style.width {
                 x = 0.;
                 button_y += button_h + s.xs + 1.;

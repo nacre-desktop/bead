@@ -2030,6 +2030,7 @@ mod tests {
             weight: 400,
             align: None,
             shadow: None,
+            features: Vec::new(),
         }];
 
         let mut pixels = tiny_skia::Pixmap::new(12, 12).unwrap();

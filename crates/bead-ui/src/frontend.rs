@@ -232,7 +232,7 @@ return function(ui, constructors, allowed, arrayMarker)
                 local padding = named.padding or 0
                 local horizontal = type(padding) == "number" and padding * 2 or 0
                 horizontal += (named.padding_left or 0) + (named.padding_right or 0)
-                named.width = ui.text_width(label, family, size) + horizontal
+                named.width = ui.text_width(label, family, size, named.font_weight, named.font_features) + horizontal
             end
             if name == "Polyline" and type(named.points) == "table" and next(named.points) == nil then
                 named.points = setmetatable({}, arrayMarker)
@@ -281,10 +281,14 @@ return function(ui, constructors, allowed, arrayMarker)
     end
 end
 "#;
+/// `ui.text_width(input, family, size[, weight[, features]])`.
+type TextMeasureArgs = (mlua::Value, String, f32, Option<f64>, Option<String>);
 struct WidthDependency {
     binding: String,
     family: String,
     size: f32,
+    weight: u16,
+    features: bead_render::FontFeatures,
     width: f32,
 }
 struct WindowDependency {
@@ -651,7 +655,14 @@ impl LuauFrontEnd {
             plugins: plugins.map(|(root, mount)| (root, mount.grants)),
         })
     }
-    fn measured_width(&self, text: &str, family: &str, size: f32) -> f32 {
+    fn measured_width(
+        &self,
+        text: &str,
+        family: &str,
+        size: f32,
+        weight: u16,
+        features: &[([u8; 4], u16)],
+    ) -> f32 {
         let mut meters = self.text_meters.borrow_mut();
         if meters.len() >= 8 && !meters.contains_key(family) {
             meters.clear();
@@ -670,7 +681,7 @@ impl LuauFrontEnd {
         meters
             .get_mut(family)
             .expect("inserted meter")
-            .width(text, family, size)
+            .width(text, family, size, weight, features)
             .ceil()
     }
     pub(super) fn resource_bytes(&self) -> (usize, usize, usize) {
@@ -992,8 +1003,16 @@ impl FrontEnd for LuauFrontEnd {
                         && dependency.binding.len() <= 2048
                         && dependency.family.len() <= 128
                         && (1. ..=256.).contains(&dependency.size)
-                        && self.measured_width(&text, &dependency.family, dependency.size).to_bits()
-                        == dependency.width.to_bits())
+                        && self
+                            .measured_width(
+                                &text,
+                                &dependency.family,
+                                dependency.size,
+                                dependency.weight,
+                                &dependency.features,
+                            )
+                            .to_bits()
+                            == dependency.width.to_bits())
             })
             && cached.windows.iter().all(|dependency| {
                 matches!(resolve(&dependency.binding), Ok(Value::Number(offset))
@@ -1052,11 +1071,23 @@ impl FrontEnd for LuauFrontEnd {
             let host = &vm.host;
             host.set(
                 "text_width",
-                scope.create_function(|_, (input, family, size): (mlua::Value, String, f32)| {
+                scope.create_function(|_, args: TextMeasureArgs| {
+                    let (input, family, size, weight, features) = args;
                     vm.bump();
-                    if family.len() > 128 || !(1. ..=256.).contains(&size) {
+                    let weight = weight.unwrap_or(400.);
+                    if family.len() > 128
+                        || !(1. ..=256.).contains(&size)
+                        || !(1. ..=1000.).contains(&weight)
+                        || weight.fract() != 0.
+                    {
                         return Err(mlua::Error::runtime("invalid text measurement"));
                     }
+                    let weight = weight as u16;
+                    let features =
+                        crate::layout::font_features(features.as_deref().unwrap_or_default())
+                            .map_err(|reason| {
+                                mlua::Error::runtime(format!("font_features {reason}"))
+                            })?;
                     let (text, binding) = match input {
                         mlua::Value::String(text) => (text.to_str()?.to_owned(), None),
                         mlua::Value::Table(table) => {
@@ -1086,7 +1117,7 @@ impl FrontEnd for LuauFrontEnd {
                         return Err(mlua::Error::runtime("invalid text measurement"));
                     }
                     let started = bead_core::profile::thread_cpu_ns();
-                    let width = self.measured_width(&text, &family, size);
+                    let width = self.measured_width(&text, &family, size, weight, &features);
                     vm.native_time.set(
                         vm.native_time.get()
                             + bead_core::profile::thread_cpu_ns().saturating_sub(started),
@@ -1097,6 +1128,8 @@ impl FrontEnd for LuauFrontEnd {
                             dependency.binding == binding
                                 && dependency.family == family
                                 && dependency.size == size
+                                && dependency.weight == weight
+                                && dependency.features == features
                         }) {
                             if dependencies.len() == 4096 {
                                 dependency_overflow.set(true);
@@ -1105,6 +1138,8 @@ impl FrontEnd for LuauFrontEnd {
                                     binding,
                                     family,
                                     size,
+                                    weight,
+                                    features,
                                     width,
                                 });
                             }

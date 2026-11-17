@@ -317,7 +317,7 @@ return function(ui, tokens)
             local chosen=o.selected or (current~=nil and o.id==current)
             local base=chosen and "primary" or "surfaceContainerHigh"
             local ink=chosen and "onPrimary" or (live and "onSurfaceVariant" or "onSurface")
-            local width=math.ceil(ui.text_width(o.label,ui.default_font_family,size))+2*tokens.spacing.md+tokens.spacing.hairline
+            local width=math.ceil(ui.text_width(o.label,ui.default_font_family,size,500))+2*tokens.spacing.md+tokens.spacing.hairline
             local option_h=height-2*tokens.spacing.xs
             total=total+width+tokens.spacing.hairline
             pill[#pill+1]=kit.Button{id="option-"..i,width=width,height=option_h,padding=0,padding_top=(option_h-20)/2,shrink=0,
@@ -493,7 +493,7 @@ return function(ui, tokens)
         local tone=p.tone or "primary"
         -- Whole-pixel width: a box sized to a fractional advance can wrap its last glyph.
         return ui.Text(props(p,{position="absolute",top=-5,right=-7,height=15,radius=7.5,padding=0,
-            width=math.max(15,math.ceil(ui.text_width(text,p.family or ui.default_font_family,10))+8),
+            width=math.max(15,math.ceil(ui.text_width(text,p.family or ui.default_font_family,10,600))+8),
             text=text,text_align="center",font_size=10,font_weight=600,fill=tone,
             color=badge_ink[tone] or "surface",visible=text~="" and text~="0"},{tone=true}))
     end
@@ -504,7 +504,7 @@ return function(ui, tokens)
         local ink=on and "onPrimaryContainer" or "onSurface"
         local base=on and "primaryContainer" or "surfaceContainerHigh"
         local glyph_px=tokens.icons.large*4/3
-        local label_w=math.ceil(ui.text_width(text,ui.default_font_family,metrics.text.label))+tokens.spacing.hairline
+        local label_w=math.ceil(ui.text_width(text,ui.default_font_family,metrics.text.label,500))+tokens.spacing.hairline
         local pad=tokens.spacing.lg
         local kids={}
         if p.icon then

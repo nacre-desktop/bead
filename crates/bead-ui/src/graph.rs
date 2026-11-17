@@ -493,6 +493,7 @@ impl Canvas {
                     size,
                     color: self.style.label,
                     shadow: None,
+                    features: Vec::new(),
                 };
                 (text, clip)
             })

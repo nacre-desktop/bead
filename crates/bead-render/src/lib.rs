@@ -31,6 +31,19 @@ pub mod tree;
 fn normal_weight() -> u16 {
     400
 }
+/// OpenType feature settings of a text run: (tag, value), applied in order (B0326).
+pub type FontFeatures = Vec<([u8; 4], u16)>;
+/// The shaper attributes of a run; paint and every measurement build theirs here so they cannot drift.
+fn text_attrs<'a>(family: &'a str, weight: u16, features: &[([u8; 4], u16)]) -> Attrs<'a> {
+    let mut set = cosmic_text::FontFeatures::new();
+    for (tag, value) in features {
+        set.set(cosmic_text::FeatureTag::new(tag), u32::from(*value));
+    }
+    Attrs::new()
+        .family(Family::Name(family))
+        .weight(cosmic_text::Weight(weight))
+        .font_features(set)
+}
 pub type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
 #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -183,6 +196,9 @@ pub enum Primitive {
         color: [u8; 4],
         #[serde(default)]
         shadow: Option<TextShadow>,
+        /// OpenType features such as `tnum`; empty is the font's defaults.
+        #[serde(default)]
+        features: FontFeatures,
     },
     Image {
         #[serde(default)]
@@ -239,6 +255,26 @@ pub struct TextShadow {
     pub offset_y: f32,
 }
 impl Primitive {
+    /// A text run with every other field at its default, so hosts never break on a new field.
+    pub fn text(
+        rect: Rect,
+        text: impl Into<String>,
+        family: impl Into<String>,
+        size: f32,
+        color: [u8; 4],
+    ) -> Self {
+        Self::Text {
+            weight: normal_weight(),
+            align: None,
+            rect,
+            text: text.into(),
+            family: family.into(),
+            size,
+            color,
+            shadow: None,
+            features: Vec::new(),
+        }
+    }
     /// An image with every other field at its default, so hosts never break on a new field.
     pub fn image(rect: Rect, path: impl Into<std::path::PathBuf>) -> Self {
         Self::Image {
@@ -390,7 +426,12 @@ pub enum TextAlign {
 pub fn primitive_bytes(p: &Primitive) -> usize {
     std::mem::size_of::<Primitive>()
         + match p {
-            Primitive::Text { text, family, .. } => text.capacity() + family.capacity(),
+            Primitive::Text {
+                text,
+                family,
+                features,
+                ..
+            } => text.capacity() + family.capacity() + std::mem::size_of_val(features.as_slice()),
             Primitive::Polyline { points, .. } => {
                 points.capacity() * std::mem::size_of::<[f32; 2]>()
             }
@@ -1303,8 +1344,9 @@ fn key(p: &Primitive, scale: f32) -> String {
             weight,
             align,
             shadow,
+            features,
         } => format!(
-            "t:{scale}:{}:{}:{family}:{weight}:{size}:{color:?}:{align:?}:{shadow:?}:{text}",
+            "t:{scale}:{}:{}:{family}:{weight}:{size}:{color:?}:{align:?}:{shadow:?}:{features:?}:{text}",
             rect.w, rect.h
         ),
         Primitive::Image {
@@ -1594,6 +1636,7 @@ impl Renderer for CpuRenderer {
                     weight,
                     align,
                     shadow,
+                    features,
                 } => {
                     let (target_w, target_h) = dimensions(*rect, scale);
                     let symbol = is_single_symbol(family, text);
@@ -1614,9 +1657,7 @@ impl Renderer for CpuRenderer {
                     buf.set_size(Some(w as f32), Some(h as f32));
                     buf.set_text(
                         text,
-                        &Attrs::new()
-                            .family(Family::Name(family))
-                            .weight(cosmic_text::Weight(*weight)),
+                        &text_attrs(family, *weight, features),
                         Shaping::Advanced,
                         align.map(|a| match a {
                             TextAlign::Left => cosmic_text::Align::Left,
@@ -2747,7 +2788,7 @@ pub fn text_boundary_x(
 fn wrapped<R>(
     scene: &Scene,
     text: &str,
-    family: &str,
+    (family, weight, features): (&str, u16, &[([u8; 4], u16)]),
     size: f32,
     width: f32,
     use_buffer: impl FnOnce(&mut FontSystem, &mut Buffer) -> R,
@@ -2759,7 +2800,7 @@ fn wrapped<R>(
     buffer.set_size(Some(width.max(1.)), None);
     buffer.set_text(
         text,
-        &Attrs::new().family(Family::Name(family)),
+        &text_attrs(family, weight, features),
         Shaping::Advanced,
         None,
     );
@@ -2768,7 +2809,16 @@ fn wrapped<R>(
 }
 /// Unwrapped advance of the widest line, using the same shaper as painting.
 pub fn text_width(scene: &Scene, text: &str, family: &str, size: f32) -> Result<f32> {
-    wrapped(scene, text, family, size, 20_000., |_, buffer| {
+    text_width_styled(scene, text, (family, 400, &[]), size)
+}
+/// `text_width` at the weight and OpenType features a text run is painted with (B0326).
+pub fn text_width_styled(
+    scene: &Scene,
+    text: &str,
+    style: (&str, u16, &[([u8; 4], u16)]),
+    size: f32,
+) -> Result<f32> {
+    wrapped(scene, text, style, size, 20_000., |_, buffer| {
         buffer
             .layout_runs()
             .map(|run| run.line_w)
@@ -2777,7 +2827,17 @@ pub fn text_width(scene: &Scene, text: &str, family: &str, size: f32) -> Result<
 }
 /// Number of drawn lines (at least one), counting wraps and explicit newlines.
 pub fn text_lines(scene: &Scene, text: &str, family: &str, size: f32, width: f32) -> Result<usize> {
-    wrapped(scene, text, family, size, width, |_, buffer| {
+    text_lines_styled(scene, text, (family, 400, &[]), size, width)
+}
+/// `text_lines` at the weight and OpenType features a text run is painted with (B0326).
+pub fn text_lines_styled(
+    scene: &Scene,
+    text: &str,
+    style: (&str, u16, &[([u8; 4], u16)]),
+    size: f32,
+    width: f32,
+) -> Result<usize> {
+    wrapped(scene, text, style, size, width, |_, buffer| {
         buffer.layout_runs().count().max(1)
     })
 }
@@ -2809,7 +2869,7 @@ pub fn text_caret(
     size: f32,
     width: f32,
 ) -> Result<(f32, f32)> {
-    wrapped(scene, text, family, size, width, |_, buffer| {
+    wrapped(scene, text, (family, 400, &[]), size, width, |_, buffer| {
         buffer
             .cursor_position(&cursor_at(text, boundary))
             .unwrap_or_else(|| {
@@ -2829,7 +2889,7 @@ pub fn text_vertical(
     size: f32,
     width: f32,
 ) -> Result<usize> {
-    wrapped(scene, text, family, size, width, |_, buffer| {
+    wrapped(scene, text, (family, 400, &[]), size, width, |_, buffer| {
         let pitch = size * 1.4;
         let (x, y) = buffer
             .cursor_position(&cursor_at(text, boundary))
@@ -2858,7 +2918,7 @@ pub fn text_selection(
     width: f32,
 ) -> Result<Vec<Rect>> {
     let (from, to) = (from.min(to), from.max(to));
-    wrapped(scene, text, family, size, width, |_, buffer| {
+    wrapped(scene, text, (family, 400, &[]), size, width, |_, buffer| {
         let (start, end) = (cursor_at(text, from), cursor_at(text, to));
         buffer
             .layout_runs()
@@ -3279,6 +3339,7 @@ mod tests {
                 weight: 400,
                 align: None,
                 shadow: None,
+                features: Vec::new(),
             },
         ];
         scene.motion = Some(Motion {
@@ -3346,6 +3407,7 @@ mod tests {
                 align: None,
                 color: [200, 0, 0, 255],
                 shadow: None,
+                features: Vec::new(),
             },
             Primitive::Arc {
                 rect: Rect::new(40., 80., 40., 40.),
@@ -3648,6 +3710,7 @@ mod tests {
                     align: None,
                     color: [255; 4],
                     shadow: None,
+                    features: Vec::new(),
                 },
                 Primitive::Rounded {
                     rect: Rect::new(32., 40., 4., 180.),
@@ -3750,6 +3813,7 @@ mod tests {
                 weight: 400,
                 align: None,
                 shadow: None,
+                features: Vec::new(),
             }],
             input_islands: None,
             key_repeat: None,
@@ -3777,6 +3841,57 @@ mod tests {
             .max()
             .unwrap();
         assert!((100..=102).contains(&maximum), "alpha {maximum}");
+    }
+    /// The bundled fixture has no `tnum`; `sups` changes figure advances, which proves features reach the shaper.
+    const SUPS: &[([u8; 4], u16)] = &[(*b"sups", 1)];
+    #[test]
+    fn font_features_reach_measurement_paint_and_cache_key() {
+        let mut scene = font_pool_scene();
+        let family = "IBM Plex Sans";
+        let Primitive::Text { text, .. } = &mut scene.primitives[0] else {
+            panic!("text")
+        };
+        *text = "office 1234".into();
+        let plain = text_width_styled(&scene, "1234", (family, 400, &[]), 16.).unwrap();
+        let sups = text_width_styled(&scene, "1234", (family, 400, SUPS), 16.).unwrap();
+        assert!(sups < plain, "{sups} vs {plain}");
+        let mut featured = scene.primitives[0].clone();
+        let Primitive::Text { features, .. } = &mut featured else {
+            panic!("text")
+        };
+        *features = SUPS.to_vec();
+        assert_ne!(key(&scene.primitives[0], 1.), key(&featured, 1.));
+        let mut renderer = CpuRenderer::default();
+        let mut with = scene.clone();
+        with.primitives = vec![featured];
+        renderer.prepare(&scene, 1.).unwrap();
+        renderer.prepare(&with, 1.).unwrap();
+        let (a, b) = (&scene.primitives[0], &with.primitives[0]);
+        let pixels = |p| renderer.textures.get(&key(p, 1.)).unwrap().data().to_vec();
+        assert_ne!(pixels(a), pixels(b));
+        // No features is the plain constructor's output, byte for byte.
+        let built = Primitive::text(
+            Rect::new(0., 0., 240., 32.),
+            "office 1234",
+            family,
+            17.,
+            [13, 27, 41, 255],
+        );
+        assert_eq!(key(&built, 1.), key(a, 1.));
+    }
+    #[test]
+    fn text_width_honours_variable_font_weight() {
+        let scene = font_pool_scene();
+        let at = |weight| {
+            text_width_styled(&scene, "Hamburgefons", ("IBM Plex Sans", weight, &[]), 16.).unwrap()
+        };
+        assert!(
+            at(700) > at(400) && at(450) > at(400),
+            "{} {} {}",
+            at(400),
+            at(450),
+            at(700)
+        );
     }
     #[test]
     fn glyph_text_shadow_is_soft_and_stays_behind_solid_ink() {
@@ -4058,6 +4173,7 @@ mod tests {
                             size: 10.,
                             color: [20, 120, 210, 255],
                             shadow: None,
+                            features: Vec::new(),
                         },
                         Primitive::Image {
                             opacity: 1.,
@@ -4554,6 +4670,7 @@ mod symbol_ink_tests {
                         weight: 400,
                         align: Some(TextAlign::Center),
                         shadow: None,
+                        features: Vec::new(),
                     }],
                     offset: (0., 0.),
                     bounds: Rect::new(0., 0., 80., 80.),

@@ -251,6 +251,7 @@ mod tests {
                 size: 12.,
                 color: [255, 255, 255, 255],
                 shadow: None,
+                features: Vec::new(),
             }],
             offset: (0., 0.),
             bounds: Rect::new(0., 0., 100., 100.),

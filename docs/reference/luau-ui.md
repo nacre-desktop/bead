@@ -35,6 +35,7 @@ ui.Box { id="box", width=80, height=40, fill="surface", child }
 ```luau
 ui.Text { id="label", text="Hello", width=100, height=24 }
 -- Label; text, font, alignment, color, and dimensions are useful props.
+-- font_weight is an integer 1..1000 (a continuous wght on variable fonts); font_features="tnum" sets OpenType features (see spec 0280).
 ```
 ```luau
 ui.Button { id="save", text="Save", on_activate=ui.action("save") }
@@ -84,7 +85,7 @@ return ui.Button { id="count", text=ui.bind("label"), on_activate=ui.action("inc
 
 For a live display, derive text in `computed` and bind it. `ui.resolve_for_check` resolves values during checks only; it does not create a runtime subscription. A view that reads an undeclared host key will not receive that value. Use a store for editable input and bind it directly to `TextInput.text`.
 
-Render a list store with `ui.Repeat { id = "rows", model = ui.bind("NAME"), key = "id", render = function(item) return ui.Text { text = item.name } end }`: one element per record, keyed by that field (see [hello-status](../../examples/hello-status/)). Other helpers: `ui.alpha(role, alpha)` and `ui.tint(base, over, alpha)` build colour values, `ui.text_width(text, family, size)` measures text (`ui.default_font_family` is the default family), `ui.component(name, schema, render)` wraps a render function with property type checks, and `ui.graph(nodes, edges)` hands graph data to Rust once for [`kit.GraphCanvas`](kit.md).
+Render a list store with `ui.Repeat { id = "rows", model = ui.bind("NAME"), key = "id", render = function(item) return ui.Text { text = item.name } end }`: one element per record, keyed by that field (see [hello-status](../../examples/hello-status/)). Other helpers: `ui.alpha(role, alpha)` and `ui.tint(base, over, alpha)` build colour values, `ui.text_width(text, family, size[, weight[, features]])` measures text exactly as it paints (pass the node's `font_weight` and `font_features`; `ui.default_font_family` is the default family), `ui.component(name, schema, render)` wraps a render function with property type checks, and `ui.graph(nodes, edges)` hands graph data to Rust once for [`kit.GraphCanvas`](kit.md).
 
 ## Motion
 

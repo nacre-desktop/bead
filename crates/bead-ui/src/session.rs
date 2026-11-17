@@ -746,6 +746,7 @@ impl Session {
                 size: 14.,
                 color: [255, 225, 225, 255],
                 shadow: None,
+                features: Vec::new(),
             });
         }
         scene

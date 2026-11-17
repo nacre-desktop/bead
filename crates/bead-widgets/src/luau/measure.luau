@@ -44,7 +44,7 @@ function M.width(node,depth)
     if node_kind=="text" then
         local value=ui.resolve_for_check(props.text or "") or ""
         return ui.text_width(tostring(value),props.family or kit.tokens.fonts.sans,
-            number(props.font_size) or kit.tokens.text.body*4/3)
+            number(props.font_size) or kit.tokens.text.body*4/3,number(props.font_weight),type(props.font_features)=="string" and props.font_features or nil)
     elseif node_kind=="image" then
         return number(props.height) or 0
     end
