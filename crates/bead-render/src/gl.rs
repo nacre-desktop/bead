@@ -1198,6 +1198,7 @@ impl GlRenderer {
                 );
             }
             let r = crate::tree::rect(&item.primitive);
+            let opacity = item.primitive.opacity();
             let (x, y) = (
                 (r.x + offset.0) * frame.scale,
                 (r.y + offset.1) * frame.scale,
@@ -1226,7 +1227,7 @@ impl GlRenderer {
                             texture.width as f32 * r.w as f32,
                             texture.height as f32 * r.h as f32,
                             0.,
-                            1.,
+                            opacity,
                         );
                         paint.set_anti_alias(false);
                         canvas.fill_path(&path, &paint);
@@ -1243,7 +1244,7 @@ impl GlRenderer {
                             texture.width as f32,
                             texture.height as f32,
                             0.,
-                            1.,
+                            opacity,
                         );
                         paint.set_anti_alias(false);
                         canvas.fill_path(&path, &paint);
@@ -1261,7 +1262,7 @@ impl GlRenderer {
                 };
                 canvas.fill_path(
                     &path,
-                    &femtovg::Paint::image(texture.image, px, py, pw, ph, 0., 1.),
+                    &femtovg::Paint::image(texture.image, px, py, pw, ph, 0., opacity),
                 );
             } else if let Some(raster) = &item.raster {
                 let (x, y) = (
@@ -1276,7 +1277,7 @@ impl GlRenderer {
                 path.rect(x.round(), y.round(), w, h);
                 canvas.fill_path(
                     &path,
-                    &femtovg::Paint::image(texture.image, x.round(), y.round(), w, h, 0., 1.),
+                    &femtovg::Paint::image(texture.image, x.round(), y.round(), w, h, 0., opacity),
                 );
             } else if let crate::Primitive::Arc {
                 start_angle,

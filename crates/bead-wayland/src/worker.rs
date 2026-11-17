@@ -1480,6 +1480,7 @@ mod tests {
         for changed_before_close in [false, true] {
             let mut fixture = scene();
             fixture.primitives[0] = bead_render::Primitive::Image {
+                opacity: 1.,
                 rect: bead_render::Rect::new(0., 0., 16., 16.),
                 path: "proof.svg".into(),
                 blur: 0.,
@@ -2047,6 +2048,7 @@ mod tests {
     fn cpu_resource_job_completes_while_worker_waits_for_gpu_ack() {
         let mut fixture = scene();
         fixture.primitives[0] = bead_render::Primitive::Image {
+            opacity: 1.,
             rect: bead_render::Rect::new(0., 0., 16., 16.),
             path: "proof.svg".into(),
             blur: 0.,
@@ -2108,6 +2110,7 @@ mod tests {
     fn image_hydration_is_deduplicated_and_runs_on_the_source_worker() {
         let mut fixture = scene();
         fixture.primitives[0] = bead_render::Primitive::Image {
+            opacity: 1.,
             rect: bead_render::Rect::new(0., 0., 16., 16.),
             path: "proof.svg".into(),
             blur: 0.,

@@ -216,9 +216,10 @@ fn content_key(scene: &Scene, scale: f32) -> u64 {
                 radius,
                 fit,
                 tint,
+                opacity,
                 ..
             } => {
-                (path, fit, tint, radius.to_bits()).hash(&mut h);
+                (path, fit, tint, radius.to_bits(), opacity.to_bits()).hash(&mut h);
                 clip_polygon.is_some().hash(&mut h);
                 for coordinate in clip_polygon.iter().flatten().flatten() {
                     coordinate.to_bits().hash(&mut h);
@@ -353,6 +354,7 @@ mod tests {
         let mut scene = scene();
         let path = std::path::PathBuf::from("tray.png");
         scene.primitives.push(crate::Primitive::Image {
+            opacity: 1.,
             blur: 0.,
             fit: crate::ImageFit::Fill,
             clip_polygon: None,

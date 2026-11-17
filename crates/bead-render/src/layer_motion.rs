@@ -1819,6 +1819,7 @@ mod tests {
         for scale in [1., 1.5] {
             for primitive in [
                 Primitive::Image {
+                    opacity: 1.,
                     blur: 0.,
                     fit: crate::ImageFit::Fill,
                     clip_polygon: None,

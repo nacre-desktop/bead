@@ -197,6 +197,9 @@ pub enum Primitive {
         /// Draw the image's alpha as a mask filled with this colour (palette-tinted monochrome icons).
         #[serde(default)]
         tint: Option<[u8; 4]>,
+        /// 0..1 multiplier of the drawn alpha, applied at draw time: never part of a raster or cache key.
+        #[serde(default = "full_alpha")]
+        opacity: f32,
         rect: Rect,
         path: std::path::PathBuf,
     },
@@ -236,6 +239,26 @@ pub struct TextShadow {
     pub offset_y: f32,
 }
 impl Primitive {
+    /// An image with every other field at its default, so hosts never break on a new field.
+    pub fn image(rect: Rect, path: impl Into<std::path::PathBuf>) -> Self {
+        Self::Image {
+            blur: 0.,
+            fit: ImageFit::default(),
+            clip_polygon: None,
+            radius: 0.,
+            tint: None,
+            opacity: 1.,
+            rect,
+            path: path.into(),
+        }
+    }
+    /// The draw-time alpha multiplier of a raster primitive (1 for all but a translucent image).
+    pub(crate) fn opacity(&self) -> f32 {
+        match self {
+            Self::Image { opacity, .. } => *opacity,
+            _ => 1.,
+        }
+    }
     fn translated(&self, x: f32, y: f32) -> Self {
         let mut primitive = self.clone();
         let (Self::Arc { rect, .. }
@@ -1289,6 +1312,7 @@ fn key(p: &Primitive, scale: f32) -> String {
             radius,
             fit,
             tint,
+            ..
         } => {
             format!(
                 "i:{blur}:{clip_polygon:?}:{radius}:{fit:?}:{tint:?}:{scale}:{}:{}:{}",
@@ -1668,6 +1692,7 @@ impl Renderer for CpuRenderer {
                     radius,
                     fit,
                     tint,
+                    ..
                 } => {
                     let pix = load_image(
                         path,
@@ -1999,7 +2024,10 @@ impl Renderer for CpuRenderer {
                         ((rect.x + scene.offset.0) * scale).round() as i32,
                         ((rect.y + scene.offset.1) * scale).round() as i32,
                         tex.as_ref(),
-                        &PixmapPaint::default(),
+                        &PixmapPaint {
+                            opacity: p.opacity(),
+                            ..PixmapPaint::default()
+                        },
                         Transform::identity(),
                         Some(mask),
                     );
@@ -4022,6 +4050,7 @@ mod tests {
                             shadow: None,
                         },
                         Primitive::Image {
+                            opacity: 1.,
                             blur: 0.,
                             fit: crate::ImageFit::Fill,
                             clip_polygon: None,

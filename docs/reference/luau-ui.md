@@ -51,6 +51,8 @@ ui.Image { id="image", path="logo.png", width=120, height=80 }
 -- tint="secondary" (a palette role, `ui.alpha(...)` or `ui.tint(...)`) draws the image's alpha as a
 -- mask filled with that colour, so themed icons and symbol glyphs follow the palette.
 -- radius=16 clips the image to an antialiased rounded rectangle (album art inside a rounded card).
+-- opacity=0.5 (0..1, default 1) multiplies the image's alpha when it is drawn; tint replaces the colour instead.
+-- The decoded raster is shared across opacities, and a hover-only child (`visible_on_hover`) fades it with the rest.
 ```
 ```luau
 ui.Arc { id="arc", width=40, height=40 }

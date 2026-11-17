@@ -688,6 +688,35 @@ fn hover_only_child_fades_in_with_its_group_and_keyboard_focus_without_luau_or_l
 }
 
 #[test]
+fn fade_scales_an_untinted_image_opacity_and_a_shadow_alpha_but_leaves_a_tint_to_its_colour() {
+    let rect = bead_render::Rect::new(0., 0., 8., 8.);
+    let mut image = Primitive::image(rect, "a.png");
+    if let Primitive::Image { opacity, .. } = &mut image {
+        *opacity = 0.5;
+    }
+    crate::materialized::fade(&mut image, 0.5);
+    assert!(matches!(image, Primitive::Image { opacity, .. } if opacity == 0.25));
+    let mut tinted = Primitive::image(rect, "a.png");
+    if let Primitive::Image { tint, .. } = &mut tinted {
+        *tint = Some([10, 20, 30, 200]);
+    }
+    crate::materialized::fade(&mut tinted, 0.5);
+    assert!(
+        matches!(tinted, Primitive::Image { tint: Some(c), opacity, .. } if c[3] == 100 && opacity == 1.)
+    );
+    let mut shadow = Primitive::Shadow {
+        rect,
+        radius: 2.,
+        blur: 4.,
+        spread: 0.,
+        dy: 0.,
+        alpha: 0.8,
+    };
+    crate::materialized::fade(&mut shadow, 0.5);
+    assert!(matches!(shadow, Primitive::Shadow { alpha, .. } if (alpha - 0.4).abs() < 1e-6));
+}
+
+#[test]
 fn pressed_view_scales_and_deepens_its_fill_until_release_without_luau() {
     let view = r#"local ui=require('bead.ui')
 return ui.Column{id='root',width=200,height=100,fill='surface',

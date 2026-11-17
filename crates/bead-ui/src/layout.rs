@@ -162,6 +162,7 @@ pub const PROPERTIES: &[&str] = &[
     "on_drag",
     "on_drop",
     "blur",
+    "opacity",
     "start_angle",
     "sweep_angle",
     "stroke_width",
@@ -256,6 +257,8 @@ pub struct ViewSpec {
     pub join_edge: Option<bead_core::Edge>,
     pub join: f32,
     pub blur: f32,
+    /// `Image` only: 0..1 multiplier of the drawn alpha.
+    pub opacity: f32,
     pub start_angle: f32,
     pub sweep_angle: f32,
     pub stroke_width: f32,
@@ -642,6 +645,10 @@ impl ViewSpec {
                 return Err(source.error("font_weight must be an integer 1..1000"));
             }
             let font_weight = font_weight as u16;
+            let opacity = number(p, "opacity", 1., source)?;
+            if !(0. ..=1.).contains(&opacity) {
+                return Err(source.error("opacity must be 0..1"));
+            }
             let text_shadow_blur = number(p, "text_shadow_blur", 0., source)?;
             if !(0. ..=32.).contains(&text_shadow_blur) {
                 return Err(source.error("text_shadow_blur must be 0..32"));
@@ -1086,6 +1093,7 @@ impl ViewSpec {
                 drop_argument: on_drop.and_then(|a| a.1),
                 border_width: number(p, "border_width", 0., source)?,
                 blur: number(p, "blur", 0., source)?.clamp(0., 32.),
+                opacity,
                 start_angle,
                 sweep_angle,
                 stroke_width,
@@ -1616,6 +1624,7 @@ pub fn layout(
                         .as_ref()
                         .map(|tint| color(Some(tint), foreground, palette, source))
                         .transpose()?,
+                    opacity: view.opacity,
                     rect: r,
                     path,
                 },

@@ -255,6 +255,14 @@ impl FrameDamage {
                 hash_primitive(&item.primitive, false, &mut h);
                 h.finish()
             };
+            // Raster and image keys leave out the draw-time opacity, which still changes the pixels.
+            let key = if item.primitive.opacity() < 1. {
+                let mut h = std::collections::hash_map::DefaultHasher::new();
+                (key, item.primitive.opacity().to_bits()).hash(&mut h);
+                h.finish()
+            } else {
+                key
+            };
             let mut id = std::collections::hash_map::DefaultHasher::new();
             item.id.hash(&mut id);
             let next = Record {

@@ -592,6 +592,8 @@ fn layer_key<'a>(
             f.to_bits().hash(&mut key);
         }
         keys[index].hash(&mut key);
+        // Keys leave out the draw-time opacity, which the layer's pixels carry.
+        item.primitive.opacity().to_bits().hash(&mut key);
         own.push(item.id.as_str());
     }
     own.hash(&mut key);
@@ -805,7 +807,8 @@ fn local(primitive: &Primitive) -> Primitive {
     }
     p
 }
-/// Hash every field bit-exactly without allocating; `at_origin` ignores the position.
+/// Hash every field bit-exactly without allocating; `at_origin` ignores the position and is the raster
+/// signature, which leaves out the draw-time `opacity` so one raster serves every opacity.
 pub(crate) fn hash_primitive(primitive: &Primitive, at_origin: bool, hash: &mut impl Hasher) {
     let rect = |r: &Rect, hash: &mut _| {
         let (x, y) = if at_origin { (0., 0.) } else { (r.x, r.y) };
@@ -886,11 +889,15 @@ pub(crate) fn hash_primitive(primitive: &Primitive, at_origin: bool, hash: &mut 
             clip_polygon,
             radius,
             tint,
+            opacity,
             rect: r,
             path,
         } => {
             rect(r, hash);
             (blur.to_bits(), radius.to_bits(), fit, path, tint).hash(hash);
+            if !at_origin {
+                opacity.to_bits().hash(hash);
+            }
             clip_polygon.is_some().hash(hash);
             for coordinate in clip_polygon.iter().flatten().flatten() {
                 coordinate.to_bits().hash(hash);
@@ -2815,17 +2822,31 @@ fn blend_over(
     strip_y: u32,
     clip: Damage,
     raster: &Raster,
-    dx: i64,
-    dy: i64,
+    (dx, dy): (i64, i64),
+    opacity: f32,
 ) {
     let source_width = raster.pixels.width() as usize;
     let source = raster.pixels.data();
+    let alpha = (opacity.clamp(0., 1.) * 255.).round() as u32;
+    let mut scaled = Vec::new();
     for row in clip.y..clip.y + clip.h {
         let from =
             ((i64::from(row) - dy) as usize * source_width + (i64::from(clip.x) - dx) as usize) * 4;
         let to = ((row - strip_y) as usize * width as usize + clip.x as usize) * 4;
         let len = clip.w as usize * 4;
-        blend_row(&source[from..from + len], &mut strip[to..to + len]);
+        let source = &source[from..from + len];
+        if alpha == 255 {
+            blend_row(source, &mut strip[to..to + len]);
+        } else {
+            // Premultiplied, so every channel scales with the alpha.
+            scaled.clear();
+            scaled.extend(
+                source
+                    .iter()
+                    .map(|&c| ((u32::from(c) * alpha + 127) / 255) as u8),
+            );
+            blend_row(&scaled, &mut strip[to..to + len]);
+        }
     }
 }
 /// Length of the leading run of pixels whose alpha is `alpha`, checked eight pixels at a time.
@@ -3075,7 +3096,10 @@ fn paint_items(
             painted = true;
             continue;
         }
-        if !painted && let Some(raster) = &item.raster {
+        if !painted
+            && item.primitive.opacity() >= 1.
+            && let Some(raster) = &item.raster
+        {
             // Damage was cleared above. Source-over onto zero is an exact copy,
             // including partial alpha; avoid blending a full shadow-sized image.
             let mut strip = PixmapMut::from_bytes(&mut bytes[begin..end], width, damage.h)
@@ -3129,8 +3153,11 @@ fn paint_items(
                 damage.y,
                 clip,
                 raster,
-                ((r.x + offset.0) * scale).round() as i64 + i64::from(raster.origin.0),
-                ((r.y + offset.1) * scale).round() as i64 + i64::from(raster.origin.1),
+                (
+                    ((r.x + offset.0) * scale).round() as i64 + i64::from(raster.origin.0),
+                    ((r.y + offset.1) * scale).round() as i64 + i64::from(raster.origin.1),
+                ),
+                item.primitive.opacity(),
             );
         } else if let Primitive::Arc {
             start_angle,
@@ -4283,7 +4310,7 @@ impl TreeCpuRenderer {
                 w: (right - left) as u32,
                 h: (bottom - top) as u32,
             };
-            blend_over(bytes, width, 0, clip, layer, x, y);
+            blend_over(bytes, width, 0, clip, layer, (x, y), 1.);
         }
         Ok(())
     }
@@ -5012,7 +5039,7 @@ mod tests {
                 Some(&mask),
             );
         let mut actual = background;
-        blend_over(&mut actual, width, 0, clip, &raster, dx, dy);
+        blend_over(&mut actual, width, 0, clip, &raster, (dx, dy), 1.);
         let worst = expected
             .iter()
             .zip(&actual)
@@ -5656,6 +5683,7 @@ mod tests {
                 .asset_data
                 .insert(path.clone(), Arc::from(pixels.encode_png().unwrap()));
             scene.primitives.push(Primitive::Image {
+                opacity: 1.,
                 rect: Rect::new(
                     (index % 5) as f32 * 512.,
                     (index / 5) as f32 * 432.,
@@ -6704,6 +6732,7 @@ mod tests {
         scene.asset_data.clear();
         scene.asset_data.insert("proof.svg".into(), Arc::from(&br##"<svg xmlns="http://www.w3.org/2000/svg" width="512" height="256"><defs><linearGradient id="rim"><stop stop-color="#123456"/><stop offset="1" stop-color="#abcdef"/></linearGradient></defs><path fill="url(#rim)" fill-rule="evenodd" d="M0 0H512V256H0Z M32 32V224H480V32Z"/></svg>"##[..]));
         scene.primitives[0] = Primitive::Image {
+            opacity: 1.,
             rect: Rect::new(2., 2., 512., 256.),
             path: "proof.svg".into(),
             blur: 0.,
@@ -6797,6 +6826,7 @@ mod tests {
         let mut scene = scene();
         scene.asset_data.clear();
         scene.primitives[0] = Primitive::Image {
+            opacity: 1.,
             rect: Rect::new(0., 0., 2300., 2200.),
             path: "proof.svg".into(),
             blur: 0.,
@@ -7232,6 +7262,7 @@ mod tests {
             unreachable!();
         };
         let image = Primitive::Image {
+            opacity: 1.,
             rect: *rect,
             path: "proof.png".into(),
             blur: 0.,
@@ -7647,6 +7678,7 @@ mod tests {
             slide: None,
             primitives: vec![
                 Primitive::Image {
+                    opacity: 1.,
                     blur: 0.,
                     fit: crate::ImageFit::Fill,
                     clip_polygon: None,
@@ -7689,6 +7721,7 @@ mod tests {
             let col = index % 6;
             let row = index / 6;
             picker.primitives.push(Primitive::Image {
+                opacity: 1.,
                 rect: Rect::new(col as f32 * 480., row as f32 * 420., 460., 380.),
                 path,
                 fit: crate::ImageFit::Cover,
@@ -7756,6 +7789,7 @@ mod tests {
                 100. + row as f32 * 20.
             };
             scene.primitives.push(Primitive::Image {
+                opacity: 1.,
                 blur: 0.,
                 fit: crate::ImageFit::Fill,
                 clip_polygon: None,
@@ -7906,6 +7940,7 @@ mod tests {
             let index = scene.primitives.len();
             let y = (row - first) as f32 * 8.;
             scene.primitives.push(Primitive::Image {
+                opacity: 1.,
                 blur: 0.,
                 fit: crate::ImageFit::Fill,
                 clip_polygon: None,
@@ -7926,6 +7961,71 @@ mod tests {
         scene
     }
 
+    fn image_scene_at(opacity: f32) -> Scene {
+        let mut scene = scene();
+        scene.primitives.truncate(1);
+        if let Primitive::Image { opacity: o, .. } = &mut scene.primitives[0] {
+            *o = opacity;
+        }
+        scene
+    }
+    fn render_image(cache: &mut TreeCache, scene: &Scene) -> Vec<u8> {
+        cache.prepare(scene, 1.).unwrap();
+        let mut bytes = vec![0; 24 * 24 * 4];
+        paint(
+            cache.frame.as_ref().unwrap(),
+            (0., 0.),
+            ShmTarget {
+                bytes: &mut bytes,
+                width: 24,
+                height: 24,
+                scale: 1.,
+                format: crate::PixelFormat::Rgba,
+            },
+            Damage::full(24, 24),
+        )
+        .unwrap();
+        bytes
+    }
+    #[test]
+    fn image_opacity_scales_the_drawn_alpha_and_reuses_the_raster() {
+        let mut cache = TreeCache::default();
+        let full = render_image(&mut cache, &image_scene_at(1.));
+        let at = (5 * 24 + 5) * 4;
+        // Opacity 1 is the raster's own pixels, untouched.
+        assert_eq!(full[at..at + 4], [20, 40, 80, 255]);
+        let raster = cache.frame.as_ref().unwrap().items[0]
+            .raster
+            .clone()
+            .unwrap();
+        let half = render_image(&mut cache, &image_scene_at(0.5));
+        // Premultiplied: every channel scales with alpha (within 1/255 of the exact half).
+        for (got, want) in half[at..at + 4].iter().zip([10., 20., 40., 127.5]) {
+            assert!((f32::from(*got) - want).abs() <= 1., "{got} vs {want}");
+        }
+        assert_eq!(half[0..4], [0, 0, 0, 0]);
+        // Same raster, one cache entry, for both opacities.
+        assert!(Arc::ptr_eq(
+            &raster,
+            cache.frame.as_ref().unwrap().items[0]
+                .raster
+                .as_ref()
+                .unwrap()
+        ));
+        assert_eq!(cache.entries.len(), 1);
+        // The frame and damage identity still see the change.
+        let mut a = std::collections::hash_map::DefaultHasher::new();
+        let mut b = std::collections::hash_map::DefaultHasher::new();
+        hash_primitive(&image_scene_at(1.).primitives[0], false, &mut a);
+        hash_primitive(&image_scene_at(0.5).primitives[0], false, &mut b);
+        assert_ne!(a.finish(), b.finish());
+        let key = |opacity| {
+            let mut h = std::collections::hash_map::DefaultHasher::new();
+            hash_primitive(&image_scene_at(opacity).primitives[0], true, &mut h);
+            h.finish()
+        };
+        assert_eq!(key(1.), key(0.5));
+    }
     #[test]
     fn scrolling_retention_tracks_only_the_accepted_visible_window_and_reverses_pixels() {
         for scale in [1., 1.5] {
@@ -8688,6 +8788,7 @@ mod tests {
         large.layers.clear();
         large.asset_data = BTreeMap::from([(PathBuf::from("wallpaper.png"), encoded)]);
         large.primitives = vec![Primitive::Image {
+            opacity: 1.,
             rect: large.bounds,
             path: PathBuf::from("wallpaper.png"),
             fit: crate::ImageFit::Fill,

@@ -1171,7 +1171,7 @@ fn mix(a: [u8; 4], b: [u8; 4], amount: f32) -> [u8; 4] {
         (f32::from(a[i]) + (f32::from(b[i]) - f32::from(a[i])) * amount).round() as u8
     })
 }
-fn fade(primitive: &mut Primitive, alpha: f32) {
+pub(super) fn fade(primitive: &mut Primitive, alpha: f32) {
     let fade = |c: &mut [u8; 4]| c[3] = (f32::from(c[3]) * alpha).round() as u8;
     match primitive {
         Primitive::Rounded { fill, border, .. } => {
@@ -1194,9 +1194,10 @@ fn fade(primitive: &mut Primitive, alpha: f32) {
             }
         }
         Primitive::Image { tint: Some(c), .. } => fade(c),
-        // shortcut: untinted images, shadows and graphs have no alpha and stay drawn; add a
-        // primitive opacity if a hover-only child ever needs one.
-        Primitive::Image { .. } | Primitive::Shadow { .. } | Primitive::Graph { .. } => {}
+        Primitive::Image { opacity, .. } => *opacity *= alpha,
+        Primitive::Shadow { alpha: a, .. } => *a *= alpha,
+        // shortcut: a graph has no alpha and stays drawn, add one if a hover-only graph ever needs it.
+        Primitive::Graph { .. } => {}
     }
 }
 /// `primitive` scaled by `s` about the centre of `around` (a shadow keeps its margin).

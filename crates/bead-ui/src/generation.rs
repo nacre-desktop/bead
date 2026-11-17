@@ -581,7 +581,9 @@ impl Generation {
                         && *blur <= 64.
                         && (0. ..=1.).contains(alpha)
                 }
-                Primitive::Image { blur, .. } => blur.is_finite() && (0.0..=32.0).contains(blur),
+                Primitive::Image { blur, opacity, .. } => {
+                    blur.is_finite() && (0.0..=32.0).contains(blur) && (0.0..=1.0).contains(opacity)
+                }
                 Primitive::Graph { camera, .. } => camera.zoom.is_finite() && camera.zoom > 0.,
             };
             if !valid_shape || !valid_rect(rect(&node.draw)) {

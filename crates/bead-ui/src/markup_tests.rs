@@ -4819,6 +4819,36 @@ fn children_input_is_root_only_and_needs_children() {
         assert!(s.reload().is_err(), "{props}{child}");
     }
 }
+/// B0323: `opacity` on an Image defaults to 1 and is range checked.
+#[test]
+fn image_opacity_prop_parses_and_validates() {
+    let f = fixture();
+    let load = |props: &str| {
+        fs::write(
+            f.0.join("ui/main.luau"),
+            format!("local ui=require('bead.ui')\nreturn ui.Box{{id='r',width=50,height=20,ui.Image{{id='i',icon='bell',width=8,height=8,{props}}}}}"),
+        )
+        .unwrap();
+        let mut s = f.session();
+        s.entry = "ui/main.luau".into();
+        s.reload().map(|scene| {
+            scene
+                .primitives
+                .iter()
+                .find_map(|p| match p {
+                    Primitive::Image { opacity, .. } => Some(*opacity),
+                    _ => None,
+                })
+                .unwrap()
+        })
+    };
+    assert_eq!(load("").unwrap(), 1.);
+    assert_eq!(load("opacity=0.5").unwrap(), 0.5);
+    assert_eq!(load("opacity=0").unwrap(), 0.);
+    for bad in ["opacity=1.5", "opacity=-0.1", "opacity='half'"] {
+        assert!(load(bad).is_err(), "{bad}");
+    }
+}
 /// B0322: `key_repeat` defaults, ranges and where it is allowed.
 #[test]
 fn key_repeat_prop_parses_and_validates() {
