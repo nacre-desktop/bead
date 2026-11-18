@@ -1445,7 +1445,7 @@ impl App {
                 if self
                     .panel_runtime
                     .as_ref()
-                    .is_none_or(|r| r.outside_dismiss())
+                    .is_none_or(|r| r.outside_dismiss() || !r.alive())
                 {
                     self.close_panel();
                 }

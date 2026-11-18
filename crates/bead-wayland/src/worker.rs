@@ -149,6 +149,9 @@ impl Packet {
     pub fn is_failed(&self) -> bool {
         matches!(self.phase, Phase::Failed)
     }
+    pub(crate) fn error(&self) -> Option<&str> {
+        self.error.as_deref()
+    }
 }
 #[derive(Debug)]
 pub struct ResourceRetirement(std::sync::Mutex<Option<mpsc::Sender<Result<(), String>>>>);
@@ -435,6 +438,8 @@ pub struct Source {
     image_policy: bead_render::tree::ImagePolicy,
     preparation_retry: bool,
     retired: Arc<std::sync::atomic::AtomicBool>,
+    /// Set by the worker thread before it reports a failed factory or a panic (B0345).
+    dead: Arc<std::sync::atomic::AtomicBool>,
     token: u64,
     accepted: bool,
     frame_pending: bool,
@@ -458,6 +463,7 @@ impl Source {
             image_policy: bead_render::tree::ImagePolicy::Dense,
             preparation_retry: false,
             retired: Default::default(),
+            dead: Default::default(),
             scales: vec![1.],
             token: 0,
             accepted: false,
@@ -740,6 +746,7 @@ impl SceneSource for Source {
         let image_policy = self.image_policy;
         let label = self.label.clone();
         let retired = self.retired.clone();
+        let dead = self.dead.clone();
         let pending = self.pending.clone();
         // Leave Rust's stack-size policy intact; only admission accounting reads
         // the request, conservatively charging at least the ordinary default.
@@ -753,6 +760,7 @@ impl SceneSource for Source {
                 let mut source = match factory() {
                     Ok(source) => source,
                     Err(error) => {
+                        dead.store(true, std::sync::atomic::Ordering::Release);
                         wakeup(UiEvent::Worker(Arc::new(Packet {
                             resume: false,
                             animation_frame: false,
@@ -1167,6 +1175,7 @@ impl SceneSource for Source {
                 }
             }));
             if result.is_err() {
+                dead.store(true, std::sync::atomic::Ordering::Release);
                 report(UiEvent::Fatal("script worker panicked".into()));
             }
         }).expect("spawn bead-worker"));
@@ -1218,7 +1227,9 @@ impl SceneSource for Source {
         &mut self,
         callback: Box<dyn Fn(Result<(), String>) + Send>,
     ) -> Result<(), Box<dyn Error>> {
+        // A fast-failing factory may already be gone: its Failed packet reports it (B0345).
         self.send(Job::Watch(callback))
+            .or_else(|error| if self.alive() { Err(error) } else { Ok(()) })
     }
     fn stage(&mut self, event: UiEvent) -> Result<Option<Scene>, Box<dyn Error>> {
         if let UiEvent::ResourcesPrepared(result) = event {
@@ -1359,6 +1370,9 @@ impl SceneSource for Source {
     }
     fn outside_dismiss(&self) -> bool {
         self.mirror.outside_dismiss
+    }
+    fn alive(&self) -> bool {
+        !self.dead.load(std::sync::atomic::Ordering::Acquire)
     }
     fn dismiss_at(&self, x: f32, y: f32) -> bool {
         self.mirror.region_at(x, y).is_some_and(|r| r.dismiss)
@@ -2259,6 +2273,7 @@ mod tests {
                 let failed = receiver.recv_timeout(Duration::from_secs(2)).unwrap();
                 assert!(matches!(&failed, UiEvent::Worker(packet) if packet.is_failed()));
                 assert!(source.stage(failed).is_err());
+                assert!(source.alive(), "a failed bake keeps its worker");
                 assert!(!source.resources_retired());
                 assert!(
                     receiver.try_recv().is_err(),
@@ -2575,11 +2590,28 @@ mod tests {
         source.services(Box::new(move |event| {
             let _ = sender.send(event);
         }));
+        assert!(source.alive());
         assert!(source.stage(UiEvent::Reload).unwrap().is_none());
         assert!(matches!(
             receiver.recv_timeout(Duration::from_secs(2)).unwrap(),
             UiEvent::Fatal(_)
         ));
+        assert!(!source.alive(), "dead before its Fatal arrives (B0345)");
+    }
+    #[test]
+    fn failed_factory_is_dead_before_its_failed_packet_arrives() {
+        let mut source = Source::new(Box::new(|| Err("boom".into())), scene());
+        let (sender, receiver) = mpsc::channel();
+        source.services(Box::new(move |event| {
+            let _ = sender.send(event);
+        }));
+        let failed = receiver.recv_timeout(Duration::from_secs(2)).unwrap();
+        assert!(
+            matches!(&failed, UiEvent::Worker(packet) if packet.is_failed() && packet.error() == Some("boom"))
+        );
+        assert!(!source.alive());
+        // The host still installs it; the queued Failed packet then tears its panel down.
+        assert!(source.watch(Box::new(|_| {})).is_ok());
     }
     struct Warm {
         stages: Arc<AtomicUsize>,
@@ -2741,6 +2773,7 @@ mod tests {
             matches!(&failed, UiEvent::Worker(packet) if packet.resume_failed() && packet.scene.is_none())
         );
         assert!(source.stage(failed).is_err());
+        assert!(source.alive(), "a rejected resume keeps its worker");
         assert!(!source.dormant_ready());
         let mut cache = crate::warm::Cache::default();
         cache.park(false, "failed".into(), 3, source, usize::MAX);

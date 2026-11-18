@@ -61,7 +61,8 @@ impl Cache {
             .position(|entry| entry.overlay == overlay && entry.name == name)?;
         let entry = self.0.remove(index);
         self.trace();
-        entry
+        // A worker that died while parked is a miss (B0345).
+        entry.filter(|entry| entry.source.alive())
     }
     /// Consume callbacks for dormant epochs. Empty model hints carry no state:
     /// mandatory resume polls their producers. Every payload/protocol event still

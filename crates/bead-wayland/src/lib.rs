@@ -685,6 +685,11 @@ pub trait SceneSource {
     fn outside_dismiss(&self) -> bool {
         true
     }
+    /// False once this source can never produce another scene (its factory failed or its
+    /// worker panicked); the host then tears its panel down instead of keeping it open.
+    fn alive(&self) -> bool {
+        true
+    }
     /// Opaque state saved alongside a remembered pearl.
     fn saved_state(&self) -> serde_json::Value {
         serde_json::Value::Null

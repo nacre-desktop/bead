@@ -860,12 +860,9 @@ impl App {
                 }
             }
             self.panel_ui(UiEvent::PanelVisibility(true));
-            if resume {
-                self.panel_runtime
-                    .as_mut()
-                    .unwrap()
-                    .resume()
-                    .map_err(|error| error.to_string())?;
+            // A dead source was torn down by that event (B0345).
+            if resume && let Some(source) = self.panel_runtime.as_mut() {
+                source.resume().map_err(|error| error.to_string())?;
             }
             return Ok(());
         }
@@ -1000,11 +997,9 @@ impl App {
             self.panel_ui(UiEvent::PanelVisibility(open));
             // The resume packet alone releases the first-frame fence. Palette
             // and service transactions queued ahead of it stay invisible.
-            self.panel_runtime
-                .as_mut()
-                .unwrap()
-                .resume()
-                .map_err(|error| error.to_string())?;
+            if let Some(source) = self.panel_runtime.as_mut() {
+                source.resume().map_err(|error| error.to_string())?;
+            }
         } else {
             self.panel_ui(UiEvent::Reload);
         }
@@ -1069,6 +1064,29 @@ impl App {
             if let Err(error) = self.start_panel(output.as_deref(), open) {
                 self.fail(error);
             }
+            return;
+        }
+        // B0345: a dead worker never sends another scene or mirror, so its open panel and
+        // dismiss catcher would swallow input forever. Tear down without asking it anything.
+        if self.panel_runtime.as_ref().is_some_and(|r| !r.alive()) {
+            let error = match &event {
+                UiEvent::Worker(packet) => packet.error(),
+                UiEvent::Fatal(error) => Some(error.as_str()),
+                _ => None,
+            };
+            eprintln!(
+                "PANEL_FAILED name={} error={}",
+                self.panel_name.as_deref().unwrap_or("-"),
+                error.unwrap_or("dead")
+            );
+            // Taken first, so release_panel cannot park it as a warm source.
+            drop(self.panel_runtime.take());
+            if self.panel_target && self.pearl.is_none() {
+                self.notify_panel_owner(UiEvent::PanelDismissed);
+                self.panel_target = false;
+                self.edges_panel_changed(true);
+            }
+            self.release_panel();
             return;
         }
         if matches!(&event, UiEvent::Worker(packet) if packet.resumed()) {
