@@ -177,6 +177,12 @@ pub struct LipState {
 /// SVG's own size must be that logical size.
 pub type EdgeArt = Arc<dyn Fn(&Lip, (f32, f32), LipState) -> Option<Arc<[u8]>> + Send + Sync>;
 
+/// A tooltip to show: its lip, scene, output and the output's logical size.
+type TipPlan = (Lip, Scene, wl_output::WlOutput, (i32, i32));
+/// The host's tooltip scene for a hovered lip (B0340), or `None` for none. Its width and height are
+/// the tip surface's logical size: the host draws everything, margins and shadow included; Bead only places it.
+pub type EdgeTip = Arc<dyn Fn(&Lip) -> Option<Scene> + Send + Sync>;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Kind {
     Reserved(usize),
@@ -210,6 +216,57 @@ impl Drop for EdgeSurface {
         if let Some(f) = &self.fractional {
             f.destroy();
         }
+        self.viewport.destroy();
+    }
+}
+/// The hover tooltip (B0340): an input-less overlay layer surface holding the host's scene, rendered
+/// once and faded by scaling its premultiplied pixels.
+pub(super) struct Tip {
+    key: String,
+    output: wl_output::WlOutput,
+    layer: LayerSurface,
+    viewport: WpViewport,
+    pool: SlotPool,
+    buffer: Option<Buffer>,
+    pixels: Vec<u8>,
+    size: (u32, u32),
+    scale120: u32,
+    configured: bool,
+    fade: f32,
+    target: f32,
+}
+impl Tip {
+    fn present(&mut self) {
+        if !self.configured {
+            return;
+        }
+        let scale = self.scale120 as f32 / 120.;
+        let (w, h) = (
+            (self.size.0 as f32 * scale).ceil() as u32,
+            (self.size.1 as f32 * scale).ceil() as u32,
+        );
+        let Ok((buffer, bytes)) =
+            self.pool
+                .create_buffer(w as i32, h as i32, (w * 4) as i32, wl_shm::Format::Argb8888)
+        else {
+            return;
+        };
+        let alpha = (self.fade.clamp(0., 1.) * 255.) as u16;
+        for (out, px) in bytes.iter_mut().zip(&self.pixels) {
+            *out = (u16::from(*px) * alpha / 255) as u8;
+        }
+        self.viewport
+            .set_destination(self.size.0 as i32, self.size.1 as i32);
+        let surface = self.layer.wl_surface();
+        if buffer.attach_to(surface).is_ok() {
+            surface.damage_buffer(0, 0, w as i32, h as i32);
+            surface.commit();
+            self.buffer = Some(buffer);
+        }
+    }
+}
+impl Drop for Tip {
+    fn drop(&mut self) {
         self.viewport.destroy();
     }
 }
@@ -471,6 +528,10 @@ pub(super) struct EdgeState {
     bar_arts: Vec<BarArt>,
     /// The cursor last sent for a lip surface: pointer (a button) or the default arrow.
     strip_button: bool,
+    /// The visible (or fading) hover tooltip, and the epoch that guards its pending show timer and fade.
+    tip: Option<Tip>,
+    tip_epoch: u64,
+    tip_fade_epoch: u64,
     /// The last `LIP_TAB` outcome printed, so the line appears only when it changes.
     tab_outcome: String,
 }
@@ -498,6 +559,17 @@ impl EdgeState {
             0.
         };
         drawn_progress(self.opening.as_deref(), key, raw)
+    }
+    /// Start a tip show timer: it fires only while this epoch is current.
+    fn tip_arm(&mut self) -> u64 {
+        self.tip_epoch = self.tip_epoch.wrapping_add(1);
+        self.tip_epoch
+    }
+    fn tip_cancel(&mut self) {
+        self.tip_epoch = self.tip_epoch.wrapping_add(1);
+    }
+    fn tip_current(&self, epoch: u64) -> bool {
+        self.tip_epoch == epoch
     }
     fn attached(&self, key: &str) -> bool {
         self.tab.as_ref().is_some_and(|tab| tab.key == key)
@@ -640,6 +712,89 @@ fn pin(edge: &mut EdgeState) {
     edge.exit_epoch = edge.exit_epoch.wrapping_add(1);
 }
 const FRAME: Duration = Duration::from_millis(16);
+/// The hover tooltip appears after this long on a lip and fades over `TIP_FADE_S` (B0340).
+const TIP_DELAY: Duration = Duration::from_millis(400);
+const TIP_FADE_S: f32 = 0.12;
+
+/// Why a tooltip may not show now (None = it may): the hover moved, a button is held, the lip's panel
+/// is open, docked or opening (or another panel of the process is), or the host offers no scene.
+fn tip_block(hovered: bool, pressed: bool, open: bool, has_scene: bool) -> Option<&'static str> {
+    if !hovered {
+        Some("leave")
+    } else if pressed {
+        Some("press")
+    } else if open {
+        Some("open")
+    } else if !has_scene {
+        Some("chrome")
+    } else {
+        None
+    }
+}
+/// One fade step toward `target` (linear, `step` = elapsed / fade time); reduced motion jumps.
+fn tip_fade(fade: f32, target: f32, step: f32, reduced: bool) -> f32 {
+    if reduced || target > fade && fade + step >= target || target < fade && fade - step <= target {
+        target
+    } else if target > fade {
+        fade + step
+    } else {
+        fade - step
+    }
+}
+/// The tip surface's anchor and margin: on the lip's screen edge at margin 0, centred on the lip along
+/// it, kept inside the output.
+fn tip_placement(lip: &Lip, output: (i32, i32), size: (u32, u32)) -> (Anchor, [i32; 4]) {
+    let g = lip_geometry(lip, output);
+    let (w, h) = (size.0 as i32, size.1 as i32);
+    match lip.edge {
+        Edge::Left | Edge::Right => {
+            let y = (g.margin[0] + g.size.1 as i32 / 2 - h / 2).clamp(0, (output.1 - h).max(0));
+            (g.anchor, [y, 0, 0, 0])
+        }
+        Edge::Top | Edge::Bottom => {
+            let x = (g.margin[3] + g.size.0 as i32 / 2 - w / 2).clamp(0, (output.0 - w).max(0));
+            (g.anchor, [0, 0, 0, x])
+        }
+    }
+}
+/// The host's scene for a lip, if the tooltip may show: the callback runs only when nothing else blocks it.
+fn tip_resolve(
+    tip: &EdgeTip,
+    lip: &Lip,
+    hovered: bool,
+    pressed: bool,
+    open: bool,
+) -> Result<Scene, &'static str> {
+    if let Some(reason) = tip_block(hovered, pressed, open, true) {
+        return Err(reason);
+    }
+    tip(lip).ok_or("chrome")
+}
+/// Render a tip scene once at the output scale into premultiplied BGRA, with the CPU scene renderer.
+fn render_tip(scene: &Scene, size: (u32, u32), scale120: u32) -> Option<Vec<u8>> {
+    let scale = scale120 as f32 / 120.;
+    let (w, h) = (
+        (size.0 as f32 * scale).ceil() as u32,
+        (size.1 as f32 * scale).ceil() as u32,
+    );
+    let mut bytes = vec![0; (w * h * 4) as usize];
+    let mut renderer = bead_render::renderer(RendererKind::Cpu).ok()?;
+    let target = ShmTarget {
+        bytes: &mut bytes,
+        width: w,
+        height: h,
+        scale,
+        format: PixelFormat::Bgra,
+    };
+    let done = renderer
+        .prepare(scene, scale)
+        .and_then(|()| renderer.render(scene, target, Damage::full(w, h)));
+    if let Err(error) = done {
+        eprintln!("EDGE_TIP_ERROR {error}");
+        return None;
+    }
+    Some(bytes)
+}
 /// The cue box fades in and out linearly over this long.
 const CUE_FADE_S: f32 = 0.12;
 
@@ -838,6 +993,7 @@ impl App {
             self.external_edge_cues_closed();
         }
         if self.hidden {
+            self.tip_hide("chrome", false);
             self.edge_surfaces.clear();
             self.edge.bar_arts.clear();
             return;
@@ -981,6 +1137,11 @@ impl App {
         })
     }
     pub(super) fn edge_configure(&mut self, layer: &LayerSurface, size: (u32, u32)) -> bool {
+        if let Some(tip) = self.edge.tip.as_mut().filter(|t| t.layer == *layer) {
+            tip.configured = true;
+            tip.present();
+            return true;
+        }
         let Some(i) = self.edge_surfaces.iter().position(|s| s.layer == *layer) else {
             return false;
         };
@@ -992,6 +1153,10 @@ impl App {
         true
     }
     pub(super) fn edge_closed(&mut self, layer: &LayerSurface) -> bool {
+        if self.edge.tip.as_ref().is_some_and(|t| t.layer == *layer) {
+            self.edge.tip = None;
+            return true;
+        }
         let before = self.edge_surfaces.len();
         self.edge_surfaces.retain(|s| s.layer != *layer);
         before != self.edge_surfaces.len()
@@ -1032,6 +1197,9 @@ impl App {
             {
                 self.edge.hovered = None;
             }
+        }
+        if self.edge.tip.as_ref().is_some_and(|t| t.output == *output) {
+            self.tip_hide("output", false);
         }
         self.edge_surfaces.retain(|s| s.output != *output);
         self.edge.bar_arts.retain(|a| a.output != *output);
@@ -1333,6 +1501,7 @@ impl App {
     }
 
     fn open_lip(&mut self, output: &str, lip: &Lip) {
+        self.tip_hide("open", false);
         if self
             .options
             .control
@@ -1530,8 +1699,215 @@ impl App {
         );
         a.drawn = Some(stamp);
     }
+    /// Any panel of this process is open or opening on the output (resident, pearl or guide), or the
+    /// host owns an open one for the lip.
+    fn tip_panel_open(&self, output: &wl_output::WlOutput, lip: &Lip) -> bool {
+        (self.panel_target && self.panel_output.as_ref() == Some(output))
+            || self.pearl.is_some()
+            || self.options.control.as_ref().is_some_and(|control| {
+                control.external_panel_open(&lip.opens, &self.output_id(output)) == Some(true)
+            })
+    }
+    /// The tooltip's lip, scene, output and output size, if it may show for `k` now.
+    fn tip_scene(&self, k: &str) -> Result<TipPlan, &'static str> {
+        let (name, id) = k.split_once('/').ok_or("chrome")?;
+        let lip = self.lip_named(id).ok_or("chrome")?;
+        let output = self
+            .output
+            .outputs()
+            .into_iter()
+            .find(|o| self.output_id(o) == name)
+            .ok_or("output")?;
+        let size = self
+            .output
+            .info(&output)
+            .and_then(|i| i.logical_size)
+            .ok_or("output")?;
+        let open = self.free_lip_state(&output, k, &lip).active
+            || self.edge.attached(k)
+            || self.tip_panel_open(&output, &lip);
+        let art = self.options.edge_tip.as_ref().ok_or("chrome")?;
+        let hovered = self.edge.hovered.as_deref() == Some(k);
+        let scene = tip_resolve(art, &lip, hovered, self.pointer_pressed, open)?;
+        Ok((lip, scene, output, size))
+    }
+    /// The scale the tip renders at: the fractional scale of the hovered lip's own surface, else of a
+    /// bar art on the output, else the output's integer scale.
+    fn tip_scale120(&self, output: &wl_output::WlOutput, lip: &str) -> u32 {
+        self.edge_surfaces
+            .iter()
+            .find(|s| s.output == *output && s.kind == Kind::Lip(lip.to_owned()))
+            .map(|s| s.scale120)
+            .or_else(|| {
+                (self.edge.bar_arts.iter())
+                    .find(|a| a.output == *output)
+                    .map(|a| a.scale120)
+            })
+            .unwrap_or_else(|| {
+                self.output
+                    .info(output)
+                    .map_or(120, |i| i.scale_factor.max(1) as u32 * 120)
+            })
+    }
+    /// The pointer entered a lip: after 400 ms still there, show its tooltip.
+    fn tip_begin(&mut self, k: &str) {
+        self.tip_hide("leave", true);
+        if self.options.edge_tip.is_none() {
+            return;
+        }
+        let epoch = self.edge.tip_arm();
+        let k = k.to_owned();
+        let _ =
+            self.loop_handle
+                .insert_source(Timer::from_duration(TIP_DELAY), move |_, _, app| {
+                    if app.edge.tip_current(epoch) {
+                        app.tip_show(&k);
+                    }
+                    TimeoutAction::Drop
+                });
+    }
+    fn tip_show(&mut self, k: &str) {
+        let Ok((lip, scene, output, out_size)) = self.tip_scene(k) else {
+            return;
+        };
+        let size = (
+            scene.bounds.w.ceil().max(1.) as u32,
+            scene.bounds.h.ceil().max(1.) as u32,
+        );
+        let scale120 = self.tip_scale120(&output, &lip.id);
+        let Some(pixels) = render_tip(&scene, size, scale120) else {
+            return;
+        };
+        self.edge.tip = None;
+        let (Some(manager), Ok(pool), Ok(empty)) = (
+            self.viewporter.as_ref(),
+            SlotPool::new(4096, &self.shm),
+            Region::new(&self.compositor),
+        ) else {
+            return;
+        };
+        let surface = self.compositor.create_surface(&self.qh);
+        surface.set_input_region(Some(empty.wl_region()));
+        let viewport = manager.get_viewport(&surface, &self.qh, ());
+        let layer = self.layers.create_layer_surface(
+            &self.qh,
+            surface,
+            Layer::Overlay,
+            Some(&format!("{}-tip", self.edge_namespace())),
+            Some(&output),
+        );
+        let (anchor, [t, r, b, l]) = tip_placement(&lip, out_size, size);
+        layer.set_anchor(anchor);
+        layer.set_size(size.0, size.1);
+        layer.set_margin(t, r, b, l);
+        layer.set_exclusive_zone(-1);
+        layer.set_keyboard_interactivity(KeyboardInteractivity::None);
+        layer.commit();
+        let fade = tip_fade(0., 1., 0., bead_core::animation::reduced_motion());
+        self.edge.tip = Some(Tip {
+            key: k.to_owned(),
+            output,
+            layer,
+            viewport,
+            pool,
+            buffer: None,
+            pixels,
+            size,
+            scale120,
+            configured: false,
+            fade,
+            target: 1.,
+        });
+        bead_core::vprintln!("EDGE_TIP lip={k} shown");
+        if fade < 1. {
+            self.tip_fade_timer();
+        }
+    }
+    /// Hide the tooltip and cancel a pending show: a fade (leave) or at once (press, open, chrome, output).
+    fn tip_hide(&mut self, reason: &str, fade: bool) {
+        self.edge.tip_cancel();
+        let Some(tip) = self.edge.tip.as_mut() else {
+            return;
+        };
+        if tip.target > 0. {
+            bead_core::vprintln!("EDGE_TIP lip={} hidden reason={reason}", tip.key);
+        }
+        tip.target = 0.;
+        tip.fade = if fade {
+            tip_fade(tip.fade, 0., 0., bead_core::animation::reduced_motion())
+        } else {
+            0.
+        };
+        if tip.fade > 0. {
+            self.tip_fade_timer();
+        } else {
+            self.edge.tip = None;
+            self.edge.tip_fade_epoch = self.edge.tip_fade_epoch.wrapping_add(1);
+        }
+    }
+    fn tip_fade_timer(&mut self) {
+        self.edge.tip_fade_epoch = self.edge.tip_fade_epoch.wrapping_add(1);
+        let (epoch, mut last) = (self.edge.tip_fade_epoch, Instant::now());
+        let _ = self
+            .loop_handle
+            .insert_source(Timer::from_duration(FRAME), move |_, _, app| {
+                let Some(tip) = app.edge.tip.as_mut() else {
+                    return TimeoutAction::Drop;
+                };
+                if app.edge.tip_fade_epoch != epoch {
+                    return TimeoutAction::Drop;
+                }
+                let now = Instant::now();
+                let step = now.duration_since(last).as_secs_f32() / TIP_FADE_S;
+                last = now;
+                let reduced = bead_core::animation::reduced_motion();
+                tip.fade = tip_fade(tip.fade, tip.target, step, reduced);
+                if tip.fade == 0. && tip.target == 0. {
+                    app.edge.tip = None;
+                    return TimeoutAction::Drop;
+                }
+                tip.present();
+                if tip.fade == tip.target {
+                    TimeoutAction::Drop
+                } else {
+                    TimeoutAction::ToDuration(FRAME)
+                }
+            });
+    }
+    /// A lip redraw (palette, state or chrome change) with a visible tooltip: ask the host again, then
+    /// re-render, or hide when the tip may no longer show.
+    fn tip_refresh(&mut self) {
+        let Some(tip) = self.edge.tip.as_ref().filter(|t| t.target > 0.) else {
+            return;
+        };
+        let k = tip.key.clone();
+        match self.tip_scene(&k) {
+            Err("leave") => self.tip_hide("leave", true),
+            Err(reason) => self.tip_hide(reason, false),
+            Ok((lip, scene, output, out_size)) => {
+                let scale120 = self.tip_scale120(&output, &lip.id);
+                let Some(tip) = self.edge.tip.as_mut() else {
+                    return;
+                };
+                let size = (
+                    scene.bounds.w.ceil().max(1.) as u32,
+                    scene.bounds.h.ceil().max(1.) as u32,
+                );
+                let Some(pixels) = render_tip(&scene, size, scale120) else {
+                    return;
+                };
+                let (anchor, [t, r, b, l]) = tip_placement(&lip, out_size, size);
+                tip.layer.set_anchor(anchor);
+                tip.layer.set_size(size.0, size.1);
+                tip.layer.set_margin(t, r, b, l);
+                (tip.pixels, tip.size, tip.scale120) = (pixels, size, scale120);
+                tip.present();
+            }
+        }
+    }
     fn redraw_lips(&mut self) {
         self.gate_external_close();
+        self.tip_refresh();
         for i in 0..self.edge.bar_arts.len() {
             self.draw_bar_art(i);
         }
@@ -1593,6 +1969,7 @@ impl App {
                 control.external_panel_hover(&lip.opens, output, true);
             }
             self.redraw_lip(&k);
+            self.tip_begin(&k);
         }
         let active = wl_output.is_some_and(|o| self.lip_active(o, lip));
         let chrome = &self.edge.chrome;
@@ -1790,6 +2167,7 @@ impl App {
             self.edge.hovered = None;
         }
         self.edge.gate.rearm(&k);
+        self.tip_hide("leave", true);
         self.redraw_lip(&k);
         self.settle_edge_exit();
     }
@@ -1798,6 +2176,7 @@ impl App {
             return;
         }
         let k = key(output, &lip.id);
+        self.tip_hide("press", false);
         if self.options.trace_state {
             println!(
                 "EDGE_CLICK lip={k} active={} allowed={}",
@@ -1904,6 +2283,9 @@ impl App {
     /// A panel opened or closed: lips redraw their active state; a panel dismissed under a
     /// resting pointer must not reopen until the pointer leaves.
     pub(super) fn edges_panel_changed(&mut self, closed: bool) {
+        if !closed {
+            self.tip_hide("open", false);
+        }
         // A pearl or guide starting in its slot sees no resident tab: redrawing lips there would
         // show the resident's free pill beside its attached tab.
         if self.options.control.is_none() || self.pearl.is_some() {
@@ -2919,5 +3301,101 @@ mod tests {
         );
         assert_eq!(chrome.lip_at(Edge::Left, (1000, 800), (4., 100.)), None);
         assert_eq!(chrome.lip_at(Edge::Right, (1000, 800), (4., 350.)), None);
+    }
+
+    fn tip_lip(edge: Edge) -> Lip {
+        Lip {
+            id: "ai".into(),
+            edge,
+            length: 100.,
+            thickness: 12.,
+            opens: "ai".into(),
+        }
+    }
+    #[test]
+    fn tip_shows_only_when_hovered_unpressed_closed_and_offered() {
+        assert_eq!(tip_block(true, false, false, true), None);
+        assert_eq!(tip_block(false, false, false, true), Some("leave"));
+        assert_eq!(tip_block(true, true, false, true), Some("press"));
+        assert_eq!(tip_block(true, false, true, true), Some("open"));
+        assert_eq!(tip_block(true, false, false, false), Some("chrome"));
+    }
+    #[test]
+    fn tip_callback_runs_again_and_none_hides() {
+        let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let offer = Arc::new(std::sync::atomic::AtomicBool::new(true));
+        let (c, o) = (calls.clone(), offer.clone());
+        let tip: EdgeTip = Arc::new(move |_| {
+            c.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            o.load(std::sync::atomic::Ordering::SeqCst)
+                .then(|| Scene::empty(80., 40.))
+        });
+        let lip = tip_lip(Edge::Left);
+        assert!(tip_resolve(&tip, &lip, true, false, false).is_ok());
+        assert!(tip_resolve(&tip, &lip, true, false, false).is_ok());
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 2);
+        offer.store(false, std::sync::atomic::Ordering::SeqCst);
+        assert_eq!(
+            tip_resolve(&tip, &lip, true, false, false).err(),
+            Some("chrome")
+        );
+        // A blocked tip never asks the host.
+        assert_eq!(
+            tip_resolve(&tip, &lip, true, true, false).err(),
+            Some("press")
+        );
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 3);
+    }
+    #[test]
+    fn tip_placement_centres_on_the_lip_and_clamps_to_the_output() {
+        let out = (1000, 600);
+        let (anchor, margin) = tip_placement(&tip_lip(Edge::Left), out, (120, 40));
+        assert_eq!(
+            (anchor, margin),
+            (Anchor::LEFT | Anchor::TOP, [280, 0, 0, 0])
+        );
+        let (anchor, margin) = tip_placement(&tip_lip(Edge::Right), out, (120, 40));
+        assert_eq!(
+            (anchor, margin),
+            (Anchor::RIGHT | Anchor::TOP, [280, 0, 0, 0])
+        );
+        let (anchor, margin) = tip_placement(&tip_lip(Edge::Top), out, (120, 40));
+        assert_eq!(
+            (anchor, margin),
+            (Anchor::TOP | Anchor::LEFT, [0, 0, 0, 440])
+        );
+        // Taller than the output at one end: clamped inside.
+        let mut lip = tip_lip(Edge::Left);
+        lip.length = 600.;
+        assert_eq!(tip_placement(&lip, out, (120, 700)).1, [0, 0, 0, 0]);
+        let mut lip = tip_lip(Edge::Top);
+        lip.length = 1000.;
+        assert_eq!(tip_placement(&lip, out, (400, 40)).1, [0, 0, 0, 300]);
+        lip.length = 100.;
+        assert_eq!(tip_placement(&lip, (300, 600), (400, 40)).1, [0, 0, 0, 0]);
+    }
+    #[test]
+    fn tip_leave_before_the_delay_cancels_the_pending_show() {
+        let mut edge = EdgeState::default();
+        let epoch = edge.tip_arm();
+        assert!(edge.tip_current(epoch));
+        edge.tip_cancel();
+        assert!(!edge.tip_current(epoch));
+        assert_eq!(TIP_DELAY, Duration::from_millis(400));
+    }
+    #[test]
+    fn tip_fades_over_120_ms_and_jumps_under_reduced_motion() {
+        let step = 0.04 / TIP_FADE_S;
+        let mut fade = 0.;
+        let mut frames = 0;
+        while fade < 1. {
+            fade = tip_fade(fade, 1., step, false);
+            frames += 1;
+        }
+        assert!((3..=4).contains(&frames));
+        assert_eq!(tip_fade(0.5, 0., step, false), 0.5 - step);
+        assert_eq!(tip_fade(0.1, 0., step, false), 0.);
+        assert_eq!(tip_fade(0., 1., 0., true), 1.);
+        assert_eq!(tip_fade(1., 0., 0., true), 0.);
     }
 }

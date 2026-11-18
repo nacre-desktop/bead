@@ -23,7 +23,7 @@ mod panel;
 mod panels;
 mod pointer_motion;
 pub use edges::{
-    EdgeArt, EdgeChrome, ExternalEdgeCue, ExternalEdgeCueChannel, ExternalEdgeCueSender,
+    EdgeArt, EdgeChrome, EdgeTip, ExternalEdgeCue, ExternalEdgeCueChannel, ExternalEdgeCueSender,
     ExternalEdgePhase, LipState,
 };
 mod pearls;
@@ -832,6 +832,8 @@ pub struct Options {
     pub decorations: Option<DecorationFactory>,
     /// Artwork for the lips [`ShellControl::edge_chrome`] describes.
     pub edge_art: Option<EdgeArt>,
+    /// Tooltip scene for a hovered lip (B0340): shown 400 ms after hover, host-drawn; `None` shows none.
+    pub edge_tip: Option<EdgeTip>,
     /// Standard compositor blur, only if advertised with the blur capability.
     pub background_blur: bool,
     pub namespace: String,
@@ -920,6 +922,7 @@ impl Default for Options {
             primary_surface_viewport: false,
             decorations: None,
             edge_art: None,
+            edge_tip: None,
             background_blur: false,
             namespace: "bead-dev".into(),
             panel_spec: None,
