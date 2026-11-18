@@ -1566,6 +1566,9 @@ impl App {
                 *renderer = bead_render::renderer(RendererKind::FemtovgGl)?;
                 *kind = RendererKind::FemtovgGl;
             }
+            if let Some(source) = self.panel_runtime.as_mut() {
+                source.restore_image_policy();
+            }
             self.surfaces[index].visual_damage = Default::default();
             println!("RENDER_POLICY companion=true transition=cpu-to-gl");
             return Ok(());
@@ -1619,6 +1622,9 @@ impl App {
             if let Some((_, renderer, kind)) = &mut self.companion {
                 *renderer = bead_render::renderer(RendererKind::FemtovgGl)?;
                 *kind = RendererKind::FemtovgGl;
+            }
+            if let Some(source) = self.panel_runtime.as_mut() {
+                source.restore_image_policy();
             }
             self.surfaces[index].visual_damage = Default::default();
             println!("RENDER_POLICY companion=true transition=cpu-to-gl");

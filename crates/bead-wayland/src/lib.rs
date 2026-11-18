@@ -644,6 +644,9 @@ pub trait SceneSource {
     }
     /// Release source-owned prepared frames after a matching frozen snapshot is accepted.
     fn release_prepared(&mut self, _scene: &Scene) {}
+    /// The companion paints on GL now (B0336): later bakes use the source's own image policy
+    /// again. A CPU snapshot adoption left them dense for the CPU presenter.
+    fn restore_image_policy(&mut self) {}
     fn resources_retired(&self) -> bool {
         false
     }

@@ -165,6 +165,7 @@ enum Job {
     PrepareImages(Vec<Arc<bead_render::tree::ImagePayload>>),
     PrepareCpu(Arc<bead_render::tree::CpuPreparation>),
     ReleasePrepared(Vec<Weak<bead_render::tree::Frame>>),
+    RestoreImagePolicy,
     PanelCenter(Option<f32>),
     InitialModel(std::collections::BTreeMap<String, bead_core::Value>),
     PanelAnchor(Option<PanelAnchor>),
@@ -604,15 +605,15 @@ fn prepare_resource_job(
         Job::PrepareCpu(request) => {
             let result = request.prepare();
             let frame = cache.frame.take();
-            // B0332: the worker keeps its own image policy. The CPU cache is Dense, so a GL
-            // panel's worker rastered every later image per rect and ignored bake_size.
+            // B0332: an empty cache keeps the worker's own image policy. B0336: an adopted CPU
+            // cache stays Dense, so the next bakes give the CPU presenter rasters it can paint;
+            // `RestoreImagePolicy` brings the worker's policy back once the companion is on GL.
             *cache = bead_render::tree::TreeCache::default().with_image_policy(policy);
             let result = result.map(|prepared| {
                 if let Some(mut prepared) = prepared {
                     // ReleasePrepared names the source frame, which can still
                     // be a native recipe while its CPU pixels are already warm.
                     prepared.frame = frame;
-                    prepared.set_image_policy(policy);
                     *cache = prepared;
                 }
             });
@@ -857,6 +858,7 @@ impl SceneSource for Source {
                         Job::ReleasePrepared(frames) => {
                             release_cached_prepared(&mut cache, &frames);
                         }
+                        Job::RestoreImagePolicy => cache.set_image_policy(image_policy),
                         Job::PanelCenter(center) => source.panel_center(center),
                         Job::InitialModel(values) => {
                             if let Err(error) = source.initial_model(values) {
@@ -1071,6 +1073,10 @@ impl SceneSource for Source {
                                                 .unwrap_or_else(|_| unreachable!()),
                                         ));
                                     }
+                                    // In send order with PrepareCpu, which runs here too.
+                                    Ok(Job::RestoreImagePolicy) => {
+                                        cache.set_image_policy(image_policy)
+                                    }
                                     Ok(Job::Ack(id, result)) if id == token => {
                                         let validated = result.and_then(|()| {
                                             if fault.is_some() {
@@ -1171,6 +1177,11 @@ impl SceneSource for Source {
     }
     fn panel_center(&mut self, center: Option<f32>) {
         let _ = self.send(Job::PanelCenter(center));
+    }
+    fn restore_image_policy(&mut self) {
+        if self.image_policy != bead_render::tree::ImagePolicy::Dense {
+            let _ = self.send(Job::RestoreImagePolicy);
+        }
     }
     fn initial_model(
         &mut self,
@@ -1612,9 +1623,9 @@ mod tests {
                     cache.builds, builds,
                     "the first scene update reuses baked CPU pixels"
                 );
-                // B0332: the adopted cache stays UploadOnly, so the image stays a payload.
-                assert!(cache.frame.as_ref().unwrap().items[0].raster.is_none());
-                assert!(cache.frame.as_ref().unwrap().items[0].image.is_some());
+                // B0336: the adopted cache is Dense for the CPU presenter.
+                assert!(cache.frame.as_ref().unwrap().items[0].raster.is_some());
+                assert!(cache.frame.as_ref().unwrap().items[0].image.is_none());
             }
             let current = Arc::downgrade(cache.frame.as_ref().unwrap());
             assert!(release_cached_prepared(&mut cache, &[current]));
@@ -1661,6 +1672,15 @@ mod tests {
             prepare_resource_job(Job::PrepareCpu(request), &mut cache, policy),
             Ok(Ok(()))
         ));
+        // B0336: the adopted cache is Dense while the companion paints on CPU.
+        cache.prepare(&sized(20.), 1.).unwrap();
+        let item = &cache.frame.as_ref().unwrap().items[0];
+        assert!(
+            item.raster.is_some() && item.image.is_none(),
+            "dense for the CPU presenter"
+        );
+        // The companion is on GL: what Job::RestoreImagePolicy runs.
+        cache.set_image_policy(policy);
         let builds = cache.builds;
         let payloads: Vec<_> = (9..13)
             .map(|w| {
@@ -1676,6 +1696,64 @@ mod tests {
         );
         assert_eq!((payloads[0].width, payloads[0].height), (16, 16));
         assert_eq!(cache.builds, builds, "no image raster");
+    }
+    #[test]
+    fn a_cpu_companion_paints_the_next_bake_after_adoption_without_another_preparation() {
+        use bead_render::Renderer;
+        let image = |w: f32| {
+            let mut fixture = scene();
+            fixture.primitives[0] = bead_render::Primitive::Image {
+                opacity: 1.,
+                rect: bead_render::Rect::new(0., 0., w, w),
+                path: "proof.svg".into(),
+                blur: 0.,
+                fit: bead_render::ImageFit::Fill,
+                clip_polygon: None,
+                bake_size: None,
+                radius: 0.,
+                tint: None,
+            };
+            fixture.asset_data.insert("proof.svg".into(), Arc::from(&br##"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><rect width="16" height="16" fill="#123456"/></svg>"##[..]));
+            fixture
+        };
+        // A femtovg-gl panel's worker opens on a CPU companion (lazy GL).
+        let policy = bead_render::tree::ImagePolicy::UploadOnly;
+        let mut cache = bead_render::tree::TreeCache::default().with_image_policy(policy);
+        let mut first = image(8.);
+        bake(&mut cache, &mut first, &[1.]).unwrap();
+        let mut presenter = bead_render::tree::TreeCpuRenderer::default();
+        let request = presenter
+            .prepare_on_ui(&first, 1.)
+            .unwrap_err()
+            .downcast_ref::<bead_render::tree::CpuResourcesPending>()
+            .unwrap()
+            .request
+            .clone();
+        assert!(matches!(
+            prepare_resource_job(Job::PrepareCpu(request), &mut cache, policy),
+            Ok(Ok(()))
+        ));
+        // The next scene's bake is paintable as is: no second PrepareCpu.
+        let mut next = image(12.);
+        bake(&mut cache, &mut next, &[1.]).unwrap();
+        presenter.prepare_on_ui(&next, 1.).unwrap();
+    }
+    #[test]
+    fn only_a_gl_policy_worker_is_told_to_restore_its_image_policy() {
+        for (policy, sent) in [
+            (bead_render::tree::ImagePolicy::UploadOnly, true),
+            (bead_render::tree::ImagePolicy::Dense, false),
+        ] {
+            let mut source =
+                Source::new(Box::new(|| Err("unused".into())), scene()).with_image_policy(policy);
+            let (sender, receiver) = mpsc::channel();
+            source.sender = Some(sender);
+            source.restore_image_policy();
+            assert_eq!(
+                matches!(receiver.try_recv(), Ok(Job::RestoreImagePolicy)),
+                sent
+            );
+        }
     }
 
     #[test]
