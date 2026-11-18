@@ -191,8 +191,9 @@ pub trait WallpaperProvider: Send + Sync {
     fn fade(&self, _output: &str) -> Option<WallpaperFade> {
         None
     }
-    /// This frame's pixels equal what `output` shows now and only the palette changed (a
-    /// light/dark switch re-staging the current frame). Asked with the frame's output and
+    /// This frame's pixels equal what `output` shows now, or the image a fade running on it is
+    /// heading to, and only the palette changed (or nothing did; a light/dark switch re-staging
+    /// the current frame). Asked with the frame's output and
     /// revision, like `discarded`. The host then keeps the shown wallpaper (no fade, no upload),
     /// eases the palette over `fade` (a cut when there is none or motion is reduced), and calls
     /// `uploaded` and `committed` for the revision as a cut of identical pixels would. Without

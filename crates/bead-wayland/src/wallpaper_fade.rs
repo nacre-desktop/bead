@@ -93,6 +93,8 @@ pub(crate) enum TweenRoute {
     /// Another output of the change that is already tweening.
     Joins,
     Starts,
+    /// B0341: palette-only frames only: nothing changed, adopt with no tween.
+    Unchanged,
 }
 /// B0333: the panel takes the tween's final step always, the intermediate ones only while open
 /// and without `palette_tween = false`; a closed retained panel is re-staged once, at the end.
@@ -118,6 +120,34 @@ pub(crate) fn tween_route(
         (true, false, true) => TweenRoute::Starts,
         (true, false, false) => TweenRoute::Fence,
     }
+}
+/// B0341: `tween_route` for a palette-only frame; the one Fence caused by nothing changing
+/// (`same`) is `Unchanged`, every other Fence stays one.
+pub(crate) fn palette_only_route(
+    possible: bool,
+    foreign_pending: bool,
+    tween_to_key: bool,
+    differs: bool,
+    same: bool,
+) -> TweenRoute {
+    match tween_route(possible, foreign_pending, tween_to_key, differs) {
+        TweenRoute::Fence if possible && !foreign_pending && same => TweenRoute::Unchanged,
+        route => route,
+    }
+}
+/// B0341: a palette-only frame is adopted when the output shows its pixels (a resting run or no
+/// run) or a running fade is heading to them (its first frame already committed). Any run with an
+/// upload queued is rejected: the queued frame would later overwrite the adopted revision. `run` is (resting, upload queued, commit pending).
+pub(crate) fn adopts_palette_only(
+    revision: u64,
+    same_size: bool,
+    transition: bool,
+    run: Option<(bool, bool, bool)>,
+) -> bool {
+    revision != 0
+        && same_size
+        && !transition
+        && run.is_none_or(|(resting, upload, commit)| !upload && (resting || !commit))
 }
 pub(crate) struct PaletteTween {
     from: PaletteMap,
@@ -553,7 +583,13 @@ impl App {
         .is_some()
     }
 
-    fn palette_tween_route(&self, key: &PaletteMap, output: &str, fade: bool) -> TweenRoute {
+    fn palette_tween_route(
+        &self,
+        key: &PaletteMap,
+        output: &str,
+        fade: bool,
+        palette_only: bool,
+    ) -> TweenRoute {
         let tween_to_key = self.palette_tween.as_ref().is_some_and(|t| t.to == *key);
         let differs = self
             .wallpaper_palette
@@ -564,23 +600,24 @@ impl App {
             .wallpaper_pending_frames
             .iter()
             .any(|frame| !crate::runtime::frame_matches_palette(frame, key));
-        tween_route(
+        palette_only_route(
             fade && self.wallpaper_palette_outputs.is_none()
                 && self.wallpaper_surfaces.iter().any(|s| s.name == output),
             foreign_pending,
             tween_to_key,
             differs,
+            palette_only && self.wallpaper_palette.as_ref() == Some(key),
         )
     }
 
     /// Whether a staged frame waits for its confirmation to tween instead of building the fence.
     pub(super) fn staged_waits_for_tween(&self, key: &PaletteMap, output: &str) -> bool {
-        self.palette_tween_route(key, output, self.fade_wanted()) != TweenRoute::Fence
+        self.palette_tween_route(key, output, self.fade_wanted(), false) != TweenRoute::Fence
     }
 
     /// Whether this change swaps the palette with a fade instead of the palette fence.
     pub(super) fn install_with_palette_tween(&mut self, key: &PaletteMap, output: &str) -> bool {
-        let route = self.palette_tween_route(key, output, self.fade_wanted());
+        let route = self.palette_tween_route(key, output, self.fade_wanted(), false);
         if route == TweenRoute::Starts {
             self.pending_palette_target = Some(key.clone());
         }
@@ -589,8 +626,10 @@ impl App {
 
     /// B0327: a frame the provider calls palette-only keeps the shown pixels and eases the palette
     /// on the timer (no fade run exists to drive it). The revision is `uploaded` and `committed`
-    /// as a cut of identical pixels would. False: not palette-only, or a cut (reduced motion, no
-    /// fade, an older change waiting, a fade still running): the caller takes today's path.
+    /// as a cut of identical pixels would. B0341: a fade running toward these pixels (first frame
+    /// committed, no upload queued) is adopted too, untouched but for its palette; an unchanged
+    /// palette adopts with no tween. False: not palette-only, or a cut (reduced motion, no fade,
+    /// an older change waiting, the palette fence): the caller takes today's path.
     pub(super) fn install_palette_only(
         &mut self,
         frame: &WallpaperFrame,
@@ -608,10 +647,15 @@ impl App {
             return false;
         };
         let surface = &self.wallpaper_surfaces[index];
-        let shown = surface.revision != 0
-            && (surface.width, surface.height) == (frame.width, frame.height)
-            && surface.transition.is_none()
-            && surface.fade.as_ref().is_none_or(|run| run.resting);
+        let shown = adopts_palette_only(
+            surface.revision,
+            (surface.width, surface.height) == (frame.width, frame.height),
+            surface.transition.is_some(),
+            surface
+                .fade
+                .as_ref()
+                .map(|run| (run.resting, run.upload.is_some(), run.commit.is_some())),
+        );
         if !shown || !provider.palette_only(output, frame.revision) {
             return false;
         }
@@ -620,13 +664,16 @@ impl App {
             bead_core::animation::reduced_motion(),
             self.wallpaper_gl_failed,
         );
-        let route = self.palette_tween_route(key, output, spec.is_some());
+        let route = self.palette_tween_route(key, output, spec.is_some(), true);
         let Some(spec) = spec.filter(|_| route != TweenRoute::Fence) else {
             return false;
         };
         let surface = &mut self.wallpaper_surfaces[index];
         surface.palette = Some(frame.palette.clone());
         surface.revision = frame.revision;
+        if let Some(run) = surface.fade.as_mut() {
+            run.palette = frame.palette.clone();
+        }
         surface.staged = surface
             .staged
             .take()
@@ -2379,6 +2426,56 @@ mod tests {
             tween_route(true, true, true, true),
             Fence,
             "an older change still waits"
+        );
+    }
+    #[test]
+    fn a_palette_only_frame_is_adopted_for_resting_or_committed_runs_and_unchanged_palettes() {
+        let run = |r, u, c| Some((r, u, c));
+        assert!(adopts_palette_only(1, true, false, None));
+        assert!(adopts_palette_only(1, true, false, run(true, false, false)));
+        assert!(!adopts_palette_only(1, true, false, run(true, true, false)));
+        assert!(adopts_palette_only(
+            1,
+            true,
+            false,
+            run(false, false, false)
+        ));
+        assert!(!adopts_palette_only(
+            1,
+            true,
+            false,
+            run(false, true, false)
+        ));
+        assert!(!adopts_palette_only(
+            1,
+            true,
+            false,
+            run(false, false, true)
+        ));
+        assert!(!adopts_palette_only(1, false, false, None));
+        assert!(!adopts_palette_only(1, true, true, None));
+        assert!(!adopts_palette_only(0, true, false, None));
+        use TweenRoute::*;
+        assert_eq!(
+            palette_only_route(true, false, false, false, true),
+            Unchanged
+        );
+        assert_eq!(palette_only_route(true, false, false, true, false), Starts);
+        assert_eq!(palette_only_route(true, false, true, true, false), Joins);
+        assert_eq!(
+            palette_only_route(true, true, false, false, true),
+            Fence,
+            "foreign pending"
+        );
+        assert_eq!(
+            palette_only_route(false, false, false, false, true),
+            Fence,
+            "fence/no fade"
+        );
+        assert_eq!(
+            palette_only_route(true, false, false, false, false),
+            Fence,
+            "no key yet"
         );
     }
     #[test]
