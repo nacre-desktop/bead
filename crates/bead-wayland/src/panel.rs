@@ -1382,6 +1382,10 @@ impl App {
             }
         }
         self.panel_resuming = false;
+        // shortcut: a closed panel's kept GL renderer (B0334) drops its canvas here without a
+        // current context, so its few shader/buffer objects stay until the transport shuts down
+        // below (later only while a warm wallpaper run holds it); bind surfaceless first if a
+        // leak check ever shows them.
         drop(self.companion.take());
         self.panel_animations = Default::default();
         self.options.companion = None;

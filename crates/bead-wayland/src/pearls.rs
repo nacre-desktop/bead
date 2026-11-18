@@ -395,7 +395,9 @@ impl App {
                 s.gl.is_some()
                     || s.handoff.as_ref().is_some_and(|h| h.gl.is_some())
                     || s.prepared_native.as_ref().is_some_and(|p| p.gl.is_some())
-            }),
+            })
+                // B0334: a closed retained panel keeps its GL renderer, without a surface.
+                || rendering::keeps_gl_closed(self.companion.as_ref().map(|(_, _, kind)| *kind)),
             self.wallpaper_surfaces.iter().any(|s| s.fade.is_some()),
         )
     }

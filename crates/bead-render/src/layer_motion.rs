@@ -431,6 +431,15 @@ pub fn scene_ink_bounds(scene: &Scene, scale: f32, offset: (f32, f32)) -> Option
     bounds.or_else(|| Some(Rect::new(offset.0, offset.1, 0., 0.)))
 }
 
+/// B0334: a motion the compositor would show as a still layer (no slide distance, reveal, fade
+/// or scale). Its panel animates in client frames, so it never plans or paints an atlas.
+pub fn still_motion(motion: &crate::Motion) -> bool {
+    motion.slide_distance == Some(0.)
+        && !motion.reveal
+        && !motion.fade
+        && motion.scale_from.is_none()
+}
+
 /// The atlas plane's closed endpoint, shared by planning and renderer eligibility.
 pub fn closed_plane_offset(scene: &Scene) -> Option<(f32, f32)> {
     let motion = scene.motion.as_ref()?;
@@ -715,6 +724,7 @@ impl LayerMotionPlan {
         // when closing; only an explicit slide distance closes as a whole scene.
         let in_place = opening || motion.slide_distance.is_none();
         if bead_core::animation::reduced_motion()
+            || still_motion(motion)
             || in_place
                 && motion.reveal
                 && motion
@@ -1487,6 +1497,53 @@ mod tests {
         assert_eq!(terminal.pixels, expected);
         assert_eq!(plan.atlas.width, terminal.width);
         assert_eq!(plan.atlas.height, terminal.height);
+        Ok(())
+    }
+
+    #[test]
+    fn a_still_motion_never_plans_or_paints_an_atlas() -> Result<()> {
+        // B0334: no slide distance, reveal, fade or scale, as a client-frame storyboard opens.
+        let mut still = scene(false, false);
+        still.motion.as_mut().unwrap().slide_distance = Some(0.);
+        let motion = still.motion.clone().unwrap();
+        assert!(still_motion(&motion));
+        for opening in [true, false] {
+            let plan = LayerMotionPlan::for_slide(
+                &still,
+                opening,
+                96,
+                72,
+                1.,
+                PixelFormat::Rgba,
+                &mut NoPaint,
+            )?;
+            assert!(plan.is_none());
+        }
+        // Any slide (also the default full-size one), fade, reveal or scale moves the layer.
+        for moving in [
+            Motion {
+                slide_distance: Some(32.),
+                ..motion.clone()
+            },
+            Motion {
+                slide_distance: None,
+                ..motion.clone()
+            },
+            Motion {
+                fade: true,
+                ..motion.clone()
+            },
+            Motion {
+                reveal: true,
+                ..motion.clone()
+            },
+            Motion {
+                scale_from: Some(0.5),
+                ..motion.clone()
+            },
+        ] {
+            assert!(!still_motion(&moving));
+        }
         Ok(())
     }
 

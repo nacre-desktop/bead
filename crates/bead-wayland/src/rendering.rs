@@ -114,6 +114,73 @@ mod layer_motion_renderer_tests {
     }
 }
 
+/// B0334: a retained GL panel closes without a CPU snapshot and reopens on GL.
+#[cfg(test)]
+mod retained_gl_open_tests {
+    use super::keeps_gl_closed;
+    use crate::wallpaper_fade::{gl_surfaces_present, prime_wanted, transport_releasable};
+    use bead_render::RendererKind::{Cpu, FemtovgGl};
+
+    /// The shutdown guard of suspend, release, warm-off and the release timers (`has_gl_surfaces`)
+    /// for a closed panel: no EGL surface, no fade run, a CPU bar.
+    fn closed_transport_releasable(companion: Option<bead_render::RendererKind>) -> bool {
+        transport_releasable(
+            false,
+            gl_surfaces_present(keeps_gl_closed(companion), false),
+            true,
+        )
+    }
+
+    #[test]
+    fn a_closed_gl_panel_opens_on_its_kept_gl_renderer_from_the_first_frame() {
+        // The renderer is still GL at open, so update_companion_policy has nothing to promote
+        // (promotion waited for the motion to end) and never takes the first_frame=cpu path.
+        assert!(keeps_gl_closed(Some(FemtovgGl)));
+        assert!(
+            !keeps_gl_closed(Some(Cpu)),
+            "a CPU companion still paints a CPU first frame"
+        );
+    }
+
+    #[test]
+    fn close_keeps_the_transport_and_the_gl_renderer_without_a_snapshot() {
+        assert!(!closed_transport_releasable(Some(FemtovgGl)));
+        // A CPU companion (the snapshot path) still gives the context back.
+        assert!(closed_transport_releasable(Some(Cpu)));
+        assert!(
+            closed_transport_releasable(None),
+            "a released panel gives it back"
+        );
+    }
+
+    #[test]
+    fn warm_off_with_the_panel_closed_keeps_the_transport_for_the_prime() {
+        // Warm-off ends the resting runs; the kept panel renderer still holds the transport, and a
+        // later warm-on primes on that same context (ensure_transport reuses it).
+        assert!(!closed_transport_releasable(Some(FemtovgGl)));
+        assert!(prime_wanted(true, false, false, false, true));
+    }
+
+    #[cfg(feature = "native-gl")]
+    #[test]
+    fn a_gl_failure_or_a_first_upload_budget_refusal_falls_back_to_the_cpu_snapshot() {
+        use super::{GpuUnavailable, first_upload_error};
+        // What `Budget::reserve` returns when the GL image admission refuses (B0318).
+        let refused = || -> Box<dyn std::error::Error> {
+            "retained cache byte budget exceeded: native-gl-images requested=64".into()
+        };
+        // The first upload of an open: the gpu-to-cpu path, like GpuUnavailable from a GL failure.
+        assert!(first_upload_error(true, refused()).is::<GpuUnavailable>());
+        // Later frames keep today's refusal, and pending images still go to the worker.
+        assert!(!first_upload_error(false, refused()).is::<GpuUnavailable>());
+        let pending: Box<dyn std::error::Error> =
+            Box::new(bead_render::tree::ResourcesPending { images: Vec::new() });
+        assert!(first_upload_error(true, pending).is::<bead_render::tree::ResourcesPending>());
+        // After the fallback the companion is CPU: its closes take the CPU snapshot again.
+        assert!(!keeps_gl_closed(Some(Cpu)));
+    }
+}
+
 fn draw_waits_for_callback(pending: bool, gpu: bool, compositor_owns_motion: bool) -> bool {
     pending && gpu && !compositor_owns_motion
 }
@@ -195,6 +262,24 @@ fn copy_layer_motion_pixels(target: &mut [u8], pixels: &[u8]) -> bool {
 fn is_cache_pressure(error: &str) -> bool {
     let error = error.to_ascii_lowercase();
     error.contains("budget") || error.contains("admission") || error.contains("cache pressure")
+}
+
+/// B0334: a retained panel's GL renderer survives its close. It keeps the shared context alive (no
+/// CPU snapshot) and paints the next open from its first frame. A CPU renderer, also after a GL
+/// failure or a budget fallback, closes to the CPU snapshot.
+pub(super) fn keeps_gl_closed(companion: Option<RendererKind>) -> bool {
+    companion == Some(RendererKind::FemtovgGl)
+}
+
+/// B0318/B0334: a budget refusal at a retained panel's first GL upload of an open takes the
+/// gpu-to-cpu fallback like a GL failure (a CPU companion, CPU snapshots at close from then on).
+#[cfg(feature = "native-gl")]
+fn first_upload_error(first_upload: bool, error: Box<dyn Error>) -> Box<dyn Error> {
+    if first_upload && is_cache_pressure(&error.to_string()) {
+        Box::new(GpuUnavailable(error.to_string()))
+    } else {
+        error
+    }
 }
 
 fn report_cache_pressure(owner: &str, error: &str) {
@@ -1021,6 +1106,16 @@ impl App {
         if !self.panel_snapshot_ready() {
             return Ok(());
         }
+        #[cfg(feature = "native-gl")]
+        if gl_renderer {
+            // B0334: a GL panel closes without a CPU snapshot. It keeps its renderer and the
+            // shared context, so its next open paints on GL from the first frame.
+            return if self.panel_gpu_suspended {
+                Ok(())
+            } else {
+                self.suspend_panel_gpu(None)
+            };
+        }
         let epoch = self.panel_epoch;
         let close_epoch = self.panel_close_epoch;
         let ui_serial = self.panel_ui_serial;
@@ -1097,7 +1192,7 @@ impl App {
                                 let accepted = if app.companion.as_ref().is_some_and(
                                     |(_, _, kind)| *kind == RendererKind::FemtovgGl,
                                 ) {
-                                    app.suspend_panel_gpu(snapshot, scale)
+                                    app.suspend_panel_gpu(Some((snapshot, scale)))
                                 } else {
                                     app.accept_panel_cpu_snapshot(snapshot, scale)
                                 };
@@ -1176,8 +1271,13 @@ impl App {
         Ok(())
     }
 
+    /// `keep_renderer` false: the caller replaces the renderer, so its canvas goes here while
+    /// the context is current (B0334).
     #[cfg(feature = "native-gl")]
-    fn release_companion_gpu_resources(&mut self) -> Result<(), Box<dyn Error>> {
+    fn release_companion_gpu_resources(
+        &mut self,
+        keep_renderer: bool,
+    ) -> Result<(), Box<dyn Error>> {
         if !self
             .companion
             .as_ref()
@@ -1196,37 +1296,44 @@ impl App {
             )?;
             if let Some((_, renderer, _)) = &mut self.companion {
                 renderer.release_gpu_resources();
+                if !keep_renderer {
+                    *renderer = bead_render::renderer(RendererKind::FemtovgGl)?;
+                }
             }
             transport.unbind()?;
         }
         Ok(())
     }
 
+    /// Without a snapshot the companion keeps its GL renderer (B0334); either way its GL
+    /// textures, EGL surface and SHM go.
     #[cfg(feature = "native-gl")]
     pub(super) fn suspend_panel_gpu(
         &mut self,
-        snapshot: bead_render::tree::PreparedCpuSnapshot,
-        scale: f32,
+        snapshot: Option<(bead_render::tree::PreparedCpuSnapshot, f32)>,
     ) -> Result<(), Box<dyn Error>> {
         let _span = bead_core::profile::Span::new("panel_gpu_retire");
-        self.release_companion_gpu_resources()?;
-        let snapshot = snapshot.accept()?;
-        let frozen = if let Some((scene, _, _)) = self.companion.as_ref() {
-            accepted_frozen_snapshot(&snapshot, scene, scale)?
-        } else {
-            false
-        };
-        if let Some((_, renderer, kind)) = &mut self.companion {
-            *renderer = Box::new(snapshot);
-            *kind = RendererKind::Cpu;
-            self.panel_cpu_cached = true;
-        }
-        if frozen {
-            self.release_panel_prepared();
-        } else if let Some((scene, _, _)) = &mut self.companion {
-            // Preserve the legacy reveal/direct fallback handoff. Those frames
-            // are not frozen snapshots and must not retire source ownership.
-            scene.prepared.clear();
+        let snapshot_taken = snapshot.is_some();
+        self.release_companion_gpu_resources(!snapshot_taken)?;
+        if let Some((snapshot, scale)) = snapshot {
+            let snapshot = snapshot.accept()?;
+            let frozen = if let Some((scene, _, _)) = self.companion.as_ref() {
+                accepted_frozen_snapshot(&snapshot, scene, scale)?
+            } else {
+                false
+            };
+            if let Some((_, renderer, kind)) = &mut self.companion {
+                *renderer = Box::new(snapshot);
+                *kind = RendererKind::Cpu;
+                self.panel_cpu_cached = true;
+            }
+            if frozen {
+                self.release_panel_prepared();
+            } else if let Some((scene, _, _)) = &mut self.companion {
+                // Preserve the legacy reveal/direct fallback handoff. Those frames
+                // are not frozen snapshots and must not retire source ownership.
+                scene.prepared.clear();
+            }
         }
         for surface in self.surfaces.iter_mut().filter(|s| s.companion) {
             let wl_surface = surface.wl_surface().clone();
@@ -1285,8 +1392,9 @@ impl App {
             libc::malloc_trim(0);
         }
         println!(
-            "PANEL_GPU_SUSPENDED shared_context_retained={} monotonic_ns={}",
+            "PANEL_GPU_SUSPENDED shared_context_retained={} kept_renderer={} snapshot={snapshot_taken} monotonic_ns={}",
             self.gl.is_some(),
+            keeps_gl_closed(self.companion.as_ref().map(|(_, _, kind)| *kind)),
             monotonic_ns()
         );
         Ok(())
@@ -1543,7 +1651,7 @@ impl App {
                     }
                     if app.companion_policy.expire(now) {
                         #[cfg(feature="native-gl")]
-                        if let Err(error) = app.release_companion_gpu_resources() {
+                        if let Err(error) = app.release_companion_gpu_resources(false) {
                             app.fail(error); return TimeoutAction::Drop;
                         }
                         if let Some((_, renderer, kind)) = &mut app.companion {
@@ -1589,7 +1697,10 @@ impl App {
                 })?;
                 self.release_timer = true;
             }
-        } else if self.surfaces[index].frames == 0 {
+        } else if self.surfaces[index].frames == 0
+            // B0334: a retained panel that closed on GL is still GL: its first frame paints on GL.
+            && !keeps_gl_closed(self.companion.as_ref().map(|(_, _, kind)| *kind))
+        {
             self.surfaces[index].redraw = true;
             println!("RENDER_POLICY companion=true first_frame=cpu");
         }
@@ -1978,9 +2089,13 @@ impl App {
                     layer_motion_renderer_supported(*kind)
                         && scene.slide.is_none()
                         && scene.motion.as_ref().is_some_and(|motion| {
-                            !self.panel_target
-                                || !motion.reveal
-                                || reveal_contour_capable(scene, self.layer_motion_manager.as_ref())
+                            !bead_render::layer_motion::still_motion(motion)
+                                && (!self.panel_target
+                                    || !motion.reveal
+                                    || reveal_contour_capable(
+                                        scene,
+                                        self.layer_motion_manager.as_ref(),
+                                    ))
                         })
                 });
             if s.configured
@@ -2066,6 +2181,7 @@ impl App {
                     transport.present(target, &[Damage::full(w as u32, h as u32)])?;
                 }
                 s.frames += 1;
+                bead_core::profile::split("handoff");
                 return Ok(());
             }
             let (scene, renderer, _kind, panel) = if s.companion {
@@ -2361,7 +2477,12 @@ impl App {
                 && layer_motion_active
                 && !bead_core::animation::reduced_motion()
                 && !self.options.background_blur
-                && scene.slide.is_none();
+                && scene.slide.is_none()
+                // B0334: a still motion (a client-frame storyboard) never takes the atlas path.
+                && scene
+                    .motion
+                    .as_ref()
+                    .is_some_and(|motion| !bead_render::layer_motion::still_motion(motion));
             let layer_motion_handoff_ok = !layer_motion_cpu_replacement
                 && layer_motion_opening.is_some_and(|opening| {
                     layer_motion_handoff_eligible(
@@ -2578,6 +2699,7 @@ impl App {
                 }
                 s.redraw = false;
                 s.frames += 1;
+                bead_core::profile::split("layer_motion");
                 return Ok(());
             }
             if layer_motion_active
@@ -2808,6 +2930,7 @@ impl App {
                     s.panel_unmapped = false;
                     s.redraw = false;
                     s.frames += 1;
+                    bead_core::profile::split("layer_motion");
                     return Ok(());
                 }
             }
@@ -2999,6 +3122,7 @@ impl App {
                                 display: &transport.display,
                                 width: native_w,
                                 height: native_h,
+                                context: transport.generation,
                             }),
                             Damage::full(native_w, native_h),
                         )?;
@@ -3017,6 +3141,10 @@ impl App {
                         .panel_spec
                         .as_ref()
                         .is_some_and(|spec| spec.retain_when_closed);
+                // B0334: a visible panel uploads and presents its first GL frame in one draw;
+                // until that present, a budget refusal falls back to CPU like a GL failure.
+                let first_gl_upload = retained_gl_prepare && self.panel_target;
+                let retained_gl_prepare = retained_gl_prepare && !self.panel_target;
                 let activate_started = Instant::now();
                 transport.activate(s.gl.as_ref().unwrap(), w as u32, h as u32)?;
                 if self.started.elapsed().as_secs_f64() > 2. {
@@ -3064,6 +3192,7 @@ impl App {
                             display: &transport.display,
                             width: w as u32,
                             height: h as u32,
+                            context: transport.generation,
                         }),
                         Damage::full(w as u32, h as u32),
                     );
@@ -3095,15 +3224,18 @@ impl App {
                 {
                     promotion.set_body_size(body_width, body_height);
                 }
-                renderer.draw(
-                    scene,
-                    RenderTarget::Gl(bead_render::gl::GlTarget {
-                        display: &transport.display,
-                        width: w as u32,
-                        height: h as u32,
-                    }),
-                    Damage::full(w as u32, h as u32),
-                )?;
+                renderer
+                    .draw(
+                        scene,
+                        RenderTarget::Gl(bead_render::gl::GlTarget {
+                            display: &transport.display,
+                            width: w as u32,
+                            height: h as u32,
+                            context: transport.generation,
+                        }),
+                        Damage::full(w as u32, h as u32),
+                    )
+                    .map_err(|error| first_upload_error(first_gl_upload, error))?;
                 drop(compose_profile);
                 bead_core::profile::split("gl_draw");
                 if self.started.elapsed().as_secs_f64() > 2. {
@@ -3155,6 +3287,7 @@ impl App {
                     bead_core::profile::mark("panel_commit");
                 }
                 transport.present(s.gl.as_ref().unwrap(), &regions)?;
+                s.gl_prepared |= first_gl_upload;
                 bead_core::profile::split("swap");
                 if pending_promotion_staged {
                     self.promotion_pending = false;

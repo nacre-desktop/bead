@@ -34,6 +34,12 @@ pub struct Transport {
     ) -> u32,
     /// EGL_KHR_surfaceless_context: the upload thread's shared context needs it (B0317).
     surfaceless: bool,
+    /// B0334: process-unique per transport (so per context): a kept canvas names its context.
+    pub generation: u64,
+}
+fn next_generation() -> u64 {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
 }
 /// EGL display/config/context setup that can be created on a worker thread and
 /// handed to the render thread before any window surface exists.
@@ -137,6 +143,7 @@ impl PreparedTransport {
             context: Some(context),
             swap_damage: self.swap_damage,
             surfaceless: self.surfaceless,
+            generation: next_generation(),
         }
     }
 
@@ -279,6 +286,8 @@ pub struct GlTarget<'a> {
     pub display: &'a Display,
     pub width: u32,
     pub height: u32,
+    /// The transport's `generation`.
+    pub context: u64,
 }
 impl Transport {
     /// Release a process-owned EGL display, including the driver's display pool.
@@ -303,6 +312,7 @@ impl Transport {
             context: None,
             swap_damage,
             surfaceless,
+            generation: next_generation(),
         })
     }
     /// B0317: start the upload thread on a context shared with this transport's. It lives until
@@ -947,6 +957,8 @@ pub struct GlRenderer {
     group_budget: Option<bead_core::cache::Budget>,
     group_charge: Option<bead_core::cache::Charge>,
     group: Option<(femtovg::ImageId, u32, u32, u64)>,
+    /// The transport generation the canvas draws with (B0334).
+    context: Option<u64>,
 }
 impl GlRenderer {
     fn finish_image_upload(
@@ -1426,9 +1438,11 @@ impl GlRenderer {
 }
 
 impl Renderer for GlRenderer {
-    /// Release GL image and canvas allocations while the renderer's EGL context
-    /// is current. `TreeCache` is deliberately retained so the CPU rasterized
-    /// layers can be uploaded again without rerasterizing them.
+    /// Release GL image allocations while the renderer's EGL context is current.
+    /// `TreeCache` is deliberately retained so the CPU rasterized layers can be
+    /// uploaded again without rerasterizing them, and the canvas (its compiled
+    /// shaders) so the next draw on this context compiles nothing (B0334). The
+    /// canvas goes with the renderer: drop it while its context is current.
     fn release_gpu_resources(&mut self) {
         let image_bytes: usize = self
             .images
@@ -1454,10 +1468,8 @@ impl Renderer for GlRenderer {
             self.group = None;
         }
         self.group_charge = None;
-        // Dropping femtovg's canvas also releases renderer-owned GL state.
         // Keep both budgets so a later upload remains accounted against the
         // same process-wide cache accounting.
-        self.canvas = None;
         self.cache.trim_idle();
     }
 
@@ -1504,6 +1516,18 @@ impl Renderer for GlRenderer {
         let RenderTarget::Gl(target) = target else {
             return Err("GL target missing".into());
         };
+        // B0334: a kept canvas names its context's objects; under another transport those names
+        // mean other objects, so forget it (its own context took them) instead of deleting.
+        if self
+            .context
+            .is_some_and(|context| context != target.context)
+        {
+            std::mem::forget(self.canvas.take());
+            self.images.clear();
+            self.group = None;
+            self.group_charge = None;
+        }
+        self.context = Some(target.context);
         self.upload(target.display)?;
         let frame = self.cache.frame.as_ref().ok_or("unprepared layer tree")?;
         let canvas = self.canvas.as_mut().ok_or("GL canvas missing")?;
