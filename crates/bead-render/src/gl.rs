@@ -249,7 +249,9 @@ fn warm_surfaceless(context: NotCurrentContext, display: &Display) -> Result<Not
                         display.get_proc_address(name).cast()
                     })
                 }?;
-                let _canvas = femtovg::Canvas::new(renderer)?;
+                let mut canvas = femtovg::Canvas::new(renderer)?;
+                // B0342: best effort; a failed warm-up draw never costs the GL path.
+                let _ = warm_draw(&mut canvas, display);
                 Ok(())
             })();
             // Unbind even if shader setup failed, before the caller retires EGL.
@@ -260,6 +262,65 @@ fn warm_surfaceless(context: NotCurrentContext, display: &Display) -> Result<Not
         #[allow(unreachable_patterns)]
         _ => Err("surfaceless warmup requires EGL".into()),
     }
+}
+
+/// B0342: one draw with each femtovg program `GlRenderer::paint` uses (FillColor fill and stencil
+/// stroke, the concave fill's Stencil pass, FillImage, the anti-alias-off TextureCopyUnclipped
+/// blit; it draws no gradients or text) into a tiny image, so the context's first-draw driver work
+/// (draw-time shader variants, texture upload and clear paths, first submit) runs on this worker.
+/// The images go with the canvas, which deletes them on drop.
+fn warm_draw(
+    canvas: &mut femtovg::Canvas<femtovg::renderer::OpenGl>,
+    display: &Display,
+) -> Result<()> {
+    let finish: unsafe extern "system" fn() = gl_proc(display, c"glFinish")?;
+    let get_error: unsafe extern "system" fn() -> u32 = gl_proc(display, c"glGetError")?;
+    let flags = femtovg::ImageFlags::PREMULTIPLIED;
+    let target = canvas.create_image_empty(
+        16,
+        16,
+        femtovg::PixelFormat::Rgba8,
+        flags | femtovg::ImageFlags::FLIP_Y,
+    )?;
+    let pixels = [255u8; 16 * 16 * 4];
+    let source = canvas.create_image(
+        femtovg::ImageSource::Rgba(imgref::Img::new(pixels.as_rgba(), 16, 16)),
+        flags,
+    )?;
+    canvas.set_size(16, 16, 1.);
+    canvas.set_render_target(femtovg::RenderTarget::Image(target));
+    canvas.clear_rect(0, 0, 16, 16, femtovg::Color::rgba(0, 0, 0, 0));
+    let mut shape = femtovg::Path::new();
+    shape.rounded_rect(1., 1., 10., 10., 3.);
+    let mut paint = femtovg::Paint::color(femtovg::Color::rgba(255, 255, 255, 255));
+    canvas.fill_path(&shape, &paint);
+    paint.set_line_width(2.);
+    canvas.stroke_path(&shape, &paint);
+    let mut concave = femtovg::Path::new();
+    concave.move_to(0., 0.);
+    for (x, y) in [(16., 0.), (8., 8.), (16., 16.), (0., 16.)] {
+        concave.line_to(x, y);
+    }
+    concave.close();
+    canvas.fill_path(&concave, &paint);
+    let mut rect = femtovg::Path::new();
+    rect.rect(0., 0., 16., 16.);
+    let mut image = femtovg::Paint::image(source, 0., 0., 16., 16., 0., 1.);
+    canvas.fill_path(&rect, &image);
+    image.set_anti_alias(false);
+    canvas.fill_path(&rect, &image);
+    canvas.flush();
+    // SAFETY: this worker's context is current; GL defines both signatures.
+    unsafe {
+        finish();
+        // Leave no error flag behind for the first frame's staging check.
+        for _ in 0..8 {
+            if get_error() == 0 {
+                break;
+            }
+        }
+    }
+    Ok(())
 }
 
 /// # Safety
@@ -1082,6 +1143,7 @@ impl GlRenderer {
         }
 
         if self.canvas.is_none() {
+            let _span = bead_core::profile::Span::new("gl_canvas_new");
             // SAFETY: Transport made its retained context current on this thread.
             let renderer = unsafe {
                 femtovg::renderer::OpenGl::new_from_function_cstr(|name| {
@@ -1104,6 +1166,7 @@ impl GlRenderer {
         for payload in frame.items.iter().filter_map(|item| item.image.as_ref()) {
             *upload_uses.entry(payload.key).or_insert(0usize) += 1;
         }
+        let upload_profile = bead_core::profile::Span::new("gl_image_upload");
         for item in &frame.items {
             if let Some(payload) = &item.image {
                 let slot = (item.id.clone(), frame.scale.to_bits());
@@ -1251,6 +1314,7 @@ impl GlRenderer {
                 old.touched = self.serial;
             }
         }
+        drop(upload_profile);
         // Retire absent slots only after every current image upload succeeds;
         // an upload error does not additionally discard old off-frame slots.
         // The size-based LRU otherwise retains visited scroll rows up to its
@@ -1670,7 +1734,9 @@ impl Renderer for GlRenderer {
                 );
             }
         }
+        let flush_profile = bead_core::profile::Span::new("gl_flush");
         canvas.flush();
+        drop(flush_profile);
         // A non-fading motion never samples an opacity group. A renderer reused
         // from a fading view must not keep that view's full-size target alive.
         if scene.opacity >= 1. && scene.motion.as_ref().is_some_and(|motion| !motion.fade) {
