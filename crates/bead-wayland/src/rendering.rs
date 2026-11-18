@@ -163,19 +163,23 @@ mod retained_gl_open_tests {
 
     #[cfg(feature = "native-gl")]
     #[test]
-    fn a_gl_failure_or_a_first_upload_budget_refusal_falls_back_to_the_cpu_snapshot() {
-        use super::{GpuUnavailable, first_upload_error};
+    fn a_gl_failure_or_any_budget_refusal_of_a_gl_panel_falls_back_to_cpu() {
+        use super::{GpuUnavailable, companion_falls_back};
         // What `Budget::reserve` returns when the GL image admission refuses (B0318).
-        let refused = || -> Box<dyn std::error::Error> {
-            "retained cache byte budget exceeded: native-gl-images requested=64".into()
-        };
-        // The first upload of an open: the gpu-to-cpu path, like GpuUnavailable from a GL failure.
-        assert!(first_upload_error(true, refused()).is::<GpuUnavailable>());
-        // Later frames keep today's refusal, and pending images still go to the worker.
-        assert!(!first_upload_error(false, refused()).is::<GpuUnavailable>());
-        let pending: Box<dyn std::error::Error> =
-            Box::new(bead_render::tree::ResourcesPending { images: Vec::new() });
-        assert!(first_upload_error(true, pending).is::<bead_render::tree::ResourcesPending>());
+        let refused: Box<dyn std::error::Error> =
+            "retained cache byte budget exceeded: native-gl-images requested=64".into();
+        // B0337: any draw of a GL companion (not only an open's first upload) takes the
+        // gpu-to-cpu path, like GpuUnavailable from a GL failure, instead of ending the shell.
+        assert!(companion_falls_back(true, refused.as_ref()));
+        let gl_failure = GpuUnavailable("no EGL".into());
+        assert!(companion_falls_back(false, &gl_failure));
+        // A CPU companion's refusal and other GL errors keep today's handling, and pending
+        // images still go to the worker.
+        assert!(!companion_falls_back(false, refused.as_ref()));
+        let missing: Box<dyn std::error::Error> = "GL canvas missing".into();
+        assert!(!companion_falls_back(true, missing.as_ref()));
+        let pending = bead_render::tree::ResourcesPending { images: Vec::new() };
+        assert!(!companion_falls_back(true, &pending));
         // After the fallback the companion is CPU: its closes take the CPU snapshot again.
         assert!(!keeps_gl_closed(Some(Cpu)));
     }
@@ -271,15 +275,11 @@ pub(super) fn keeps_gl_closed(companion: Option<RendererKind>) -> bool {
     companion == Some(RendererKind::FemtovgGl)
 }
 
-/// B0318/B0334: a budget refusal at a retained panel's first GL upload of an open takes the
-/// gpu-to-cpu fallback like a GL failure (a CPU companion, CPU snapshots at close from then on).
-#[cfg(feature = "native-gl")]
-fn first_upload_error(first_upload: bool, error: Box<dyn Error>) -> Box<dyn Error> {
-    if first_upload && is_cache_pressure(&error.to_string()) {
-        Box::new(GpuUnavailable(error.to_string()))
-    } else {
-        error
-    }
+/// B0318/B0334/B0337: a GL failure, or a budget refusal on any draw of a GL companion, takes the
+/// gpu-to-cpu fallback (a CPU companion, CPU snapshots at close from then on) instead of App::fail.
+#[cfg(any(feature = "native-gl", feature = "wgpu"))]
+fn companion_falls_back(gl_companion: bool, error: &(dyn Error + 'static)) -> bool {
+    error.is::<GpuUnavailable>() || (gl_companion && is_cache_pressure(&error.to_string()))
 }
 
 fn report_cache_pressure(owner: &str, error: &str) {
@@ -3147,8 +3147,7 @@ impl App {
                         .panel_spec
                         .as_ref()
                         .is_some_and(|spec| spec.retain_when_closed);
-                // B0334: a visible panel uploads and presents its first GL frame in one draw;
-                // until that present, a budget refusal falls back to CPU like a GL failure.
+                // B0334: a visible panel uploads and presents its first GL frame in one draw.
                 let first_gl_upload = retained_gl_prepare && self.panel_target;
                 let retained_gl_prepare = retained_gl_prepare && !self.panel_target;
                 let activate_started = Instant::now();
@@ -3230,18 +3229,16 @@ impl App {
                 {
                     promotion.set_body_size(body_width, body_height);
                 }
-                renderer
-                    .draw(
-                        scene,
-                        RenderTarget::Gl(bead_render::gl::GlTarget {
-                            display: &transport.display,
-                            width: w as u32,
-                            height: h as u32,
-                            context: transport.generation,
-                        }),
-                        Damage::full(w as u32, h as u32),
-                    )
-                    .map_err(|error| first_upload_error(first_gl_upload, error))?;
+                renderer.draw(
+                    scene,
+                    RenderTarget::Gl(bead_render::gl::GlTarget {
+                        display: &transport.display,
+                        width: w as u32,
+                        height: h as u32,
+                        context: transport.generation,
+                    }),
+                    Damage::full(w as u32, h as u32),
+                )?;
                 drop(compose_profile);
                 bead_core::profile::split("gl_draw");
                 if self.started.elapsed().as_secs_f64() > 2. {
@@ -4000,7 +3997,12 @@ impl App {
             #[cfg(any(feature = "native-gl", feature = "wgpu"))]
             if self.options.auto_fallback
                 && self.surfaces[index].companion
-                && e.downcast_ref::<GpuUnavailable>().is_some()
+                && companion_falls_back(
+                    self.companion
+                        .as_ref()
+                        .is_some_and(|(_, _, kind)| *kind == RendererKind::FemtovgGl),
+                    e.as_ref(),
+                )
             {
                 eprintln!("FALLBACK companion GPU unavailable: {e}");
                 let renderer = match bead_render::renderer(RendererKind::Cpu) {

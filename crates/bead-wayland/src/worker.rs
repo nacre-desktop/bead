@@ -1063,6 +1063,17 @@ impl SceneSource for Source {
                                 reload,
                                 wallpaper_palette: wallpaper_palette.clone(),
                             })));
+                            // B0337: the host may withhold the Ack until a resource job queued
+                            // behind this stage is done: run those now, in send order.
+                            for job in std::mem::take(&mut queue) {
+                                match job {
+                                    Job::RestoreImagePolicy => cache.set_image_policy(image_policy),
+                                    job => match prepare_resource_job(job, &mut cache, image_policy) {
+                                        Ok(result) => wakeup(UiEvent::ResourcesPrepared(result)),
+                                        Err(job) => queue.push_back(job),
+                                    },
+                                }
+                            }
                             // No later script event may overwrite this staged transaction before its GPU acknowledgement.
                             loop {
                                 match receiver.recv() {
@@ -2962,10 +2973,12 @@ mod tests {
         assert_eq!(absorbed.palettes, [palette(1)]);
         assert_eq!((absorbed.replaced, absorbed.repeats), (1, 2));
     }
-    /// Logs each staged event; the first stage waits for the gate, so later jobs queue.
+    /// Logs each staged event and stages `scene`; the first stage (or `presented`) waits for
+    /// the gate, so later jobs queue.
     struct Gated {
         log: Arc<std::sync::Mutex<Vec<String>>>,
         gate: Option<mpsc::Receiver<()>>,
+        scene: Scene,
     }
     impl SceneSource for Gated {
         fn watch(
@@ -2983,7 +2996,12 @@ mod tests {
                 UiEvent::Command { command, .. } => command,
                 event => event_kind(&event),
             });
-            Ok(Some(scene()))
+            Ok(Some(self.scene.clone()))
+        }
+        fn presented(&mut self, _: u64) {
+            if let Some(gate) = self.gate.take() {
+                let _ = gate.recv();
+            }
         }
         fn validate(&self) -> Result<(), Box<dyn Error>> {
             Ok(())
@@ -3008,6 +3026,7 @@ mod tests {
                 Ok(Box::new(Gated {
                     log: staged,
                     gate: Some(gate),
+                    scene: scene(),
                 }))
             }),
             scene(),
@@ -3047,5 +3066,106 @@ mod tests {
             *log.lock().unwrap(),
             ["Reload", "tab", "palette 2", "left", "right"]
         );
+    }
+
+    fn image_scene(size: f32) -> Scene {
+        let mut fixture = scene();
+        fixture.primitives[0] = bead_render::Primitive::Image {
+            opacity: 1.,
+            rect: bead_render::Rect::new(0., 0., size, size),
+            path: "proof.svg".into(),
+            blur: 0.,
+            fit: bead_render::ImageFit::Fill,
+            clip_polygon: None,
+            bake_size: None,
+            radius: 0.,
+            tint: None,
+        };
+        fixture.asset_data.insert("proof.svg".into(), Arc::from(&br##"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><rect width="16" height="16" fill="#123456"/></svg>"##[..]));
+        fixture
+    }
+    /// B0337: an UploadOnly worker holds in `presented` while a stage, a CPU preparation and
+    /// (when `restore_queued`) a policy restore queue behind it, in that order; returns once
+    /// the host holds the stage's Ready.
+    fn ready_with_a_queued_preparation(
+        view: Scene,
+        restore_queued: bool,
+    ) -> (Source, mpsc::Receiver<UiEvent>) {
+        let (open, gate) = mpsc::channel();
+        let mut source = Source::new(
+            Box::new(move || {
+                Ok(Box::new(Gated {
+                    log: Default::default(),
+                    gate: Some(gate),
+                    scene: view,
+                }))
+            }),
+            scene(),
+        )
+        .with_image_policy(bead_render::tree::ImagePolicy::UploadOnly);
+        let (sender, receiver) = mpsc::channel();
+        source.services(Box::new(move |event| {
+            let _ = sender.send(event);
+        }));
+        source.presented(1);
+        source.stage(UiEvent::Reload).unwrap();
+        let request = bead_render::renderer(bead_render::RendererKind::Cpu)
+            .unwrap()
+            .prepare_on_ui(&image_scene(16.), 1.)
+            .unwrap_err()
+            .downcast_ref::<bead_render::tree::CpuResourcesPending>()
+            .unwrap()
+            .request
+            .clone();
+        source.prepare_cpu(request).unwrap();
+        if restore_queued {
+            source.restore_image_policy();
+        }
+        open.send(()).unwrap();
+        let ready = receiver.recv_timeout(Duration::from_secs(2)).unwrap();
+        assert!(matches!(&ready, UiEvent::Worker(packet) if matches!(packet.phase, Phase::Ready)));
+        assert!(source.stage(ready).unwrap().is_some());
+        (source, receiver)
+    }
+    #[test]
+    fn a_preparation_queued_behind_a_stage_runs_before_that_stage_waits_for_its_ack() {
+        let (_source, receiver) = ready_with_a_queued_preparation(scene(), false);
+        // A host whose upload waits for this preparation would never send the Ack.
+        assert!(matches!(
+            receiver.recv_timeout(Duration::from_secs(2)),
+            Ok(UiEvent::ResourcesPrepared(Ok(())))
+        ));
+    }
+    #[test]
+    fn a_policy_restore_after_a_queued_cpu_preparation_leaves_the_worker_upload_only() {
+        for restore_queued in [true, false] {
+            let (mut source, receiver) =
+                ready_with_a_queued_preparation(image_scene(12.), restore_queued);
+            if !restore_queued {
+                // Sent after the PrepareCpu, it arrives while the worker waits for the Ack.
+                source.restore_image_policy();
+            }
+            assert!(!source.commit(), "acknowledges the Ready");
+            let (mut prepared, mut accepted) = (false, false);
+            while !(prepared && accepted) {
+                match receiver.recv_timeout(Duration::from_secs(2)).unwrap() {
+                    UiEvent::ResourcesPrepared(result) => prepared = result.is_ok(),
+                    UiEvent::Worker(packet) if packet.is_accepted() => {
+                        source.stage(UiEvent::Worker(packet)).unwrap();
+                        accepted = source.commit();
+                    }
+                    _ => {}
+                }
+            }
+            source.stage(command("left")).unwrap();
+            let Ok(UiEvent::Worker(ready)) = receiver.recv_timeout(Duration::from_secs(2)) else {
+                panic!("the next stage's Ready");
+            };
+            let frame = &ready.scene.as_ref().unwrap().prepared[&1f32.to_bits()];
+            assert!(
+                frame.items[0].image.is_some() && frame.items[0].raster.is_none(),
+                "the Dense adoption ran first, the restore last (restore_queued={restore_queued})"
+            );
+        }
     }
 }
