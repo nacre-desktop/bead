@@ -25,7 +25,7 @@ This index contains current framework contracts and repository-boundary decision
 | [0246 — Bluetooth devices service](0246-bluetooth.md) | Event-driven BlueZ adapter and device snapshots and controls for folder apps |
 | [0247 — Network devices service](0247-network.md) | Event-driven NetworkManager device, access point and saved-connection snapshots and controls for folder apps |
 | [0249 — Compositor adapters](0249-compositor-adapters.md) | Clean-room niri and Hyprland IPC snapshots and folder workspace focus |
-| [0250 — Popup panels for folder apps](0250-folder-app-panels.md) | Manifest-declared Luau popups a bar opens with `panel.*` actions |
+| [0250 — Popup panels for folder apps](0250-folder-app-panels.md) | Manifest-declared Luau popups a bar opens with `panel.*` actions; a panel whose worker is dead (factory `Err` or panic) is torn down at once with its dismissal layer (`SceneSource::alive`, `PANEL_FAILED`, B0345) |
 | [0254 — Render and worker hot paths](0254-hotpath-render.md) | Scene handoff, action isolation, and render preparation costs; worker queue backpressure (B0332: the newest palette wins, key repeats are dropped while one is queued) an image policy that follows the companion renderer (B0336), and queued resource jobs that run before the ack wait (B0337) |
 | [0264 — Tinted icons and badge](0264-tinted-icons-and-badge.md) | Palette-tinted monochrome images and the kit count badge |
 | [0274 — Kit batch](0274-kit-batch.md) | `kit.Segment`, `LinkRow`, `Chip`, `Tag`, the `SliderTile` end slot, `kit.metrics`, honoured close durations, transcript alignment |
