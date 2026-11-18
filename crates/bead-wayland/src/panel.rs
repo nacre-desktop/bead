@@ -1382,11 +1382,21 @@ impl App {
             }
         }
         self.panel_resuming = false;
-        // shortcut: a closed panel's kept GL renderer (B0334) drops its canvas here without a
-        // current context, so its few shader/buffer objects stay until the transport shuts down
-        // below (later only while a warm wallpaper run holds it); bind surfaceless first if a
-        // leak check ever shows them.
+        // B0334: a closed panel's kept GL renderer has no EGL surface left: its canvas and image
+        // textures are deleted with the context current surfaceless.
+        #[cfg(feature = "native-gl")]
+        let surfaceless =
+            rendering::keeps_gl_closed(self.companion.as_ref().map(|(_, _, kind)| *kind))
+                && !self.surfaces.iter().any(|s| s.companion && s.gl.is_some())
+                && self
+                    .gl
+                    .as_ref()
+                    .is_some_and(|gl| gl.bind_surfaceless().is_ok());
         drop(self.companion.take());
+        #[cfg(feature = "native-gl")]
+        if surfaceless && let Some(Err(error)) = self.gl.as_ref().map(|gl| gl.unbind()) {
+            self.fail(error);
+        }
         self.panel_animations = Default::default();
         self.options.companion = None;
         if self.options.report.is_some() {

@@ -1156,8 +1156,10 @@ pub trait Renderer {
     /// Release backend-owned GPU resources while preserving prepared CPU-side
     /// data (including retained tree rasters). Backends without GPU caches do
     /// nothing. A backend that requires a current graphics context documents
-    /// that requirement on its implementation.
-    fn release_gpu_resources(&mut self) {}
+    /// that requirement on its implementation. `keep_images` keeps uploaded
+    /// image textures, so a closed panel that keeps its renderer reopens without
+    /// decoding them again (B0334).
+    fn release_gpu_resources(&mut self, _keep_images: bool) {}
 
     /// Per-surface presentation hint, not global activity on another surface.
     fn presentation_motion(&mut self, _active: bool) {}

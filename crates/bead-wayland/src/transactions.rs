@@ -640,7 +640,7 @@ impl App {
                         .ok_or("resource retirement GL context missing")?
                         .activate(surface.gl.as_ref().unwrap(), w as u32, h as u32)?;
                 }
-                self.renderer.release_gpu_resources();
+                self.renderer.release_gpu_resources(false);
                 for surface in self.surfaces.iter_mut().filter(|surface| {
                     surface.companion == self.processing_panel
                         && output_scope_matches(self.active_output.as_deref(), &surface.output_name)

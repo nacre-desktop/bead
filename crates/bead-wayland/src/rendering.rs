@@ -1295,7 +1295,7 @@ impl App {
                 (surface.height as f32 * scale).ceil() as u32,
             )?;
             if let Some((_, renderer, _)) = &mut self.companion {
-                renderer.release_gpu_resources();
+                renderer.release_gpu_resources(keep_renderer);
                 if !keep_renderer {
                     *renderer = bead_render::renderer(RendererKind::FemtovgGl)?;
                 }

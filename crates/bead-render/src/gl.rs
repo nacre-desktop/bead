@@ -437,6 +437,17 @@ impl Transport {
         }
         Ok(())
     }
+    /// B0334: make the context current without a window, so a closed panel's kept renderer can
+    /// delete its GL objects after its EGL surface is gone.
+    pub fn bind_surfaceless(&self) -> Result<()> {
+        #[allow(unreachable_patterns)]
+        match self.context.as_ref() {
+            Some(PossiblyCurrentContext::Egl(context)) if self.surfaceless => {
+                Ok(context.make_current_surfaceless()?)
+            }
+            _ => Err("surfaceless context unavailable".into()),
+        }
+    }
     pub fn present(&self, surface: &Surface, damage: &[Damage]) -> Result<()> {
         if damage.is_empty() {
             return Err("empty EGL damage must use a callback-only commit".into());
@@ -942,6 +953,8 @@ impl Drop for Uploader {
 }
 struct Texture {
     key: u64,
+    /// An image payload's texture (not a layer raster): `release_gpu_resources` may keep it.
+    payload: bool,
     image: femtovg::ImageId,
     width: u32,
     height: u32,
@@ -1063,6 +1076,7 @@ impl GlRenderer {
                     slot,
                     Texture {
                         key: payload.key,
+                        payload: true,
                         image,
                         width,
                         height,
@@ -1129,6 +1143,7 @@ impl GlRenderer {
                     Texture {
                         _charge: charge,
                         key: raster.key,
+                        payload: false,
                         image,
                         width: w,
                         height: h,
@@ -1443,28 +1458,33 @@ impl Renderer for GlRenderer {
     /// uploaded again without rerasterizing them, and the canvas (its compiled
     /// shaders) so the next draw on this context compiles nothing (B0334). The
     /// canvas goes with the renderer: drop it while its context is current.
-    fn release_gpu_resources(&mut self) {
-        let image_bytes: usize = self
-            .images
-            .values()
-            .map(|t| t.width as usize * t.height as usize * 4)
-            .sum();
+    fn release_gpu_resources(&mut self, keep_images: bool) {
+        let bytes = |t: &Texture| t.width as usize * t.height as usize * 4;
+        let image_bytes: usize = self.images.values().map(bytes).sum();
         let group_bytes = self
             .group
             .map_or(0, |(_, w, h, _)| u64::from(w) * u64::from(h) * 4);
+        // Layer rasters upload again from `TreeCache`; image payloads would need the worker.
+        let (kept, released): (
+            std::collections::BTreeMap<_, _>,
+            std::collections::BTreeMap<_, _>,
+        ) = std::mem::take(&mut self.images)
+            .into_iter()
+            .partition(|(_, texture)| keep_images && texture.payload);
         println!(
-            "GL_CACHE_RELEASE images={} image_bytes={image_bytes} composite_bytes={group_bytes}",
-            self.images.len()
+            "GL_CACHE_RELEASE images={} image_bytes={image_bytes} composite_bytes={group_bytes} kept_image_bytes={}",
+            kept.len() + released.len(),
+            kept.values().map(bytes).sum::<usize>()
         );
+        self.images = kept;
         if let Some(canvas) = self.canvas.as_mut() {
-            for (_, texture) in std::mem::take(&mut self.images) {
+            for (_, texture) in released {
                 canvas.delete_image(texture.image);
             }
             if let Some((image, _, _, _)) = self.group.take() {
                 canvas.delete_image(image);
             }
         } else {
-            self.images.clear();
             self.group = None;
         }
         self.group_charge = None;
