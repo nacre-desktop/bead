@@ -164,6 +164,9 @@ impl Session {
         self.projector = Some(projector);
     }
     /// Set this session's intrinsic text measurement policy if none was supplied.
+    /// Text is MEASURED with the picker's files while the scene's `font_files`
+    /// decide DRAWING: a host that sets `font_files` must give a picker returning
+    /// the same files, or widths come from another face and text clips (B0344).
     /// Hosts call this before the first load; explicit test policies remain intact.
     pub fn set_font_picker_if_missing(&mut self, picker: crate::transcript::Picker) {
         if self.font_picker.is_none() {

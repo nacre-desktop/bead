@@ -29,6 +29,7 @@ Swap was zero throughout. The file-backed share is the `bead` binary's text and 
 | accesskit a11y adapter (`accesskit_unix` default `async-io` executor): threads `async-io` and `blocking-1`, reactor, zbus session connection | ~90 KiB heap, 2 arenas, 2 stacks, one 500 ms wakeup each | leaked by design: created with no assistive technology present, for the process's life | thread list, heaptrack |
 | SHM pools, companion renderer, GL transport of a closed panel | 0 | released on close (a retained GL panel keeps its renderer and the transport for a 300 s grace, [0270](0270-panel-first-frame.md#retained-gl-open-b0334)); memfd stays at 3 bar buffers (0.79 MiB, 0.13 PSS) | smaps shmem |
 | Font database (one `FontSystem` per worker `TreeCache`) | negligible with 8 font files; scales with installed fonts for hosts that leave `scene.font_files` empty | kept | heaptrack |
+| `scene.font_files` contract (B0344) | non-empty means exactly those files and no system fonts; a missing or unreadable file is skipped with one `FONT_FILE_SKIPPED file=<name> reason=missing\|unreadable` line per path, and none loading falls back to the system fonts | kept | `missing_font_files_are_skipped_not_fatal` |
 
 ## Fixes landed
 

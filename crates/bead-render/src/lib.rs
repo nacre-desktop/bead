@@ -601,6 +601,10 @@ pub struct Scene {
     pub clips: std::collections::BTreeMap<usize, Rect>,
     pub layers: Vec<SceneLayer>,
     pub prepared: std::collections::BTreeMap<u32, std::sync::Arc<tree::Frame>>,
+    /// Non-empty means exactly these files and no system fonts (this keeps the font
+    /// database small, spec 0271), so list every family the scene uses, icon and
+    /// fallback faces included. A missing or unreadable file is skipped (B0344); if
+    /// none loads, the system fonts are used.
     pub font_files: Vec<std::path::PathBuf>,
     pub width: f32,
     pub slide: Option<Slide>,
@@ -1304,6 +1308,24 @@ static FONT_POOL_INDEX: std::sync::OnceLock<std::sync::Mutex<VecDeque<FontPoolIn
 fn font_pool_index() -> &'static std::sync::Mutex<VecDeque<FontPoolIndex>> {
     FONT_POOL_INDEX.get_or_init(|| std::sync::Mutex::new(VecDeque::new()))
 }
+/// B0344: a listed font file that cannot be read is skipped, logged once per path.
+fn skip_font_file(path: &std::path::Path, error: &std::io::Error) {
+    static SEEN: std::sync::Mutex<Vec<std::path::PathBuf>> = std::sync::Mutex::new(Vec::new());
+    let mut seen = SEEN.lock().unwrap_or_else(|poison| poison.into_inner());
+    if seen.len() >= 64 || seen.iter().any(|known| known == path) {
+        return;
+    }
+    seen.push(path.to_path_buf());
+    let reason = if error.kind() == std::io::ErrorKind::NotFound {
+        "missing"
+    } else {
+        "unreadable"
+    };
+    eprintln!(
+        "FONT_FILE_SKIPPED file={} reason={reason}",
+        path.file_name().unwrap_or_default().to_string_lossy()
+    );
+}
 fn scene_fonts(scene: &Scene) -> Result<SharedFontSystem> {
     let fresh =
         || load_scene_fonts(scene).map(|fonts| std::sync::Arc::new(std::sync::Mutex::new(fonts)));
@@ -1314,7 +1336,13 @@ fn scene_fonts(scene: &Scene) -> Result<SharedFontSystem> {
     let locale = scene_locale();
     let mut stamp = Vec::with_capacity(scene.font_files.len());
     for path in &scene.font_files {
-        let metadata = std::fs::metadata(path)?;
+        let metadata = match std::fs::metadata(path) {
+            Ok(metadata) => metadata,
+            Err(error) => {
+                skip_font_file(path, &error);
+                continue;
+            }
+        };
         let Ok(modified) = metadata.modified() else {
             return fresh();
         };
@@ -1328,6 +1356,10 @@ fn scene_fonts(scene: &Scene) -> Result<SharedFontSystem> {
                 (metadata.dev(), metadata.ino())
             },
         });
+    }
+    // Nothing listed is present: system fonts, uncached like an empty list.
+    if stamp.is_empty() {
+        return fresh();
     }
     let mut index = font_pool_index()
         .lock()
@@ -1381,8 +1413,15 @@ fn load_scene_fonts(scene: &Scene) -> Result<FontSystem> {
         return Ok(FontSystem::new());
     }
     let mut db = fontdb::Database::new();
+    let mut loaded = 0;
     for path in &scene.font_files {
-        db.load_font_file(path)?;
+        match db.load_font_file(path) {
+            Ok(()) => loaded += 1,
+            Err(error) => skip_font_file(path, &error),
+        }
+    }
+    if loaded == 0 {
+        return Ok(FontSystem::new());
     }
     db.set_sans_serif_family("Noto Sans");
     db.set_monospace_family("Noto Sans Mono");
@@ -1390,7 +1429,7 @@ fn load_scene_fonts(scene: &Scene) -> Result<FontSystem> {
     bead_core::vprintln!(
         "PROFILE stage=font_load ms={:.3} files={} faces={}",
         start.elapsed().as_secs_f64() * 1000.,
-        scene.font_files.len(),
+        loaded,
         db.len()
     );
     Ok(FontSystem::new_with_locale_and_db(scene_locale(), db))
@@ -4212,6 +4251,30 @@ mod tests {
             .unwrap();
         let second = scene_fonts(&scene).unwrap();
         assert!(!std::sync::Arc::ptr_eq(&first, &second));
+    }
+    #[test]
+    fn missing_font_files_are_skipped_not_fatal() {
+        let dir = std::env::temp_dir().join(format!("bead-font-skip-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut scene = font_pool_scene();
+        let (kept, gone) = (dir.join("kept.ttf"), dir.join("gone.ttf"));
+        std::fs::copy(&scene.font_files[0], &kept).unwrap();
+        scene.font_files = vec![kept.clone(), gone.clone()];
+        let width = |scene: &Scene| text_width(scene, "office café", "IBM Plex Sans", 17.).unwrap();
+        let reference = width(&scene);
+        assert!(reference > 0.);
+        // Restore the second file: the stamp differs, so the set reloads.
+        let one = scene_fonts(&scene).unwrap();
+        std::fs::copy(&kept, &gone).unwrap();
+        let two = scene_fonts(&scene).unwrap();
+        assert!(!std::sync::Arc::ptr_eq(&one, &two));
+        assert_eq!(width(&scene), reference);
+        // Every file missing: system fonts, no Err.
+        std::fs::remove_dir_all(&dir).unwrap();
+        assert!(width_ok(&scene));
+    }
+    fn width_ok(scene: &Scene) -> bool {
+        text_width(scene, "office café", "IBM Plex Sans", 17.).is_ok() && scene_fonts(scene).is_ok()
     }
     #[test]
     fn clipped_primitives_leave_pixels_outside_the_scroll_viewport_intact() {
