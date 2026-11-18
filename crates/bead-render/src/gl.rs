@@ -1502,12 +1502,14 @@ impl Renderer for GlRenderer {
             .group
             .map_or(0, |(_, w, h, _)| u64::from(w) * u64::from(h) * 4);
         // Layer rasters upload again from `TreeCache`; image payloads would need the worker.
+        // B0339: only those the last frame drew stay (a glide leaves earlier ones behind).
+        let serial = self.serial;
         let (kept, released): (
             std::collections::BTreeMap<_, _>,
             std::collections::BTreeMap<_, _>,
         ) = std::mem::take(&mut self.images)
             .into_iter()
-            .partition(|(_, texture)| keep_images && texture.payload);
+            .partition(|(_, texture)| keep_images && texture.payload && texture.touched == serial);
         println!(
             "GL_CACHE_RELEASE images={} image_bytes={image_bytes} composite_bytes={group_bytes} kept_image_bytes={}",
             kept.len() + released.len(),
@@ -1807,6 +1809,8 @@ mod texture_budget_tests {
                 charged_texture(&mut canvas, &budget, &mut renderer.texture_peak, payload, 1);
             renderer.images.insert((slot.into(), 0), texture);
         }
+        // The last frame (1) drew both.
+        renderer.serial = 1;
         // A B0334 close keeps the image payload's texture, still charged; the layer raster goes.
         renderer.release_gpu_resources(true);
         assert_eq!(budget.used(), MIB);
@@ -1820,6 +1824,38 @@ mod texture_budget_tests {
         renderer.images.insert(("thumbnail".into(), 0), texture);
         drop(renderer);
         assert_eq!(budget.used(), 0);
+    }
+    #[test]
+    fn a_close_keeps_only_the_image_textures_the_last_frame_drew() {
+        let mut canvas = femtovg::Canvas::new(femtovg::renderer::Void).unwrap();
+        let mut renderer = GlRenderer::default();
+        let budget = renderer.texture_budget();
+        // B0339: a glide drew "passed" at frame 1; frame 3, the last, drew "visible" and a label.
+        for (slot, payload, touched) in [
+            ("passed", true, 1),
+            ("visible", true, 3),
+            ("label", false, 3),
+        ] {
+            let texture = charged_texture(
+                &mut canvas,
+                &budget,
+                &mut renderer.texture_peak,
+                payload,
+                touched,
+            );
+            renderer.images.insert((slot.into(), 0), texture);
+        }
+        renderer.serial = 3;
+        renderer.release_gpu_resources(true);
+        assert_eq!(
+            renderer
+                .images
+                .keys()
+                .map(|slot| slot.0.as_str())
+                .collect::<Vec<_>>(),
+            ["visible"]
+        );
+        assert_eq!(budget.used(), MIB, "the other textures' charges are freed");
     }
     #[test]
     fn a_full_budget_evicts_textures_the_frame_does_not_use_then_refuses() {

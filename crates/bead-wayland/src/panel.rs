@@ -1386,21 +1386,12 @@ impl App {
             }
         }
         self.panel_resuming = false;
-        // B0334: a closed panel's kept GL renderer has no EGL surface left: its canvas and image
-        // textures are deleted with the context current surfaceless.
         #[cfg(feature = "native-gl")]
-        let surfaceless =
-            rendering::keeps_gl_closed(self.companion.as_ref().map(|(_, _, kind)| *kind))
-                && !self.surfaces.iter().any(|s| s.companion && s.gl.is_some())
-                && self
-                    .gl
-                    .as_ref()
-                    .is_some_and(|gl| gl.bind_surfaceless().is_ok());
-        drop(self.companion.take());
-        #[cfg(feature = "native-gl")]
-        if surfaceless && let Some(Err(error)) = self.gl.as_ref().map(|gl| gl.unbind()) {
+        if let Err(error) = self.with_kept_gl_context(|app| drop(app.companion.take())) {
             self.fail(error);
         }
+        #[cfg(not(feature = "native-gl"))]
+        drop(self.companion.take());
         self.panel_animations = Default::default();
         self.options.companion = None;
         if self.options.report.is_some() {

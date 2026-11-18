@@ -136,9 +136,47 @@ mod retained_gl_open_tests {
         // The renderer is still GL at open, so update_companion_policy has nothing to promote
         // (promotion waited for the motion to end) and never takes the first_frame=cpu path.
         assert!(keeps_gl_closed(Some(FemtovgGl)));
+        // B0339: after the grace the companion is CPU, so its next open takes the old path:
+        // the CPU snapshot first, then promotion to GL.
         assert!(
             !keeps_gl_closed(Some(Cpu)),
             "a CPU companion still paints a CPU first frame"
+        );
+    }
+
+    #[cfg(feature = "native-gl")]
+    #[test]
+    fn the_grace_ends_only_for_the_same_close_of_a_still_closed_kept_panel() {
+        use super::kept_gl_grace_due;
+        assert!(kept_gl_grace_due(false, true, true));
+        assert!(!kept_gl_grace_due(true, true, true), "a reopen cancels it");
+        assert!(
+            !kept_gl_grace_due(false, false, true),
+            "a later close (another close epoch) or another panel arms its own"
+        );
+        assert!(
+            !kept_gl_grace_due(false, true, false),
+            "a fallback already left GL"
+        );
+        assert_eq!(super::KEPT_GL_GRACE, std::time::Duration::from_secs(300));
+    }
+
+    #[test]
+    fn after_the_grace_the_transport_goes_unless_warm_mode_or_another_owner_holds_it() {
+        // The grace makes the companion CPU, then asks transport_releasable(warm, other GL, CPU host).
+        let other = |runs| gl_surfaces_present(keeps_gl_closed(Some(Cpu)), runs);
+        assert!(transport_releasable(false, other(false), true));
+        assert!(
+            !transport_releasable(true, other(false), true),
+            "warm mode and its prime keep it"
+        );
+        assert!(
+            !transport_releasable(false, other(true), true),
+            "a resting wallpaper run keeps it"
+        );
+        assert!(
+            !transport_releasable(false, other(false), false),
+            "a GL bar keeps it"
         );
     }
 
@@ -282,6 +320,15 @@ fn is_cache_pressure(error: &str) -> bool {
 /// failure or a budget fallback, closes to the CPU snapshot.
 pub(super) fn keeps_gl_closed(companion: Option<RendererKind>) -> bool {
     companion == Some(RendererKind::FemtovgGl)
+}
+/// B0339: how long a closed panel keeps its GL renderer and context before the CPU snapshot
+/// close path takes over (the idle rule: a kept context above ~10 MiB gets a grace).
+#[cfg(feature = "native-gl")]
+const KEPT_GL_GRACE: Duration = Duration::from_secs(300);
+/// B0339: the grace ends only for the same close of a panel that is still closed and kept.
+#[cfg(feature = "native-gl")]
+fn kept_gl_grace_due(open: bool, same_close: bool, kept: bool) -> bool {
+    !open && same_close && kept
 }
 
 /// B0318/B0334/B0337: a GL failure, or a budget refusal on any draw of a GL companion, takes the
@@ -1324,8 +1371,64 @@ impl App {
         Ok(())
     }
 
-    /// Without a snapshot the companion keeps its GL renderer (B0334); either way its GL
-    /// textures, EGL surface and SHM go.
+    /// B0334: a closed panel's kept GL renderer has no EGL surface left: `f` drops or replaces
+    /// it with the context current surfaceless, so its canvas and textures are deleted.
+    #[cfg(feature = "native-gl")]
+    pub(super) fn with_kept_gl_context(
+        &mut self,
+        f: impl FnOnce(&mut Self),
+    ) -> Result<(), Box<dyn Error>> {
+        let bound = keeps_gl_closed(self.companion.as_ref().map(|(_, _, kind)| *kind))
+            && !self.surfaces.iter().any(|s| s.companion && s.gl.is_some())
+            && self
+                .gl
+                .as_ref()
+                .is_some_and(|gl| gl.bind_surfaceless().is_ok());
+        f(self);
+        if bound && let Some(gl) = &self.gl {
+            gl.unbind()?;
+        }
+        Ok(())
+    }
+
+    /// B0339: the grace ended. The kept renderer goes and the panel takes the CPU snapshot
+    /// close path; the transport goes too unless another GL owner or warm mode (its resting
+    /// runs and prime) still holds it.
+    #[cfg(feature = "native-gl")]
+    fn end_kept_gl(&mut self) -> Result<(), Box<dyn Error>> {
+        let cpu = bead_render::renderer(RendererKind::Cpu)?;
+        self.with_kept_gl_context(|app| {
+            if let Some((_, renderer, kind)) = &mut app.companion {
+                *renderer = cpu;
+                *kind = RendererKind::Cpu;
+            }
+        })?;
+        if crate::wallpaper_fade::transport_releasable(
+            self.warm.on,
+            self.has_gl_surfaces(),
+            self.options.renderer == RendererKind::Cpu,
+        ) && let Some(transport) = self.gl.take()
+        {
+            // SAFETY: no renderer, EGL surface or wallpaper run uses the display; warm mode is off.
+            unsafe { transport.shutdown_exclusive() }?;
+        }
+        // Closed-idle reclamation, as suspend_panel_gpu does after its release.
+        #[cfg(all(target_os = "linux", target_env = "gnu"))]
+        unsafe {
+            libc::malloc_trim(0);
+        }
+        self.start_panel_snapshot()?;
+        println!(
+            "PANEL_GPU_SUSPENDED shared_context_retained={} kept_renderer=false snapshot={} reason=grace monotonic_ns={}",
+            self.gl.is_some(),
+            self.panel_snapshot_pending,
+            monotonic_ns()
+        );
+        Ok(())
+    }
+
+    /// Without a snapshot the companion keeps its GL renderer (B0334) for `KEPT_GL_GRACE`
+    /// (B0339); either way its GL textures, EGL surface and SHM go.
     #[cfg(feature = "native-gl")]
     pub(super) fn suspend_panel_gpu(
         &mut self,
@@ -1421,6 +1524,25 @@ impl App {
             keeps_gl_closed(self.companion.as_ref().map(|(_, _, kind)| *kind)),
             monotonic_ns()
         );
+        if !snapshot_taken {
+            // Guarded like close_panel's snapshot timer: a reopen bumps the close epoch.
+            let (epoch, close_epoch) = (self.panel_epoch, self.panel_close_epoch);
+            self.loop_handle.insert_source(
+                Timer::from_duration(KEPT_GL_GRACE),
+                move |_, _, app| {
+                    let kept = app.panel_gpu_suspended
+                        && keeps_gl_closed(app.companion.as_ref().map(|(_, _, kind)| *kind));
+                    let same_close =
+                        app.panel_epoch == epoch && app.panel_close_epoch == close_epoch;
+                    if kept_gl_grace_due(app.panel_target, same_close, kept)
+                        && let Err(error) = app.end_kept_gl()
+                    {
+                        app.fail(error);
+                    }
+                    TimeoutAction::Drop
+                },
+            )?;
+        }
         Ok(())
     }
 
