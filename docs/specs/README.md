@@ -32,7 +32,7 @@ This index contains current framework contracts and repository-boundary decision
 | [0276 — Kit batch 2](0276-kit-batch2.md) | `kit.EmptyState`, `kit.NoticeRow`, `radius` on `ui.Image`, chip/button label centring |
 | [0262 — Non-exhaustive host types](0262-non-exhaustive.md) | `#[non_exhaustive]` service config/snapshots, `Options` and `WindowSpec::new`; host construction |
 | [0263 — Motion tokens and panel retarget](0263-motion-tokens-and-retarget.md) | Named curves and durations, sampled `ui.animated` markers, and a panel body that regrows mid-animation |
-| [0270 — Panel first frame](0270-panel-first-frame.md) | Cold and reopened panel-open latency: per-axis shadow templates; a retained GL panel keeps its renderer, image textures and context across close and reopens on GL from frame 1 (B0334) |
+| [0270 — Panel first frame](0270-panel-first-frame.md) | Cold and reopened panel-open latency: per-axis shadow templates; a retained GL panel keeps its renderer, image textures and context across close and reopens on GL from frame 1 (B0334); at close it keeps only the last frame's textures, and after 300 s closed it releases to the CPU snapshot path (B0339) |
 | [0271 — Idle memory ownership](0271-idle-memory.md) | Idle PSS and heap ownership of a Bead process (Luau VMs, keep-alive panels, a11y threads, arenas); fixes landed; GL textures charge a per-renderer 64 MiB native-gl-images budget (B0338) |
 | [0263 — Reveal close (B0277)](0263-motion-tokens-and-retarget.md#reveal-close-b0277) | A stationary reveal closes as the open reversed (shrinks into its anchor edge) on the CPU and compositor paths |
 | [0275 — Clock resync](0275-clock-resync.md) | The clock republishes at once after resume, wall-clock steps and timezone switches without the system bus (Linux timerfd + `/etc/localtime` watch) |
@@ -44,7 +44,7 @@ This index contains current framework contracts and repository-boundary decision
 | [0284 — Mirror validates once](0284-mirror-validate-once.md) | A mirrored snapshot is validated once per patch; `Publisher::publish_mirror` republishes it; one compare per publication |
 | [0281 — Cleanup and bloat pass](0281-cleanup-pass.md) | One snapshot hub for the event services, unused probes and dependency, stale spec text; deferred cleanup by owner |
 | [0285 — UI package](0285-ui-package.md) | `UiPackage` reads a UI root once; `FolderView::from_package` builds more views from memory (a lock screen survives a package upgrade) |
-| [0279 — Lip as its panel's tab](0279-lip-tab.md) | The edge lip rides its panel's inner edge as a subsurface posed with the panel each frame; 150 ms exit grace (panel profile), press/key pin |
+| [0279 — Lip as its panel's tab](0279-lip-tab.md) | The edge lip rides its panel's inner edge as a subsurface posed with the panel each frame; 150 ms exit grace (panel profile), press/key pin; hover tooltip `Options::edge_tip`, a host-drawn Scene placed beside the lip after 400 ms (B0340) |
 | [0279 addendum — top tab (B0291)](0279-lip-tab.md) | Bar cue off while the tab is attached; top-tab rect tests at 50 px; detach before every unmap |
 | [0261 — Docs and tutorials pass](0261-docs-and-tutorials.md) | Reference pages and tutorials match the code; every snippet and tutorial step executed |
 
