@@ -1458,6 +1458,7 @@ mod tests {
             bounds: bead_render::Rect::new(0., 0., 16., 16.),
             input_islands: None,
             key_repeat: None,
+            palette_at_rest: false,
         }
     }
     fn prepared_frame(scene: &mut Scene) -> Arc<bead_render::tree::Frame> {

@@ -350,6 +350,7 @@ mod tests {
             }],
             input_islands: None,
             key_repeat: None,
+            palette_at_rest: false,
         }
     }
     #[test]

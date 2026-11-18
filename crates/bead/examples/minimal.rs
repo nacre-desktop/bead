@@ -23,6 +23,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }],
         input_islands: None,
         key_repeat: None,
+        palette_at_rest: false,
     };
     if std::env::args().any(|a| a == "--check") {
         let mut renderer = bead::render::renderer(Default::default())?;

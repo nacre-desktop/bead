@@ -1069,6 +1069,7 @@ mod tests {
             bounds: Rect::new(0., 0., 96., 72.),
             input_islands: None,
             key_repeat: None,
+            palette_at_rest: false,
         }
     }
 

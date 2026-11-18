@@ -143,6 +143,9 @@ pub(super) struct App {
     pub(super) pending_palette_target: Option<std::collections::BTreeMap<String, [u8; 4]>>,
     /// Until this clock time, a settle of an older tween step is stale, not a rollback.
     pub(super) palette_tween_until: f64,
+    /// B0333: panel steps skipped since the last WALLPAPER_FADE_FINISH.
+    #[cfg_attr(not(feature = "native-gl"), allow(dead_code))]
+    pub(super) panel_steps_skipped: u32,
     /// B0319: running main-thread CPU (ns) spent in fade frames and in palette steps.
     #[cfg_attr(not(feature = "native-gl"), allow(dead_code))]
     pub(super) fade_frame_cpu_ns: u64,
@@ -511,6 +514,7 @@ pub fn run_runtime(
         palette_tween_generation: 0,
         pending_palette_target: None,
         palette_tween_until: 0.,
+        panel_steps_skipped: 0,
         fade_frame_cpu_ns: 0,
         palette_step_cpu_ns: 0,
         report_surfaces: Vec::new(),

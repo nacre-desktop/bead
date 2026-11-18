@@ -612,6 +612,8 @@ pub struct Scene {
     pub input_islands: Option<Vec<Rect>>,
     /// `Panel{key_repeat=...}` (B0322): this panel's held-key schedule, None for the system repeat.
     pub key_repeat: Option<KeyRepeat>,
+    /// `Panel{palette_tween=false}` (B0333): a wallpaper palette tween reaches this panel only with its final palette.
+    pub palette_at_rest: bool,
 }
 /// A panel's key-repeat schedule in milliseconds; an unset field follows the system repeat.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -658,6 +660,7 @@ impl Scene {
             bounds: Rect::new(0., 0., width, height),
             input_islands: None,
             key_repeat: None,
+            palette_at_rest: false,
         }
     }
     /// Pose a panel motion. Revealing panels grow from their dock while opening
@@ -3882,6 +3885,7 @@ mod tests {
             bounds: Rect::new(0., 0., 364., 264.),
             input_islands: None,
             key_repeat: None,
+            palette_at_rest: false,
         };
         let original = scene.primitives.clone();
         let mut animations = bead_core::animation::Animations::default();
@@ -3968,6 +3972,7 @@ mod tests {
             }],
             input_islands: None,
             key_repeat: None,
+            palette_at_rest: false,
         }
     }
     #[test]
@@ -4234,6 +4239,7 @@ mod tests {
             ],
             input_islands: None,
             key_repeat: None,
+            palette_at_rest: false,
         };
         let mut renderer = CpuRenderer::default();
         let mut bytes = vec![0; 64];
@@ -4351,6 +4357,7 @@ mod tests {
                     ],
                     input_islands: None,
                     key_repeat: None,
+                    palette_at_rest: false,
                 };
                 // Include fractional scaling and abrupt movement / erasure.
                 if frame % 7 == 0 {
@@ -4832,6 +4839,7 @@ mod symbol_ink_tests {
                     bounds: Rect::new(0., 0., 80., 80.),
                     input_islands: None,
                     key_repeat: None,
+                    palette_at_rest: false,
                 };
                 let width = (80. * scale) as u32;
                 let mut pixels = vec![0; width as usize * width as usize * 4];

@@ -5096,6 +5096,34 @@ fn key_repeat_prop_parses_and_validates() {
     );
 }
 
+/// B0333: `palette_tween` is a root-Panel-only bool; absent keeps every step.
+#[test]
+fn palette_tween_prop_is_root_panel_and_bool_only() {
+    let f = fixture();
+    let load = |root: &str, props: &str| {
+        fs::write(
+            f.0.join("ui/main.luau"),
+            format!(
+                "local ui=require('bead.ui')\nreturn ui.{root}{{id='r',width=50,height=20,{props} ui.Box{{id='k',width=5,height=5}}}}"
+            ),
+        )
+        .unwrap();
+        let mut s = f.session();
+        s.entry = "ui/main.luau".into();
+        s.reload().map(|scene| scene.palette_at_rest)
+    };
+    assert!(!load("Panel", "").unwrap());
+    assert!(!load("Panel", "palette_tween=true,").unwrap());
+    assert!(load("Panel", "palette_tween=false,").unwrap());
+    for bad in ["palette_tween=0", "palette_tween='no'", "palette_tween={}"] {
+        assert!(load("Panel", &format!("{bad},")).is_err(), "{bad}");
+    }
+    assert!(
+        load("Box", "palette_tween=false,").is_err(),
+        "root Panel only"
+    );
+}
+
 /// B0329: `scroll_steps` defaults, ranges, the binding error, and the action seeing the step.
 #[test]
 fn scroll_steps_prop_parses_validates_and_reaches_the_action() {

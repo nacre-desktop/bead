@@ -94,6 +94,18 @@ pub(crate) enum TweenRoute {
     Joins,
     Starts,
 }
+/// B0333: the panel takes the tween's final step always, the intermediate ones only while open
+/// and without `palette_tween = false`; a closed retained panel is re-staged once, at the end.
+pub(crate) fn panel_takes_step(last: bool, open: bool, at_rest: bool) -> bool {
+    last || (open && !at_rest)
+}
+fn skipped_suffix(n: u32) -> String {
+    if n == 0 {
+        String::new()
+    } else {
+        format!(" panel_steps_skipped={n}")
+    }
+}
 pub(crate) fn tween_route(
     possible: bool,
     foreign_pending: bool,
@@ -637,7 +649,7 @@ impl App {
             .iter()
             .any(|s| s.name == output && s.revision == revision);
         if installed {
-            self.apply_palette_step(target);
+            self.apply_palette_step(target, true);
         }
     }
 
@@ -727,7 +739,7 @@ impl App {
         }
         let began = std::time::Instant::now();
         let cpu = bead_core::profile::thread_cpu_ns();
-        self.apply_palette_step(palette);
+        self.apply_palette_step(palette, last);
         self.palette_step_cpu_ns += bead_core::profile::thread_cpu_ns().saturating_sub(cpu);
         let ms = ms_since(began);
         for run in self
@@ -749,9 +761,12 @@ impl App {
     }
 
     /// One palette step through the same recipients as a fenced change, without the fence.
-    fn apply_palette_step(&mut self, palette: PaletteMap) {
+    fn apply_palette_step(&mut self, palette: PaletteMap, last: bool) {
         let _span = bead_core::profile::Span::new("wallpaper_palette_step");
-        self.apply_wallpaper_palette(palette.clone(), true);
+        let at_rest = self.companion.as_ref().is_some_and(|c| c.0.palette_at_rest);
+        let notify = panel_takes_step(last, self.panel_target, at_rest);
+        self.panel_steps_skipped += u32::from(!notify && self.panel_runtime.is_some());
+        self.apply_wallpaper_palette(palette.clone(), notify);
         if self.options.primary_factory.is_some() {
             let (participants, active) = self.palette_participants();
             for (id, epoch) in participants {
@@ -1653,8 +1668,9 @@ impl App {
             libc::malloc_trim(0);
         }
         println!(
-            "WALLPAPER_FADE_FINISH output={name} ms={:.1}",
-            ms_since(began)
+            "WALLPAPER_FADE_FINISH output={name} ms={:.1}{}",
+            ms_since(began),
+            skipped_suffix(std::mem::take(&mut self.panel_steps_skipped))
         );
     }
 
@@ -1759,8 +1775,9 @@ impl App {
             libc::malloc_trim(0);
         }
         println!(
-            "WALLPAPER_FADE_FINISH output={name} ms={:.1}",
-            ms_since(began)
+            "WALLPAPER_FADE_FINISH output={name} ms={:.1}{}",
+            ms_since(began),
+            skipped_suffix(std::mem::take(&mut self.panel_steps_skipped))
         );
         true
     }
@@ -2191,6 +2208,59 @@ mod tests {
             started,
             1,
         )
+    }
+    /// Every step a tween delivers to a panel, as `apply_palette_step` decides it.
+    fn delivered(t: &mut PaletteTween, open: bool, at_rest: bool) -> Vec<PaletteMap> {
+        let (mut out, mut now) = (vec![], 0.);
+        loop {
+            now += 0.001;
+            let Some((step, wait)) = t.advance(now) else {
+                continue;
+            };
+            let last = wait.is_none();
+            if panel_takes_step(last, open, at_rest) {
+                out.push(step);
+            }
+            if last {
+                return out;
+            }
+        }
+    }
+    #[test]
+    fn an_at_rest_panel_gets_only_the_final_step_and_a_closed_one_too() {
+        let n = tween(0, 200, 0.).steps.len();
+        assert!(n > 1);
+        let mut normal = tween(0, 200, 0.);
+        assert_eq!(delivered(&mut normal, true, false).len(), n, "today");
+        let mut rest = tween(0, 200, 0.);
+        assert_eq!(
+            delivered(&mut rest, true, true),
+            vec![palette([200, 0, 0, 255])]
+        );
+        let mut closed = tween(0, 200, 0.);
+        assert_eq!(
+            delivered(&mut closed, false, false),
+            vec![palette([200, 0, 0, 255])],
+            "a closed retained panel is re-staged once, with no prop"
+        );
+        assert!(panel_takes_step(true, false, true), "a cut is a last step");
+        // A retarget replaces the tween: only the new one's final palette is ever delivered.
+        let mut second = PaletteTween::new(
+            palette([100, 0, 0, 255]),
+            palette([50, 0, 0, 255]),
+            WallpaperFade::default(),
+            1.,
+            2,
+        );
+        assert_eq!(
+            delivered(&mut second, true, true),
+            vec![palette([50, 0, 0, 255])]
+        );
+    }
+    #[test]
+    fn the_skipped_step_count_only_shows_when_nonzero() {
+        assert_eq!(skipped_suffix(0), "");
+        assert_eq!(skipped_suffix(29), " panel_steps_skipped=29");
     }
     #[test]
     fn a_step_due_during_a_fade_is_applied_after_a_frame_not_by_the_timer() {

@@ -154,6 +154,7 @@ pub const PROPERTIES: &[&str] = &[
     "duration",
     "return_duration",
     "key_repeat",
+    "palette_tween",
     "return_transition",
     "slide_distance",
     "scale_from",
@@ -263,6 +264,8 @@ pub struct ViewSpec {
     pub input_children: bool,
     /// Root `Panel` only (B0322): the held-key repeat schedule.
     pub key_repeat: Option<bead_render::KeyRepeat>,
+    /// Root `Panel` only (B0333): `palette_tween = false` takes a wallpaper palette tween's final palette only.
+    pub palette_at_rest: bool,
     /// The edge this box is attached to: its two corners there are square at `join` = 1.
     pub join_edge: Option<bead_core::Edge>,
     pub join: f32,
@@ -1158,6 +1161,9 @@ impl ViewSpec {
             if p.contains_key("key_repeat") && (raw.kind != Widget::Panel || path != "view") {
                 return Err(source.error("key_repeat is only valid on the root Panel"));
             }
+            if p.contains_key("palette_tween") && (raw.kind != Widget::Panel || path != "view") {
+                return Err(source.error("palette_tween is only valid on the root Panel"));
+            }
             if p.contains_key("body") && (raw.kind != Widget::Panel || path != "view") {
                 return Err(source.error("body is only valid on the root Panel"));
             }
@@ -1286,6 +1292,7 @@ impl ViewSpec {
                     .transpose()?,
                 input_children,
                 key_repeat: key_repeat(p, source)?,
+                palette_at_rest: !boolean(p, "palette_tween", true, source)?,
                 join_edge: p
                     .get("join_edge")
                     .map(|value| {
@@ -1606,11 +1613,13 @@ pub fn layout(
             bounds: Rect::new(-32., -32., root_size.width + 64., root_size.height + 64.),
             input_islands: None,
             key_repeat: None,
+            palette_at_rest: false,
         },
         nodes: vec![],
     };
     output.scene.motion = view.motion.clone();
     output.scene.key_repeat = view.key_repeat;
+    output.scene.palette_at_rest = view.palette_at_rest;
     let hover = resolve("bead.hovered")
         .ok()
         .and_then(|v| {

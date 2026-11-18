@@ -81,6 +81,7 @@ mod layer_motion_renderer_tests {
             bounds: bead_render::Rect::new(0., 0., 16., 16.),
             input_islands: None,
             key_repeat: None,
+            palette_at_rest: false,
         };
         let frozen = bead_render::tree::TreeCpuRenderer::snapshot(&scene, 1.).unwrap();
         assert!(accepted_frozen_snapshot(&frozen, &scene, 1.).unwrap());
@@ -4172,6 +4173,7 @@ mod repair_tests {
                         ],
                         input_islands: None,
                         key_repeat: None,
+                        palette_at_rest: false,
                     };
                     for (_, pending, _) in &mut buffers {
                         track_repair(
@@ -4344,6 +4346,7 @@ mod input_tests {
             bounds: Rect::new(-32., -32., 264., 164.),
             input_islands: None,
             key_repeat: None,
+            palette_at_rest: false,
         }
     }
 

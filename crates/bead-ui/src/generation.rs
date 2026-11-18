@@ -1142,6 +1142,7 @@ impl Generation {
             prepared: Default::default(),
             input_islands: None,
             key_repeat: None,
+            palette_at_rest: false,
         })
     }
     pub fn hit(&self, stores: &Stores, x: f32, y: f32) -> Option<&Node> {
