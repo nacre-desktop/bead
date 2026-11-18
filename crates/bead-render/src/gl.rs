@@ -972,8 +972,69 @@ pub struct GlRenderer {
     group: Option<(femtovg::ImageId, u32, u32, u64)>,
     /// The transport generation the canvas draws with (B0334).
     context: Option<u64>,
+    /// B0338: every texture's charge, apart from the views that baked the pixels.
+    texture_budget: Option<bead_core::cache::Budget>,
+    texture_peak: usize,
+}
+/// B0338: one `native-gl-images` budget per renderer: its textures live and die with its canvas.
+const TEXTURE_LIMIT: usize = 64 * bead_core::cache::MIB;
+/// B0338: the renderer's texture budget refused a texture and nothing was left to evict.
+#[derive(Debug)]
+pub struct TextureBudgetRefused {
+    pub need: usize,
+    pub cap: usize,
+}
+impl std::fmt::Display for TextureBudgetRefused {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "native-gl-images texture budget exceeded need={} cap={}",
+            self.need, self.cap
+        )
+    }
+}
+impl std::error::Error for TextureBudgetRefused {}
+/// Reserve `bytes` on `budget`; on a refusal `evict` frees a texture until one fits or none is left.
+fn reserve_texture(
+    budget: &bead_core::cache::Budget,
+    peak: &mut usize,
+    bytes: usize,
+    mut evict: impl FnMut() -> bool,
+) -> Result<bead_core::cache::Charge> {
+    loop {
+        if let Ok(charge) = budget.reserve(bytes) {
+            *peak = (*peak).max(budget.used());
+            return Ok(charge);
+        }
+        if !evict() {
+            let (_, cap) = budget.refusal(bytes);
+            return Err(Box::new(TextureBudgetRefused { need: bytes, cap }));
+        }
+    }
+}
+/// Delete the least recently drawn texture that frame `serial` does not use; false when none is.
+fn evict_lru(
+    images: &mut std::collections::BTreeMap<(String, u32), Texture>,
+    canvas: &mut femtovg::Canvas<impl femtovg::Renderer>,
+    serial: u64,
+) -> bool {
+    let victim = images
+        .iter()
+        .filter(|(_, texture)| texture.touched != serial)
+        .min_by_key(|(_, texture)| texture.touched)
+        .map(|(slot, _)| slot.clone());
+    let Some(texture) = victim.and_then(|slot| images.remove(&slot)) else {
+        return false;
+    };
+    canvas.delete_image(texture.image);
+    true
 }
 impl GlRenderer {
+    fn texture_budget(&mut self) -> bead_core::cache::Budget {
+        self.texture_budget
+            .get_or_insert_with(|| bead_core::cache::Budget::new("native-gl-images", TEXTURE_LIMIT))
+            .clone()
+    }
     fn finish_image_upload(
         payload: &crate::tree::ImagePayload,
         uses: &mut std::collections::BTreeMap<u64, usize>,
@@ -1029,6 +1090,7 @@ impl GlRenderer {
             }?;
             self.canvas = Some(femtovg::Canvas::new(renderer)?);
         }
+        let budget = self.texture_budget();
         let frame = self.cache.frame.as_ref().ok_or("unprepared layer tree")?;
         let canvas = self.canvas.as_mut().ok_or("GL canvas missing")?;
         self.serial += 1;
@@ -1055,8 +1117,16 @@ impl GlRenderer {
                 let upload = payload.upload.lock().map_err(|_| "image upload poisoned")?;
                 let pixels = &upload.as_ref().ok_or("image upload not prepared")?.pixels;
                 let (width, height) = (pixels.width(), pixels.height());
-                let charge =
-                    payload.reserve_texture(pixels.data().len() + slot.0.capacity() + 192)?;
+                // The replaced texture goes first, so a full budget never holds both.
+                if let Some(old) = self.images.remove(&slot) {
+                    canvas.delete_image(old.image);
+                }
+                let charge = reserve_texture(
+                    &budget,
+                    &mut self.texture_peak,
+                    pixels.data().len() + slot.0.capacity() + 192,
+                    || evict_lru(&mut self.images, canvas, self.serial),
+                )?;
                 let result = canvas.create_image(
                     femtovg::ImageSource::Rgba(imgref::Img::new(
                         pixels.data().as_rgba(),
@@ -1072,7 +1142,7 @@ impl GlRenderer {
                     }
                 };
                 drop(upload);
-                if let Some(old) = self.images.insert(
+                self.images.insert(
                     slot,
                     Texture {
                         key: payload.key,
@@ -1083,9 +1153,7 @@ impl GlRenderer {
                         touched: self.serial,
                         _charge: charge,
                     },
-                ) {
-                    canvas.delete_image(old.image);
-                }
+                );
                 Self::finish_image_upload(payload, &mut upload_uses)?;
                 continue;
             }
@@ -1099,34 +1167,15 @@ impl GlRenderer {
                 .get(&slot)
                 .is_none_or(|old| old.width != w || old.height != h)
             {
-                let charge = loop {
-                    match raster
-                        ._charge
-                        .reserve_related(w as usize * h as usize * 4 + slot.0.capacity() + 192)
-                    {
-                        Ok(c) => break c,
-                        Err(e) => {
-                            let victim = self
-                                .images
-                                .iter()
-                                .filter(|(key, t)| *key != &slot && t.touched != self.serial)
-                                .min_by_key(|(_, t)| t.touched)
-                                .map(|(k, _)| k.clone());
-                            if let Some(victim) = victim {
-                                if let Some(old) = self.images.remove(&victim) {
-                                    canvas.delete_image(old.image);
-                                }
-                            } else {
-                                return Err(format!(
-                                    "{e}: native-gl-images requested={} global={}",
-                                    w as usize * h as usize * 4 + slot.0.capacity() + 192,
-                                    bead_core::cache::report().used_bytes,
-                                )
-                                .into());
-                            }
-                        }
-                    }
-                };
+                if let Some(old) = self.images.remove(&slot) {
+                    canvas.delete_image(old.image);
+                }
+                let charge = reserve_texture(
+                    &budget,
+                    &mut self.texture_peak,
+                    w as usize * h as usize * 4 + slot.0.capacity() + 192,
+                    || evict_lru(&mut self.images, canvas, self.serial),
+                )?;
                 let image = canvas.create_image(
                     femtovg::ImageSource::Rgba(imgref::Img::new(
                         raster.pixels.data().as_rgba(),
@@ -1135,9 +1184,6 @@ impl GlRenderer {
                     )),
                     femtovg::ImageFlags::PREMULTIPLIED,
                 )?;
-                if let Some(old) = self.images.remove(&slot) {
-                    canvas.delete_image(old.image);
-                }
                 self.images.insert(
                     slot.clone(),
                     Texture {
@@ -1228,17 +1274,8 @@ impl GlRenderer {
                 .sum::<usize>()
                 > crate::tree::STEADY_RASTER_LIMIT
         {
-            let victim = self
-                .images
-                .iter()
-                .filter(|(_, t)| t.touched != self.serial)
-                .min_by_key(|(_, t)| t.touched)
-                .map(|(id, _)| id.clone());
-            let Some(victim) = victim else {
+            if !evict_lru(&mut self.images, canvas, self.serial) {
                 return Err("active GL images exceed budget".into());
-            };
-            if let Some(texture) = self.images.remove(&victim) {
-                canvas.delete_image(texture.image);
             }
         }
         Ok(())
@@ -1502,6 +1539,13 @@ impl Renderer for GlRenderer {
             self.images.len() + usize::from(self.group.is_some()),
         )
     }
+    fn take_texture_peak(&mut self) -> usize {
+        let held = self
+            .texture_budget
+            .as_ref()
+            .map_or(0, |budget| budget.used());
+        std::mem::replace(&mut self.texture_peak, held).max(held)
+    }
     fn stage_resources(&mut self, target: crate::ResourceTarget<'_>) -> Result<()> {
         #[allow(irrefutable_let_patterns)]
         let crate::ResourceTarget::Gl { display } = target else {
@@ -1580,13 +1624,9 @@ impl Renderer for GlRenderer {
                     canvas.delete_image(old);
                 }
                 self.group_charge = None;
-                let budget = frame.native_resource_budget.as_ref().unwrap_or_else(|| {
-                    self.group_budget.get_or_insert_with(|| {
-                        bead_core::cache::Budget::new(
-                            "native-gl-composite",
-                            64 * bead_core::cache::MIB,
-                        )
-                    })
+                // B0338: a texture, so never the view's budget.
+                let budget = self.group_budget.get_or_insert_with(|| {
+                    bead_core::cache::Budget::new("native-gl-composite", 64 * bead_core::cache::MIB)
                 });
                 self.group_charge = Some(budget.reserve(w as usize * h as usize * 4 + 64)?);
                 self.group = Some((
@@ -1684,5 +1724,153 @@ mod group_tests {
                 "{opacity} {fade} {opening} {current}"
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod texture_budget_tests {
+    use super::*;
+    use bead_core::cache::{Budget, MIB};
+    use std::collections::BTreeMap;
+
+    /// A 1 MiB-charged texture on a femtovg Void canvas, so no GL context is needed.
+    fn charged_texture(
+        canvas: &mut femtovg::Canvas<femtovg::renderer::Void>,
+        budget: &Budget,
+        peak: &mut usize,
+        payload: bool,
+        touched: u64,
+    ) -> Texture {
+        let image = canvas
+            .create_image_empty(
+                1,
+                1,
+                femtovg::PixelFormat::Rgba8,
+                femtovg::ImageFlags::empty(),
+            )
+            .unwrap();
+        Texture {
+            key: 0,
+            payload,
+            image,
+            width: 512,
+            height: 512,
+            touched,
+            _charge: reserve_texture(budget, peak, MIB, || false).unwrap(),
+        }
+    }
+    #[test]
+    fn textures_charge_the_renderers_budget_not_the_view_that_baked_them() {
+        let mut scene = Scene::empty(16., 16.);
+        scene.primitives.push(crate::Primitive::Image {
+            opacity: 1.,
+            rect: crate::Rect::new(0., 0., 16., 16.),
+            path: "proof.svg".into(),
+            blur: 0.,
+            fit: crate::ImageFit::Fill,
+            clip_polygon: None,
+            bake_size: None,
+            radius: 0.,
+            tint: None,
+        });
+        scene.asset_data.insert("proof.svg".into(), std::sync::Arc::from(&br##"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><rect width="16" height="16" fill="#123456"/></svg>"##[..]));
+        let mut view = crate::tree::TreeCache::default()
+            .with_image_policy(crate::tree::ImagePolicy::UploadOnly);
+        view.prepare(&scene, 1.).unwrap();
+        let baked = view.retained_bytes();
+        let mut renderer = GlRenderer::default();
+        let budget = renderer.texture_budget();
+        let charge =
+            reserve_texture(&budget, &mut renderer.texture_peak, 3 * MIB, || false).unwrap();
+        assert_eq!(budget.used(), 3 * MIB);
+        assert_eq!(
+            view.retained_bytes(),
+            baked,
+            "retained-view-resources is untouched"
+        );
+        assert!(bead_core::cache::report().caches.iter().any(|cache| {
+            cache.name == "native-gl-images"
+                && cache.limit_bytes == 64 * MIB
+                && cache.used_bytes >= 3 * MIB
+        }));
+        drop(charge);
+        assert_eq!(budget.used(), 0);
+    }
+    #[test]
+    fn kept_textures_stay_charged_until_released_and_nothing_leaks_across_a_reopen() {
+        let mut canvas = femtovg::Canvas::new(femtovg::renderer::Void).unwrap();
+        // No GL canvas: releasing only drops the textures and their charges.
+        let mut renderer = GlRenderer::default();
+        let budget = renderer.texture_budget();
+        for (slot, payload) in [("thumbnail", true), ("label", false)] {
+            let texture =
+                charged_texture(&mut canvas, &budget, &mut renderer.texture_peak, payload, 1);
+            renderer.images.insert((slot.into(), 0), texture);
+        }
+        // A B0334 close keeps the image payload's texture, still charged; the layer raster goes.
+        renderer.release_gpu_resources(true);
+        assert_eq!(budget.used(), MIB);
+        // The reopen adds a texture; a release keeping nothing, then the renderer's drop, free all.
+        let texture = charged_texture(&mut canvas, &budget, &mut renderer.texture_peak, true, 2);
+        renderer.images.insert(("sheen".into(), 0), texture);
+        assert_eq!(budget.used(), 2 * MIB);
+        renderer.release_gpu_resources(false);
+        assert_eq!(budget.used(), 0);
+        let texture = charged_texture(&mut canvas, &budget, &mut renderer.texture_peak, true, 3);
+        renderer.images.insert(("thumbnail".into(), 0), texture);
+        drop(renderer);
+        assert_eq!(budget.used(), 0);
+    }
+    #[test]
+    fn a_full_budget_evicts_textures_the_frame_does_not_use_then_refuses() {
+        let mut canvas = femtovg::Canvas::new(femtovg::renderer::Void).unwrap();
+        let budget = Budget::new("native-gl-images-test", 2 * MIB);
+        let (mut peak, mut images) = (0, BTreeMap::new());
+        images.insert(
+            ("old".into(), 0),
+            charged_texture(&mut canvas, &budget, &mut peak, true, 1),
+        );
+        images.insert(
+            ("drawn".into(), 0),
+            charged_texture(&mut canvas, &budget, &mut peak, true, 2),
+        );
+        let fits = reserve_texture(&budget, &mut peak, MIB, || {
+            evict_lru(&mut images, &mut canvas, 2)
+        });
+        assert!(fits.is_ok());
+        assert_eq!(
+            images
+                .keys()
+                .map(|slot| slot.0.as_str())
+                .collect::<Vec<_>>(),
+            ["drawn"]
+        );
+        let Err(error) = reserve_texture(&budget, &mut peak, MIB, || {
+            evict_lru(&mut images, &mut canvas, 2)
+        }) else {
+            panic!("nothing is left to evict");
+        };
+        let refused = error.downcast_ref::<TextureBudgetRefused>().unwrap();
+        assert_eq!((refused.need, refused.cap), (MIB, 2 * MIB));
+        assert!(
+            error.to_string().contains("budget"),
+            "the host's cache-pressure test matches it"
+        );
+        assert_eq!((peak, budget.used()), (2 * MIB, 2 * MIB));
+    }
+    #[test]
+    fn the_texture_peak_covers_one_open_and_restarts_from_what_is_held() {
+        let mut renderer = GlRenderer::default();
+        assert_eq!(renderer.take_texture_peak(), 0);
+        let budget = renderer.texture_budget();
+        let kept = reserve_texture(&budget, &mut renderer.texture_peak, MIB, || false).unwrap();
+        drop(reserve_texture(&budget, &mut renderer.texture_peak, 2 * MIB, || false).unwrap());
+        assert_eq!(renderer.take_texture_peak(), 3 * MIB, "this open's peak");
+        assert_eq!(
+            renderer.take_texture_peak(),
+            MIB,
+            "the next open starts at the kept texture"
+        );
+        drop(kept);
     }
 }

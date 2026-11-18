@@ -163,7 +163,8 @@ fn log_limited(kind: &'static str, owner: &'static str, line: impl FnOnce() -> S
     true
 }
 /// B0318: a budget overrun was absorbed instead of failing the frame. One rate-limited marker
-/// per owner; true when it printed. `action` is uncached, scaled, skipped or direct.
+/// per owner; true when it printed. `action` is uncached, scaled, skipped, direct or cpu (a GL
+/// companion's texture refusal moved it to the CPU renderer, B0338).
 pub fn report_degrade(owner: &'static str, need: usize, cap: usize, action: &str) -> bool {
     log_limited("render-budget", owner, || {
         format!("RENDER_BUDGET owner={owner} need={need} cap={cap} action={action}")

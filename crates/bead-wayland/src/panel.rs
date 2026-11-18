@@ -776,6 +776,10 @@ impl App {
         }
         if open {
             self.panel_gpu_suspended = false;
+            // B0338: PANEL_GPU_SUSPENDED's gl_texture_peak covers this open.
+            if let Some((_, renderer, _)) = self.companion.as_mut() {
+                renderer.take_texture_peak();
+            }
             #[cfg(feature = "native-gl")]
             self.prepare_panel_gl().map_err(|error| error.to_string())?;
         }

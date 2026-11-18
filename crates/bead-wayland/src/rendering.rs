@@ -180,6 +180,15 @@ mod retained_gl_open_tests {
         assert!(!companion_falls_back(true, missing.as_ref()));
         let pending = bead_render::tree::ResourcesPending { images: Vec::new() };
         assert!(!companion_falls_back(true, &pending));
+        // B0338: the renderer's own texture budget refusing also falls back, with one
+        // RENDER_BUDGET line (owner, need, cap, action).
+        let texture = bead_render::gl::TextureBudgetRefused {
+            need: 64,
+            cap: 64 * bead_core::cache::MIB,
+        };
+        assert!(companion_falls_back(true, &texture));
+        assert!(super::report_texture_refusal(&texture));
+        assert!(!super::report_texture_refusal(&gl_failure));
         // After the fallback the companion is CPU: its closes take the CPU snapshot again.
         assert!(!keeps_gl_closed(Some(Cpu)));
     }
@@ -280,6 +289,16 @@ pub(super) fn keeps_gl_closed(companion: Option<RendererKind>) -> bool {
 #[cfg(any(feature = "native-gl", feature = "wgpu"))]
 fn companion_falls_back(gl_companion: bool, error: &(dyn Error + 'static)) -> bool {
     error.is::<GpuUnavailable>() || (gl_companion && is_cache_pressure(&error.to_string()))
+}
+
+/// B0338: a fallback on the renderer's texture budget prints its RENDER_BUDGET line (action=cpu).
+#[cfg(feature = "native-gl")]
+fn report_texture_refusal(error: &(dyn Error + 'static)) -> bool {
+    error
+        .downcast_ref::<bead_render::gl::TextureBudgetRefused>()
+        .is_some_and(|refused| {
+            bead_core::cache::report_degrade("native-gl-images", refused.need, refused.cap, "cpu")
+        })
 }
 
 fn report_cache_pressure(owner: &str, error: &str) {
@@ -1314,6 +1333,11 @@ impl App {
     ) -> Result<(), Box<dyn Error>> {
         let _span = bead_core::profile::Span::new("panel_gpu_retire");
         let snapshot_taken = snapshot.is_some();
+        // B0338: read before the release, which may replace the renderer.
+        let gl_texture_peak = self
+            .companion
+            .as_mut()
+            .map_or(0, |(_, renderer, _)| renderer.take_texture_peak());
         self.release_companion_gpu_resources(!snapshot_taken)?;
         if let Some((snapshot, scale)) = snapshot {
             let snapshot = snapshot.accept()?;
@@ -1392,7 +1416,7 @@ impl App {
             libc::malloc_trim(0);
         }
         println!(
-            "PANEL_GPU_SUSPENDED shared_context_retained={} kept_renderer={} snapshot={snapshot_taken} monotonic_ns={}",
+            "PANEL_GPU_SUSPENDED shared_context_retained={} kept_renderer={} snapshot={snapshot_taken} gl_texture_peak={gl_texture_peak} monotonic_ns={}",
             self.gl.is_some(),
             keeps_gl_closed(self.companion.as_ref().map(|(_, _, kind)| *kind)),
             monotonic_ns()
@@ -4005,6 +4029,8 @@ impl App {
                 )
             {
                 eprintln!("FALLBACK companion GPU unavailable: {e}");
+                #[cfg(feature = "native-gl")]
+                report_texture_refusal(e.as_ref());
                 let renderer = match bead_render::renderer(RendererKind::Cpu) {
                     Ok(renderer) => renderer,
                     Err(error) => {

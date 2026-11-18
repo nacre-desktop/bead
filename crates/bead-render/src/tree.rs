@@ -276,10 +276,6 @@ impl ImagePayload {
         });
         Ok(())
     }
-    #[cfg(any(feature = "native-gl", test))]
-    pub(crate) fn reserve_texture(&self, bytes: usize) -> Result<bead_core::cache::Charge> {
-        Ok(self.budget.reserve(bytes)?)
-    }
     pub fn mark_requested(&self) -> bool {
         self.requested
             .compare_exchange(
@@ -5734,7 +5730,7 @@ mod tests {
         let payload = old.items[0].image.as_ref().unwrap();
         drop(payload.take_upload().unwrap());
         let budget = payload.budget.clone();
-        let gpu = payload.reserve_texture(28 * bead_core::cache::MIB).unwrap();
+        let gpu = payload.budget.reserve(28 * bead_core::cache::MIB).unwrap();
         scene.primitives.clear();
         scene.layers.clear();
         scene.asset_data.clear();
@@ -5791,7 +5787,8 @@ mod tests {
             let upload = payload.take_upload().unwrap();
             textures.push(
                 payload
-                    .reserve_texture(upload.pixels.data().len() + 192)
+                    .budget
+                    .reserve(upload.pixels.data().len() + 192)
                     .unwrap(),
             );
             assert!(budget.used() <= 40 * bead_core::cache::MIB);
@@ -6923,7 +6920,7 @@ mod tests {
         let old = worker.frame.clone().unwrap();
         let payload = old.items[0].image.as_ref().unwrap();
         drop(payload.take_upload().unwrap());
-        let gpu = payload.reserve_texture(28 * bead_core::cache::MIB).unwrap();
+        let gpu = payload.budget.reserve(28 * bead_core::cache::MIB).unwrap();
         let scratch = payload.scratch_budget.clone();
         let retained = payload.budget.clone();
         scene.asset_data.insert("proof.svg".into(), Arc::from(&br##"<svg xmlns="http://www.w3.org/2000/svg" width="2300" height="2200"><rect width="2300" height="2200" fill="#654321"/></svg>"##[..]));
@@ -7002,15 +6999,15 @@ mod tests {
         assert_eq!(retained.used(), 0);
     }
     #[test]
-    fn native_view_budget_is_shared_with_gpu_and_held_frames() {
+    fn native_view_budget_is_shared_with_held_frames() {
         let mut worker = TreeCache::default().with_image_policy(ImagePolicy::UploadOnly);
         worker.prepare(&scene(), 1.).unwrap();
         let frame = worker.frame.clone().unwrap();
         let payload = frame.items[0].image.clone().unwrap();
         let budget = payload.budget.clone();
         let available = 40 * bead_core::cache::MIB - budget.used();
-        let gpu = payload.reserve_texture(available).unwrap();
-        assert!(payload.reserve_texture(1).is_err());
+        let gpu = payload.budget.reserve(available).unwrap();
+        assert!(payload.budget.reserve(1).is_err());
         assert!(
             frame
                 ._accounting

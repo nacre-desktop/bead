@@ -1160,6 +1160,11 @@ pub trait Renderer {
     /// image textures, so a closed panel that keeps its renderer reopens without
     /// decoding them again (B0334).
     fn release_gpu_resources(&mut self, _keep_images: bool) {}
+    /// The most texture bytes held since the last call (B0338); the next window starts at what
+    /// is held now. Backends without a texture budget report 0.
+    fn take_texture_peak(&mut self) -> usize {
+        0
+    }
 
     /// Per-surface presentation hint, not global activity on another surface.
     fn presentation_motion(&mut self, _active: bool) {}
