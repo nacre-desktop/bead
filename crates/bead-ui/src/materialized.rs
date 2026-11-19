@@ -103,6 +103,8 @@ enum Animate {
         vertical: bool,
         base: f32,
     },
+    /// `opacity` of an image view: the Image primitive's draw-time opacity (B0348).
+    Opacity { primitive: usize },
     /// Any other property: the cached layout is stale until the motion ends.
     Layout { property: String },
 }
@@ -319,6 +321,7 @@ impl Cached {
             }
             for (property, value) in &raw.props {
                 if let Some(marker) = layout::marker(value) {
+                    let image = primitive(|p| matches!(p, Primitive::Image { .. }));
                     let kind = match (property.as_str(), lookup.layers.get(view.id.as_str())) {
                         // A joined box moves its rect with the radius too: rebuild instead.
                         ("radius", _) if view.join_edge.is_none() => Animate::Radius {
@@ -340,6 +343,9 @@ impl Cached {
                             layer,
                             vertical: true,
                             base: view.translate_y,
+                        },
+                        ("opacity", _) if image.is_some() => Animate::Opacity {
+                            primitive: image.expect("checked"),
                         },
                         _ => Animate::Layout {
                             property: property.clone(),
@@ -971,6 +977,11 @@ impl Cached {
                             },
                         ) => border.0 = colour,
                         _ => {}
+                    }
+                }
+                Animate::Opacity { primitive } => {
+                    if let Primitive::Image { opacity, .. } = &mut scene.primitives[primitive] {
+                        *opacity = value.clamp(0., 1.) as f32;
                     }
                 }
                 Animate::Translate { .. } | Animate::Layout { .. } => {}

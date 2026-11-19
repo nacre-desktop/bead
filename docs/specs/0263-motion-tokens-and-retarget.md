@@ -39,7 +39,8 @@ slide .24, drop .26, pulse 1.6. Reduced motion reaches every target at once; a p
 `ui.animate` is unchanged (its number is baked into the view, so each frame re-runs Luau). A marker
 carries `from`, `to`, `start`, `duration`, `curve` and `loop`; layout samples it when the view is
 built and the materialized cache samples it on every frame: no Luau run, and for `fill`/`color`/
-`border_color` amounts, `radius`, `join` and `translate_x/y` no relayout (the cached scene's
+`border_color` amounts, `radius`, `join` and `translate_x/y` (B0348: and `opacity` on an image
+view, a draw-time value outside the raster key) no relayout (the cached scene's
 primitives, clips, layer bounds and node boxes are patched in place). A marker on a layout property
 rebuilds IR and layout without Luau until its motion ends. Frame pacing comes from the motions
 themselves, so a build served from the raw cache keeps its deadlines. The per-frame scene copy the

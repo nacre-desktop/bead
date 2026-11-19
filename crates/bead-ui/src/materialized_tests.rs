@@ -522,6 +522,89 @@ return ui.Row{id='root',width=300,height=60,fill='surface',
 }
 
 #[test]
+fn opacity_marker_patches_an_image_without_relayout_but_a_box_relayouts() {
+    let view = r#"local ui=require('bead.ui')
+local target=ui.resolve_for_check(ui.bind('target'))
+return ui.Row{id='root',width=300,height=60,fill='surface',
+ ui.Image{id='pic',icon='bell',width=20,height=20,opacity=ui.animated('o',target,0.05,'linear')},
+ ui.Box{id='plain',width=20,height=20,fill='primary',opacity=ui.animated('p',target,0.05,'linear')}}"#;
+    let behavior = "return {stores={target=0},actions={},computed={}}";
+    let (_fixture, mut session) = interaction_fixture(view, behavior);
+    session.set_frame_interval(std::time::Duration::from_millis(4));
+    let opacity = |scene: &Scene| {
+        scene
+            .primitives
+            .iter()
+            .find_map(|p| match p {
+                Primitive::Image { opacity, .. } => Some(*opacity),
+                _ => None,
+            })
+            .expect("image")
+    };
+    let scene = session
+        .update(BTreeMap::from([("target".into(), Value::Number(1.))]))
+        .unwrap()
+        .unwrap();
+    let mut last = opacity(&scene);
+    session.commit(scene);
+    frontend::reset_eval_calls();
+    let hits = patch_hits();
+    let mut changed = 0;
+    while let Some(deadline) = session.preview_deadline() {
+        std::thread::sleep(deadline.saturating_duration_since(std::time::Instant::now()));
+        let Some(scene) = session.update_model(BTreeMap::new()).unwrap() else {
+            break;
+        };
+        let next = opacity(&scene);
+        assert!(next >= last);
+        changed += usize::from(next > last);
+        last = next;
+        session.commit(scene);
+        assert_eq!(frontend::eval_calls(), 0);
+    }
+    assert_eq!(last, 1.);
+    assert!(changed > 1, "samples change the image opacity");
+    assert_eq!(patch_hits(), hits, "the box marker keeps the Layout path");
+    // Image alone: patched frames equal a full rebuild at the same sample.
+    let alone = r#"local ui=require('bead.ui')
+local target=ui.resolve_for_check(ui.bind('target'))
+return ui.Row{id='root',width=300,height=60,fill='surface',
+ ui.Image{id='pic',icon='bell',width=20,height=20,opacity=ui.animated('o',target,0.05,'linear')}}"#;
+    let (_f, mut session) = interaction_fixture(alone, behavior);
+    session.set_frame_interval(std::time::Duration::from_millis(4));
+    let scene = session
+        .update(BTreeMap::from([("target".into(), Value::Number(1.))]))
+        .unwrap()
+        .unwrap();
+    session.commit(scene);
+    frontend::reset_eval_calls();
+    let hits = patch_hits();
+    let mut frames = 0;
+    let mut previous = 0.;
+    while let Some(deadline) = session.preview_deadline() {
+        std::thread::sleep(deadline.saturating_duration_since(std::time::Instant::now()));
+        let Some(scene) = session.update_model(BTreeMap::new()).unwrap() else {
+            break;
+        };
+        let sampled = opacity(&scene);
+        assert!(sampled >= previous);
+        previous = sampled;
+        session.commit(scene.clone());
+        frames += 1;
+        assert_eq!(frontend::eval_calls(), 0);
+        assert_eq!(patch_hits(), hits + frames, "one patch per frame");
+        assert!(frames < 200);
+    }
+    assert!(frames > 1);
+    assert_eq!(previous, 1.);
+    // The settled patched scene equals a full materialize of the same sample.
+    let patched = session.update_model(BTreeMap::new()).unwrap();
+    assert!(patched.is_none());
+    let full = session.reload().unwrap();
+    assert_eq!(opacity(&full), 1.);
+}
+
+#[test]
 fn sampled_layout_markers_relayout_without_luau_until_the_motion_ends() {
     let view = r#"local ui=require('bead.ui')
 return ui.Row{id='root',width=300,height=40,fill='surface',
