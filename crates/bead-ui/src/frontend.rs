@@ -588,6 +588,13 @@ impl ScalarMotion {
     }
 }
 impl LuauFrontEnd {
+    /// Whether the last build kept `raw` for patching (not while animating or over budget).
+    pub(super) fn keeps(&self, raw: &std::rc::Rc<RawNode>) -> bool {
+        self.materialized
+            .borrow()
+            .as_ref()
+            .is_some_and(|kept| std::rc::Rc::ptr_eq(&kept.raw, raw))
+    }
     pub fn new(entry: &Path, sources: &Sources) -> Result<Self, Diagnostic> {
         Self::new_with_picker(entry, sources, None, None)
     }

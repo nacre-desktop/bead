@@ -348,6 +348,14 @@ impl Loader {
         serde_json::from_slice(&bytes).map_err(|e| Diagnostic::new(path, e.line(), e.column(), e))
     }
 }
+#[cfg(test)]
+thread_local! {
+    static CACHED_NEW: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+#[cfg(test)]
+pub(super) fn cached_builds() -> usize {
+    CACHED_NEW.get()
+}
 impl Generation {
     pub(super) fn set_frame_interval(&self, interval: std::time::Duration) {
         if let Some(frontend) = &self.markup_frontend {
@@ -1023,15 +1031,20 @@ impl Generation {
                 .borrow_mut()
                 .set_hooks(&view, &result.scene, palette)?;
             *self.materialized.borrow_mut() = None;
-            *self.materialized.borrow_mut() = crate::materialized::Cached::new(
-                raw,
-                &view,
-                &result.scene,
-                &result.nodes,
-                &resolve,
-                palette,
-                viewport,
-            )?;
+            // A raw the frontend did not keep can never pass patch's Rc::ptr_eq: skip the copy.
+            if self.markup_frontend.as_ref().is_some_and(|f| f.keeps(&raw)) {
+                #[cfg(test)]
+                CACHED_NEW.set(CACHED_NEW.get() + 1);
+                *self.materialized.borrow_mut() = crate::materialized::Cached::new(
+                    raw,
+                    &view,
+                    &result.scene,
+                    &result.nodes,
+                    &resolve,
+                    palette,
+                    viewport,
+                )?;
+            }
             // After the cache copy, which keeps the undimmed scene its patches start from.
             let dimmed = crate::materialized::view_opacities(&view, &result.scene);
             crate::materialized::apply_opacity(&mut result.scene, dimmed);

@@ -442,6 +442,54 @@ return ui.Row{id='root',width=300,height=40,fill='surface',
 }
 
 #[test]
+fn a_motion_build_skips_the_unusable_cache_and_the_settled_build_restores_it() {
+    let view = r#"local ui=require('bead.ui')
+return ui.Column{id='root',width=300,height=80,fill='surface',
+ ui.Box{id='bar',width=ui.animate('w',ui.resolve_for_check(ui.bind('target')),0.05,'linear'),height=20,fill='primary'},
+ ui.Button{id='btn',text='Go',width=100,height=30,fill='surfaceContainer',hover_fill='primary',on_activate=ui.action('noop')}}"#;
+    let behavior = "return {stores={target=10},actions={noop=function(s) end},computed={}}";
+    let target = BTreeMap::from([("target".into(), Value::Number(200.))]);
+    let (_fixture, mut session) = interaction_fixture(view, behavior);
+    let (_reference_fixture, mut reference) = interaction_fixture(view, behavior);
+    session.set_frame_interval(std::time::Duration::from_millis(5));
+    let built = crate::generation::cached_builds();
+    let scene = session.update(target.clone()).unwrap().unwrap();
+    session.commit(scene);
+    // Every build while the motion runs is a build whose raw nothing keeps.
+    let mut frames = 0;
+    while let Some(deadline) = session.preview_deadline() {
+        assert_eq!(
+            crate::generation::cached_builds(),
+            built,
+            "no Cached mid-motion"
+        );
+        std::thread::sleep(deadline.saturating_duration_since(std::time::Instant::now()));
+        let Some(scene) = session.update_model(BTreeMap::new()).unwrap() else {
+            break;
+        };
+        session.commit(scene);
+        frames += 1;
+        assert!(frames < 100);
+    }
+    assert!(frames > 1);
+    // The settling build is not animating: a Cached exists again and hover patches.
+    assert!(crate::generation::cached_builds() > built);
+    rebuilt(&mut reference, target);
+    let hits = patch_hits();
+    let (x, y) = center(&session, "btn");
+    let scene = session.hover(x, y).unwrap().unwrap();
+    assert_eq!(patch_hits(), hits + 1, "the settled cache patches hover");
+    let expected = rebuilt(
+        &mut reference,
+        BTreeMap::from([("bead.hovered".into(), scoped(&session, "btn"))]),
+    );
+    assert_eq!(
+        painted(&scene, session.view_nodes()),
+        painted(&expected, reference.view_nodes())
+    );
+}
+
+#[test]
 fn sampled_markers_patch_paint_properties_without_luau_or_relayout() {
     let view = r#"local ui=require('bead.ui')
 local m=ui.motion

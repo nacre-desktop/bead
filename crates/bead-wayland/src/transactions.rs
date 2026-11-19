@@ -1078,8 +1078,8 @@ impl App {
                         self.fail(error);
                     }
                 }
-                if let (Some(bridge), Some(tree)) =
-                    (&mut self.accessibility, runtime.accessibility_tree())
+                if let Some(bridge) = &mut self.accessibility
+                    && let Some(tree) = runtime.accessibility_tree()
                 {
                     bridge.update(tree);
                 }
