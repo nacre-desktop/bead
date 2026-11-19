@@ -69,6 +69,50 @@ pub(crate) fn value_to_lua(lua: &Lua, value: &Value) -> mlua::Result<mlua::Value
         _ => lua.to_value(value),
     }
 }
+type BoundEntry = (std::sync::Arc<Vec<serde_json::Value>>, Table, u64);
+/// Frozen Lua tables for bound lists, per VM. Entries hold the `Arc` so a freed
+/// address can't alias; those unused for a whole build are dropped, which bounds
+/// the cache to the lists the last two builds read.
+#[derive(Default)]
+pub(crate) struct BoundCache {
+    build: std::cell::Cell<u64>,
+    entries: RefCell<Vec<BoundEntry>>,
+}
+fn freeze(table: &Table) -> mlua::Result<()> {
+    table.set_readonly(true);
+    for pair in table.pairs::<mlua::Value, mlua::Value>() {
+        if let (_, mlua::Value::Table(inner)) = pair? {
+            freeze(&inner)?;
+        }
+    }
+    Ok(())
+}
+impl BoundCache {
+    pub(crate) fn begin_build(&self) {
+        self.build.set(self.build.get() + 1);
+    }
+    pub(crate) fn value(&self, lua: &Lua, value: &Value) -> mlua::Result<mlua::Value> {
+        let Value::List(items) = value else {
+            return lua.to_value(value);
+        };
+        let build = self.build.get();
+        let mut entries = self.entries.borrow_mut();
+        if let Some(entry) = entries
+            .iter_mut()
+            .find(|e| std::sync::Arc::ptr_eq(&e.0, items))
+        {
+            entry.2 = build;
+            return Ok(mlua::Value::Table(entry.1.clone()));
+        }
+        let mlua::Value::Table(table) = json_array(lua, items)? else {
+            unreachable!("lists convert to tables");
+        };
+        freeze(&table)?;
+        entries.retain(|e| e.2 + 1 >= build);
+        entries.push((items.clone(), table.clone(), build));
+        Ok(mlua::Value::Table(table))
+    }
+}
 struct Cached {
     value: Value,
     reads: BTreeMap<String, (u64, Value)>,
@@ -836,5 +880,42 @@ mod action_isolation_tests {
         }
         assert!(script.memory_bytes() <= warmed + 4096);
         assert!(script.memory_bytes() <= 16 * bead_core::cache::MIB);
+    }
+}
+
+#[cfg(test)]
+mod bound_cache_tests {
+    use super::*;
+    fn list(n: usize) -> Value {
+        Value::list(
+            (0..n)
+                .map(|i| serde_json::json!({"id": i, "tags": ["a"]}))
+                .collect(),
+        )
+    }
+    #[test]
+    fn same_list_shares_one_frozen_table_and_cache_stays_bounded() {
+        let (lua, cache) = (Lua::new(), BoundCache::default());
+        cache.begin_build();
+        let value = list(3);
+        let (a, b) = (
+            cache.value(&lua, &value).unwrap(),
+            cache.value(&lua, &value.clone()).unwrap(),
+        );
+        assert_eq!(a.to_pointer(), b.to_pointer());
+        assert_ne!(
+            a.to_pointer(),
+            cache.value(&lua, &list(3)).unwrap().to_pointer()
+        );
+        lua.globals().set("t", a).unwrap();
+        for write in ["t[1].id = 9", "t[1].tags[1] = 'x'", "table.insert(t, 1)"] {
+            let error = lua.load(write).exec().unwrap_err().to_string();
+            assert!(error.contains("readonly"), "{write}: {error}");
+        }
+        for n in 0..200 {
+            cache.begin_build();
+            cache.value(&lua, &list(n % 7 + 1)).unwrap();
+        }
+        assert!(cache.entries.borrow().len() <= 2);
     }
 }

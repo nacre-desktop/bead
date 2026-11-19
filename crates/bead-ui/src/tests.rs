@@ -114,6 +114,25 @@ fn external_projector_refreshes_without_local_edits_and_keeps_atomic_failure() {
 }
 
 #[test]
+fn writing_a_bound_list_is_a_view_error_not_a_panic() {
+    let fixture = Fixture::new();
+    let mut session = fixture.session();
+    fs::create_dir_all(fixture.0.join("ui")).unwrap();
+    fs::write(
+        fixture.0.join("ui/main.luau"),
+        "local ui=require('bead.ui')\nlocal rows=ui.resolve_for_check(ui.bind('rows'))\nrows[1].id=2\nreturn ui.Box{id='panel',width=100,height=40}",
+    )
+    .unwrap();
+    fs::write(
+        fixture.0.join("ui/behavior.luau"),
+        "return {stores={rows={{id=1}}},actions={},computed={}}",
+    )
+    .unwrap();
+    session.entry = "ui/main.luau".into();
+    let error = session.reload().err().expect("write must fail").to_string();
+    assert!(error.contains("readonly"), "{error}");
+}
+#[test]
 fn forty_unchanged_projection_wakeups_do_not_materialize_or_build_luau() {
     let fixture = Fixture::new();
     let mut session = fixture.session();

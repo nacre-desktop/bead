@@ -206,6 +206,7 @@ return function(ui, constructors, allowed, arrayMarker)
         return {name=string_arg(name, "action name"), argument=argument}
     end
     local inspect = debug.info
+    local names = {}
     for name, kind in constructors do
         ui[name] = function(props)
             built += 1
@@ -245,9 +246,14 @@ return function(ui, constructors, allowed, arrayMarker)
                 child = rawget(props, index)
             end
             local file, line = inspect(2, "sl")
-            file = (file or ""):gsub("^@+", "")
-            return {kind=kind, props=named, children=children,
-                source={file=file ~= "" and file or "ui/main.luau", line=line or 1}}
+            file = file or ""
+            local name = names[file]
+            if name == nil then
+                name = file:gsub("^@+", "")
+                if name == "" then name = "ui/main.luau" end
+                names[file] = name
+            end
+            return {kind=kind, props=named, children=children, source={file=name, line=line or 1}}
         end
     end
     local function check(value, schema)
@@ -752,6 +758,7 @@ struct Vm {
     native_time: std::rc::Rc<std::cell::Cell<u64>>,
     /// Catalog/text-style epoch the kit tokens and translations were read at.
     epoch: u64,
+    bound: crate::script::BoundCache,
 }
 impl Vm {
     fn new(frontend: &LuauFrontEnd) -> mlua::Result<Self> {
@@ -959,6 +966,7 @@ impl Vm {
             deadline,
             native_time,
             epoch,
+            bound: Default::default(),
         })
     }
     fn chunk(&self, path: &Path, bytes: &[u8]) -> mlua::Result<Function> {
@@ -1070,6 +1078,7 @@ impl FrontEnd for LuauFrontEnd {
         .map_err(|error| diagnostic(entry, error))?;
         vm.deadline.set(deadline);
         vm.native_time.set(0);
+        vm.bound.begin_build();
         let owned = vm;
         let vm = &owned;
         let lua = &vm.lua;
@@ -1195,10 +1204,9 @@ impl FrontEnd for LuauFrontEnd {
                                 "plugin {id} lacks capability topic:{name}"
                             )));
                         }
-                        return crate::script::value_to_lua(
-                            lua,
-                            &resolve(&name).map_err(mlua::Error::external)?,
-                        );
+                        return vm
+                            .bound
+                            .value(lua, &resolve(&name).map_err(mlua::Error::external)?);
                     }
                     Ok(value)
                 })?,
