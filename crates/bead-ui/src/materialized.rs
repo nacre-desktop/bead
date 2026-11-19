@@ -322,7 +322,10 @@ impl Cached {
                     });
                 }
             }
-            for (property, value) in &raw.props {
+            // Hash order is unstable: apply animations in a fixed order.
+            let mut props: Vec<_> = raw.props.iter().collect();
+            props.sort_unstable_by_key(|(name, _)| *name);
+            for (property, value) in props {
                 if let Some(marker) = layout::marker(value) {
                     let kind = match (property.as_str(), lookup.layers.get(view.id.as_str())) {
                         // A joined box moves its rect with the radius too: rebuild instead.

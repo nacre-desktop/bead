@@ -3,8 +3,9 @@
 use crate::{Diagnostic, Node, frontend::Resolve};
 use bead_core::Value;
 use bead_render::{Palette, Primitive, Rect, Scene};
+use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value as Json};
+use serde_json::Value as Json;
 use std::{
     collections::{BTreeMap, BTreeSet},
     path::{Path, PathBuf},
@@ -63,7 +64,7 @@ impl Source {
 #[serde(deny_unknown_fields)]
 pub struct RawNode {
     pub kind: Widget,
-    pub props: Map<String, Json>,
+    pub props: FxHashMap<String, Json>,
     pub children: Vec<RawNode>,
     pub source: Source,
     pub scope: Option<String>,
@@ -319,8 +320,8 @@ pub struct ViewSpec {
 }
 /// A node's authored properties with its bindings resolved on top.
 struct Props<'a> {
-    raw: &'a Map<String, Json>,
-    resolved: Map<String, Json>,
+    raw: &'a FxHashMap<String, Json>,
+    resolved: FxHashMap<String, Json>,
 }
 impl Props<'_> {
     fn get(&self, name: &str) -> Option<&Json> {
@@ -747,7 +748,7 @@ impl ViewSpec {
             }
             let mut props = Props {
                 raw: &raw.props,
-                resolved: Map::new(),
+                resolved: FxHashMap::default(),
             };
             for (name, value) in &raw.props {
                 if !allowed_property(name) {
@@ -817,13 +818,14 @@ impl ViewSpec {
             let sweep_angle = number(p, "sweep_angle", 360., source)?;
             let stroke_width = number(p, "stroke_width", 4., source)?;
             let points: Vec<[f32; 2]> = if raw.kind == Widget::Polyline {
-                let value = p.get("points").cloned().unwrap_or(Json::Array(Vec::new()));
+                let empty = Json::Array(Vec::new());
+                let value = p.get("points").unwrap_or(&empty);
                 if !value.as_array().is_some_and(|items| items.len() <= 256) {
                     return Err(
                         source.error("Polyline points must be an array of at most 256 pairs")
                     );
                 }
-                let parsed: Vec<[f32; 2]> = serde_json::from_value(value)
+                let parsed = Vec::<[f32; 2]>::deserialize(value)
                     .map_err(|_| source.error("Polyline points must be [x,y] pairs"))?;
                 if parsed
                     .iter()
@@ -2153,5 +2155,39 @@ mod scrollbar_property_tests {
         raw.props
             .insert("scrollbar".into(), Json::String("no".into()));
         assert!(ViewSpec::from_raw(&raw, &resolve).is_err());
+    }
+    #[test]
+    fn prop_insertion_order_does_not_change_the_scene() {
+        let props = [
+            ("id", serde_json::json!("box")),
+            ("width", serde_json::json!(120.)),
+            ("height", serde_json::json!(40.)),
+            ("padding", serde_json::json!(6.)),
+            ("gap", serde_json::json!(3.)),
+            ("radius", serde_json::json!(5.)),
+            ("fill", serde_json::json!({"role": "surface", "alpha": 1.})),
+        ];
+        let scene = |order: &mut dyn Iterator<Item = &(&str, Json)>| {
+            let raw = RawNode {
+                kind: Widget::Panel,
+                props: order.map(|(k, v)| ((*k).to_owned(), v.clone())).collect(),
+                children: vec![],
+                source: Source {
+                    file: "test.luau".into(),
+                    line: 1,
+                },
+                scope: None,
+            };
+            let resolve = |_: &str| Ok(Value::Number(0.));
+            let view = ViewSpec::from_raw(&raw, &resolve).unwrap();
+            let palette = Palette(std::sync::Arc::new(
+                [("surface".to_owned(), [1, 2, 3, 255])].into(),
+            ));
+            let laid = layout(&view, &resolve, &palette, 1, (400., 300.)).unwrap();
+            serde_json::to_string(&laid.scene.primitives).unwrap()
+        };
+        let forward = scene(&mut props.iter());
+        assert!(forward.contains("rounded"));
+        assert_eq!(forward, scene(&mut props.iter().rev()));
     }
 }
