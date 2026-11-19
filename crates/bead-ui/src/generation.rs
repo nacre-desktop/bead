@@ -1032,6 +1032,9 @@ impl Generation {
                 palette,
                 viewport,
             )?;
+            // After the cache copy, which keeps the undimmed scene its patches start from.
+            let dimmed = crate::materialized::view_opacities(&view, &result.scene);
+            crate::materialized::apply_opacity(&mut result.scene, dimmed);
             return Ok((result.scene, result.nodes));
         }
         Ok((self.scene(stores, palette, true)?, self.nodes.clone()))

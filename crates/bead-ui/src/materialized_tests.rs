@@ -522,12 +522,11 @@ return ui.Row{id='root',width=300,height=60,fill='surface',
 }
 
 #[test]
-fn opacity_marker_patches_an_image_without_relayout_but_a_box_relayouts() {
+fn opacity_marker_patches_an_image_without_relayout() {
     let view = r#"local ui=require('bead.ui')
 local target=ui.resolve_for_check(ui.bind('target'))
 return ui.Row{id='root',width=300,height=60,fill='surface',
- ui.Image{id='pic',icon='bell',width=20,height=20,opacity=ui.animated('o',target,0.05,'linear')},
- ui.Box{id='plain',width=20,height=20,fill='primary',opacity=ui.animated('p',target,0.05,'linear')}}"#;
+ ui.Image{id='pic',icon='bell',width=20,height=20,opacity=ui.animated('o',target,0.05,'linear')}}"#;
     let behavior = "return {stores={target=0},actions={},computed={}}";
     let (_fixture, mut session) = interaction_fixture(view, behavior);
     session.set_frame_interval(std::time::Duration::from_millis(4));
@@ -564,7 +563,7 @@ return ui.Row{id='root',width=300,height=60,fill='surface',
     }
     assert_eq!(last, 1.);
     assert!(changed > 1, "samples change the image opacity");
-    assert_eq!(patch_hits(), hits, "the box marker keeps the Layout path");
+    assert!(patch_hits() > hits, "the image marker patches");
     // Image alone: patched frames equal a full rebuild at the same sample.
     let alone = r#"local ui=require('bead.ui')
 local target=ui.resolve_for_check(ui.bind('target'))
@@ -602,6 +601,123 @@ return ui.Row{id='root',width=300,height=60,fill='surface',
     assert!(patched.is_none());
     let full = session.reload().unwrap();
     assert_eq!(opacity(&full), 1.);
+}
+
+/// B0349: the alphas of the group's fill, text and image, and the image opacity.
+fn group_alphas(scene: &Scene) -> (u8, u8, f32) {
+    let (mut fill, mut text, mut image) = (0, 0, 0.);
+    for p in &scene.primitives {
+        match p {
+            Primitive::Rounded { rect, fill: f, .. } if rect.w == 100. => fill = f[3],
+            Primitive::Text { color, .. } => text = color[3],
+            Primitive::Image { opacity, .. } => image = *opacity,
+            _ => {}
+        }
+    }
+    (fill, text, image)
+}
+/// Run the motion of a fixture whose target store goes to `target` to its end: one patch per frame.
+fn settle_opacity(
+    view: &str,
+    target: f64,
+    mut each: impl FnMut(&Scene),
+) -> (Fixture, Session, Scene) {
+    let behavior = "return {stores={target=0},actions={},computed={}}";
+    let (fixture, mut session) = interaction_fixture(view, behavior);
+    session.set_frame_interval(std::time::Duration::from_millis(4));
+    let mut scene = session
+        .update(BTreeMap::from([("target".into(), Value::Number(target))]))
+        .unwrap()
+        .unwrap();
+    session.commit(scene.clone());
+    frontend::reset_eval_calls();
+    let hits = patch_hits();
+    let mut frames = 0;
+    while let Some(deadline) = session.preview_deadline() {
+        std::thread::sleep(deadline.saturating_duration_since(std::time::Instant::now()));
+        let Some(next) = session.update_model(BTreeMap::new()).unwrap() else {
+            break;
+        };
+        frames += 1;
+        assert_eq!(frontend::eval_calls(), 0, "no Luau");
+        assert_eq!(
+            patch_hits(),
+            hits + frames,
+            "one patch per frame, no relayout"
+        );
+        each(&next);
+        session.commit(next.clone());
+        scene = next;
+        assert!(frames < 300);
+    }
+    assert!(frames > 1);
+    (fixture, session, scene)
+}
+fn json(scene: &Scene) -> String {
+    serde_json::to_string(&scene.primitives).unwrap()
+}
+
+#[test]
+fn opacity_marker_on_a_box_dims_its_subtree_and_equals_a_full_build() {
+    let view = r#"local ui=require('bead.ui')
+local target=ui.resolve_for_check(ui.bind('target'))
+return ui.Row{id='root',width=300,height=60,fill='surface',
+ ui.Box{id='group',width=100,height=40,fill='primary',opacity=ui.animated('o',target,0.05,'linear'),
+  ui.Text{id='label',text='Hi',width=50,height=20},
+  ui.Image{id='pic',icon='bell',width=20,height=20}}}"#;
+    let mut seen = vec![];
+    let (_fixture, mut session, last) =
+        settle_opacity(view, 0.5, |scene| seen.push(group_alphas(scene)));
+    assert_eq!(group_alphas(&last), (128, 128, 0.5));
+    assert!(seen.windows(2).any(|w| w[0].2 < w[1].2), "samples change");
+    // Each sample: every child alpha is its opaque base times the sample.
+    for (fill, text, image) in seen {
+        assert_eq!(fill, (255. * image).round() as u8);
+        assert_eq!(text, (255. * image).round() as u8);
+    }
+    // The settled patched scene equals a full build at the same sample.
+    assert_eq!(json(&session.reload().unwrap()), json(&last));
+}
+
+#[test]
+fn opacity_multiplies_with_parents_and_alpha_markers_without_compounding() {
+    let view = r#"local ui=require('bead.ui')
+local target=ui.resolve_for_check(ui.bind('target'))
+return ui.Row{id='root',width=300,height=60,fill='surface',
+ ui.Box{id='outer',width=100,height=40,fill='primary',opacity=0.5,
+  ui.Box{id='inner',width=60,height=30,fill=ui.alpha('primary',ui.animated('a',target,0.05,'linear')),opacity=ui.animated('o',target,0.05,'linear')}}}"#;
+    let inner = |scene: &Scene| match scene
+        .primitives
+        .iter()
+        .find(|p| matches!(p, Primitive::Rounded { rect, .. } if rect.w == 60.))
+    {
+        Some(Primitive::Rounded { fill, .. }) => fill[3],
+        _ => panic!("no inner"),
+    };
+    let mut seen = vec![];
+    let (_fixture, mut session, last) = settle_opacity(view, 1., |scene| seen.push(inner(scene)));
+    // Settled: base alpha times the outer 0.5 only. Mid-motion the alpha, the opacity and the
+    // outer factor all multiply, so the sequence rises monotonically and never exceeds that.
+    assert_eq!(inner(&last), 128);
+    assert!(seen.iter().all(|a| *a <= 128));
+    assert!(seen.windows(2).all(|w| w[0] <= w[1]));
+    assert!(seen.iter().any(|a| *a < 64), "alpha and opacity both apply");
+    assert_eq!(json(&session.reload().unwrap()), json(&last));
+}
+
+#[test]
+fn static_opacity_one_changes_nothing() {
+    let plain = r#"local ui=require('bead.ui')
+return ui.Row{id='root',width=300,height=60,fill='surface',
+ ui.Box{id='group',width=100,height=40,fill='primary',{{O}}ui.Text{id='label',text='Hi',width=50,height=20}}}"#;
+    let scene = |o: &str| {
+        let (_f, mut session) = interaction_fixture(
+            &plain.replace("{{O}}", o),
+            "return {stores={},actions={},computed={}}",
+        );
+        session.reload().unwrap()
+    };
+    assert_eq!(json(&scene("")), json(&scene("opacity=1.0,")));
 }
 
 #[test]

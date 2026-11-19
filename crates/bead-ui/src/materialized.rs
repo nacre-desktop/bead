@@ -103,8 +103,8 @@ enum Animate {
         vertical: bool,
         base: f32,
     },
-    /// `opacity` of an image view: the Image primitive's draw-time opacity (B0348).
-    Opacity { primitive: usize },
+    /// `opacity`: the layer's subtree alpha, applied by `apply_opacity` (B0348, B0349).
+    Opacity { layer: usize },
     /// Any other property: the cached layout is stale until the motion ends.
     Layout { property: String },
 }
@@ -120,6 +120,8 @@ pub(super) struct Cached {
     /// When the scene was built: a motion finished by then is already at its target.
     built_ns: u64,
     animated: Vec<Animated>,
+    /// Static `opacity` of the views without a marker (layer, factor).
+    opacities: Vec<(usize, f32)>,
     body_layer: Option<usize>,
     raw: Rc<RawNode>,
     scene: Scene,
@@ -225,6 +227,7 @@ impl Cached {
             _charge: None,
             built_ns: bead_core::animation::build_clock(),
             animated: vec![],
+            opacities: view_opacities(view, scene),
             body_layer: view
                 .body
                 .as_ref()
@@ -321,7 +324,6 @@ impl Cached {
             }
             for (property, value) in &raw.props {
                 if let Some(marker) = layout::marker(value) {
-                    let image = primitive(|p| matches!(p, Primitive::Image { .. }));
                     let kind = match (property.as_str(), lookup.layers.get(view.id.as_str())) {
                         // A joined box moves its rect with the radius too: rebuild instead.
                         ("radius", _) if view.join_edge.is_none() => Animate::Radius {
@@ -344,9 +346,11 @@ impl Cached {
                             vertical: true,
                             base: view.translate_y,
                         },
-                        ("opacity", _) if image.is_some() => Animate::Opacity {
-                            primitive: image.expect("checked"),
-                        },
+                        ("opacity", Some(&layer)) => {
+                            // The marker's sample replaces the static factor of this layer.
+                            cached.opacities.retain(|(l, _)| *l != layer);
+                            Animate::Opacity { layer }
+                        }
                         _ => Animate::Layout {
                             property: property.clone(),
                         },
@@ -979,12 +983,7 @@ impl Cached {
                         _ => {}
                     }
                 }
-                Animate::Opacity { primitive } => {
-                    if let Primitive::Image { opacity, .. } = &mut scene.primitives[primitive] {
-                        *opacity = value.clamp(0., 1.) as f32;
-                    }
-                }
-                Animate::Translate { .. } | Animate::Layout { .. } => {}
+                Animate::Translate { .. } | Animate::Opacity { .. } | Animate::Layout { .. } => {}
             }
         }
         fn translate(primitive: &mut Primitive, dx: f32, dy: f32) {
@@ -1138,7 +1137,42 @@ impl Cached {
                 }
             }
         }
+        // Last, so it also dims a hover box inserted above. shortcut: `motion.parts` keeps the
+        // undimmed body of a panel motion, as `Poses::pose` does for a reveal fade.
+        let sampled = self.animated.iter().filter_map(|a| match a.kind {
+            Animate::Opacity { layer } => {
+                layout::sample(&a.marker, now_ns).map(|v| (layer, v.clamp(0., 1.) as f32))
+            }
+            _ => None,
+        });
+        apply_opacity(&mut scene, self.opacities.iter().copied().chain(sampled));
         Ok(Some((scene, nodes)))
+    }
+}
+/// The `opacity` of every laid-out view that dims its subtree (layer, factor), the layout's value
+/// (a marker's sample at build time included).
+pub(super) fn view_opacities(view: &ViewSpec, scene: &Scene) -> Vec<(usize, f32)> {
+    let mut out = vec![];
+    if view.opacity < 1.
+        && let Some(layer) = scene.layers.iter().position(|l| l.id == view.id)
+    {
+        out.push((layer, view.opacity));
+    }
+    for child in &view.children {
+        out.extend(view_opacities(child, scene));
+    }
+    out
+}
+/// Multiply the alpha of each layer's own and descendant primitives by its factor.
+pub(super) fn apply_opacity(scene: &mut Scene, factors: impl IntoIterator<Item = (usize, f32)>) {
+    for (layer, factor) in factors {
+        if factor < 1. {
+            let layer = &scene.layers[layer];
+            let range = layer.own.start..layer.subtree_end;
+            for primitive in &mut scene.primitives[range] {
+                fade(primitive, factor);
+            }
+        }
     }
 }
 /// An interaction pose (spec 0280) a view asked for.

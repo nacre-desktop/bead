@@ -270,7 +270,9 @@ pub struct ViewSpec {
     pub join_edge: Option<bead_core::Edge>,
     pub join: f32,
     pub blur: f32,
-    /// `Image` only: 0..1 multiplier of the drawn alpha.
+    /// 0..1 multiplier of the alpha of everything this view and its subtree draw (Qt Quick
+    /// `Item.opacity`, B0349: no offscreen group, so overlaps show through; nested values multiply).
+    /// The post-layout `materialized::apply_opacity` applies it, so layout emits no factor.
     pub opacity: f32,
     pub start_angle: f32,
     pub sweep_angle: f32,
@@ -1840,7 +1842,7 @@ pub fn layout(
                         .as_ref()
                         .map(|tint| color(Some(tint), foreground, palette, source))
                         .transpose()?,
-                    opacity: view.opacity,
+                    opacity: 1.,
                     rect: r,
                     path,
                 },
