@@ -2781,7 +2781,8 @@ fn decode_native_image(bytes: &[u8]) -> Result<Pixmap> {
     Pixmap::from_vec(raw.into_raw(), size).ok_or_else(|| "image allocation".into())
 }
 
-const IMAGE_CACHE_LIMIT: usize = 1536 * 1024;
+/// B0354: 3 MiB, so icons warmed at two output scales (1.0 and 1.5) do not evict each other.
+const IMAGE_CACHE_LIMIT: usize = 3 * 1024 * 1024;
 /// A bounded shared cache for large rasters explicitly warmed off the UI path.
 pub const LARGE_IMAGE_CACHE_LIMIT: usize = 22 * 1024 * 1024;
 const IMAGE_CACHE_MAX_ENTRIES: usize = 256;
