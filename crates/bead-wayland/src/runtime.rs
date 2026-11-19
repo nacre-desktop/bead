@@ -757,7 +757,9 @@ pub fn run_runtime(
     }
     // The connection lives: release the warm run (final attach, GL objects, upload thread).
     #[cfg(feature = "native-gl")]
-    app.set_wallpaper_warm(false);
+    if app.warm.on {
+        app.warm_off();
+    }
     for s in &app.surfaces {
         println!(
             "ACQUIRE p50_ms={:.3} p99_ms={:.3}",

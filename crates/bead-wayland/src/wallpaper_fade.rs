@@ -418,6 +418,14 @@ pub(crate) fn gl_surfaces_present(other_surfaces: bool, wallpaper_runs: bool) ->
 pub(crate) fn worker_wanted(warm: bool, gl_failed: bool, worker_failed: bool) -> bool {
     warm && !gl_failed && !worker_failed
 }
+/// B0353: the host drops its hold at a final pick, before the pick's frame is queued. Warm mode
+/// then lasts this long (the host's warmer retries 2 s after a close) so that fade reuses the
+/// resting runs and the upload thread instead of building its run on the main thread.
+const WARM_OFF_GRACE: Duration = Duration::from_secs(2);
+/// B0353: the release is due once the grace is over and no fade runs and no frame waits.
+pub(crate) fn warm_release_due(off_wanted: bool, grace_elapsed: bool, busy: bool) -> bool {
+    off_wanted && grace_elapsed && !busy
+}
 /// An upload answer belongs to the run's newest waiting frame (last wins: older ones are deleted).
 pub(crate) fn upload_current(waiting: Option<u64>, token: u64) -> bool {
     waiting == Some(token)
@@ -460,6 +468,11 @@ pub(crate) struct Warm {
     failed: bool,
     /// Warm mode ended and a fade still held its run: report when the last one is released.
     releasing: bool,
+    /// B0353: the host ended warm mode; `on` holds through the grace and any fade.
+    off_wanted: bool,
+    grace_elapsed: bool,
+    /// Bumped by every warm-off and warm-on: a grace timer of an older one does nothing.
+    off_epoch: u64,
     next_token: u64,
     /// B0325: the one prime in flight (outputs are primed one at a time).
     prime: Option<Prime>,
@@ -467,6 +480,23 @@ pub(crate) struct Warm {
     upload: Option<UploadThread>,
 }
 impl Warm {
+    /// The host ended warm mode: the grace starts (again); returns the epoch its timer carries.
+    fn off_requested(&mut self) -> u64 {
+        (self.off_wanted, self.grace_elapsed) = (true, false);
+        self.off_epoch += 1;
+        self.off_epoch
+    }
+    /// Warm mode came back (or the release ran): a pending release is cancelled.
+    fn off_cancelled(&mut self) {
+        (self.off_wanted, self.grace_elapsed) = (false, false);
+        self.off_epoch += 1;
+    }
+    /// The grace timer of `epoch` fired; false when it was cancelled or re-armed.
+    fn grace_over(&mut self, epoch: u64) -> bool {
+        let current = self.off_wanted && self.off_epoch == epoch;
+        self.grace_elapsed |= current;
+        current
+    }
     /// A frame for `output` supersedes its prime: the answer then finds no prime and its texture
     /// is deleted, and the frame takes the cold start.
     fn cancel_prime(&mut self, output: &str) -> bool {
@@ -1741,6 +1771,7 @@ impl App {
             ms_since(began),
             skipped_suffix(std::mem::take(&mut self.panel_steps_skipped))
         );
+        self.release_warm_if_due();
     }
 
     /// Free a run's GL objects in the order EGL needs: textures and canvas with the context
@@ -1772,6 +1803,7 @@ impl App {
         if self.release_run_objects(index) {
             self.release_wallpaper_gl();
         }
+        self.release_warm_if_due();
     }
 
     fn release_run_objects(&mut self, index: usize) -> bool {
@@ -1862,22 +1894,61 @@ impl App {
 
     /// The host's warm switch changed (or was read for the first time).
     pub(super) fn set_wallpaper_warm(&mut self, on: bool) {
-        if self.warm.on == on {
+        if on {
+            self.warm.off_cancelled();
+        } else if self.warm.on {
+            let epoch = self.warm.off_requested();
+            let _ = self.loop_handle.clone().insert_source(
+                Timer::from_duration(WARM_OFF_GRACE),
+                move |_, _, app| {
+                    if app.warm.grace_over(epoch) {
+                        app.release_warm_if_due();
+                    }
+                    TimeoutAction::Drop
+                },
+            );
             return;
         }
-        self.warm.on = on;
-        self.warm.failed = false;
-        self.warm.releasing = false;
-        if on {
+        if on && !self.warm.on {
+            self.warm.on = true;
+            self.warm.failed = false;
+            self.warm.releasing = false;
             self.report_warm(true);
             self.schedule_prime();
-            return;
         }
+    }
+
+    /// The grace and the fades are over: release the runs, the upload thread and the transport.
+    pub(super) fn warm_off(&mut self) {
+        self.warm.on = false;
+        self.warm.failed = false;
         self.warm.releasing = true;
         self.release_wallpaper_gl();
         // A fade that still runs keeps its run; the line with nothing left follows its end.
         if self.warm.releasing {
             self.report_warm(false);
+        }
+    }
+
+    /// A fade runs (or waits for its upload), or a frame waits for its fade.
+    fn fading_or_queued(&self) -> bool {
+        !self.wallpaper_pending_frames.is_empty()
+            || self
+                .wallpaper_surfaces
+                .iter()
+                .filter_map(|s| s.fade.as_ref())
+                .any(|run| !run.resting || run.upload.is_some())
+    }
+
+    /// Release warm mode once the fades it waited for have ended.
+    fn release_warm_if_due(&mut self) {
+        if warm_release_due(
+            self.warm.off_wanted,
+            self.warm.grace_elapsed,
+            self.fading_or_queued(),
+        ) {
+            self.warm.off_cancelled();
+            self.warm_off();
         }
     }
 
@@ -2008,6 +2079,29 @@ mod tests {
             fade_end(true, true, true),
             FadeEnd::Release,
             "no fade starts after a GL failure"
+        );
+    }
+    #[test]
+    fn warm_release_needs_the_grace_over_and_no_fade() {
+        // (off wanted, grace elapsed, busy)
+        assert!(!warm_release_due(true, false, false), "within the grace");
+        assert!(!warm_release_due(true, true, true), "a fade still runs");
+        assert!(warm_release_due(true, true, false), "grace over and idle");
+        assert!(!warm_release_due(false, true, false), "no warm-off pending");
+    }
+    #[test]
+    fn warm_on_cancels_a_pending_release_and_a_second_off_re_arms() {
+        let mut warm = Warm::default();
+        let first = warm.off_requested();
+        warm.off_cancelled();
+        assert!(!warm.grace_over(first), "warm-on in between cancels it");
+        let second = warm.off_requested();
+        let third = warm.off_requested();
+        assert!(!warm.grace_over(second), "the older timer is void");
+        assert!(warm.grace_over(third) && warm.grace_elapsed);
+        assert!(
+            warm.off_wanted,
+            "the release itself is still due to the hooks"
         );
     }
     #[test]
