@@ -225,6 +225,9 @@ pub(crate) struct GapProbe {
     last: Option<(f64, CpuMark)>,
     /// (gap seconds, other, peer-frame and palette-step main-thread ms) of the largest gap so far.
     worst: (f64, f64, f64, f64),
+    /// B0347: the three costliest frames' main-thread CPU (frame index, ms), costliest first.
+    top_cpu: [(u32, f64); 3],
+    frames: u32,
 }
 /// B0319: main-thread CPU (ns) at one instant: the thread total and the running sums spent inside
 /// fade frames (all outputs) and inside palette steps (host callback included).
@@ -250,7 +253,23 @@ impl GapProbe {
                 );
             }
         }
+        let cpu = end.cpu.saturating_sub(start.cpu) as f64 / 1e6;
+        if cpu > self.top_cpu[2].1 {
+            self.top_cpu[2] = (self.frames, cpu);
+            self.top_cpu.sort_by(|a, b| b.1.total_cmp(&a.1));
+        }
+        self.frames += 1;
         self.last = Some((now, end));
+    }
+    /// `render_cpu_top` text: the frames' CPU beside `render_top`'s wall time.
+    pub(crate) fn cpu_top(&self) -> String {
+        let top: Vec<String> = self
+            .top_cpu
+            .iter()
+            .filter(|(_, ms)| *ms > 0.)
+            .map(|(at, ms)| format!("{at}:{ms:.1}"))
+            .collect();
+        top.join(",")
     }
     pub(crate) fn other_ms(&self) -> f64 {
         self.worst.1
@@ -301,6 +320,7 @@ pub(crate) fn transition_marker(
     slide: &bead_core::animation::Slide,
     palette_steps: u32,
     gap_other_ms: f64,
+    render_cpu_top: &str,
     setup: &SetupTimes,
     retarget_ms: f64,
     clock_s: f64,
@@ -315,7 +335,7 @@ pub(crate) fn transition_marker(
         .collect();
     format!(
         "WALLPAPER_TRANSITION output={output} kind={} frames={} duration_ms={:.1} \
-         first_frame_ms={:.1} max_gap_ms={:.1} gap_at={} render_top={} palette_steps={palette_steps} \
+         first_frame_ms={:.1} max_gap_ms={:.1} gap_at={} render_top={} render_cpu_top={render_cpu_top} palette_steps={palette_steps} \
          gap_other_ms={gap_other_ms:.1} setup=read:{:.1},egl:{:.1},surface:{:.1},canvas:{:.1},\
          upload:{:.1},first:{:.1} retarget_ms={retarget_ms:.1} \
          clock_s={clock_s:.3} gap_peer_ms={gap_peer_ms:.1} gap_step_ms={gap_step_ms:.1} \
@@ -1467,7 +1487,7 @@ impl App {
             WallpaperFadeKind::Fade => bead_render::gl::WallpaperBlend::Fade,
             WallpaperFadeKind::Grow { origin } => bead_render::gl::WallpaperBlend::Grow { origin },
         };
-        run.fader.draw(blend, mode);
+        run.fader.draw(&surface.name, blend, mode);
         let wl_surface = surface.layer.wl_surface();
         if first
             && let Some((provider, (revision, token))) =
@@ -1552,6 +1572,7 @@ impl App {
                     &slide,
                     run.palette_steps,
                     run.gaps.other_ms(),
+                    &run.gaps.cpu_top(),
                     &run.setup,
                     run.retarget_ms,
                     run.clock.unwrap_or_default(),
@@ -2186,6 +2207,7 @@ mod tests {
             &slide,
             10,
             3.5,
+            "4:1.2,9:0.8",
             &SetupTimes {
                 read: 3.1,
                 egl: 0.,
@@ -2218,6 +2240,10 @@ mod tests {
             "{line}"
         );
         assert!(line.contains(" render_top="));
+        assert!(
+            line.contains(" render_cpu_top=4:1.2,9:0.8 palette_steps=10"),
+            "{line}"
+        );
     }
     #[test]
     fn the_gap_probe_charges_the_largest_gap_with_the_other_cpu_time_before_its_frame() {

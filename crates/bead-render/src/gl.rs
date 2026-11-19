@@ -540,6 +540,7 @@ impl Transport {
         }
         // SAFETY: extension was advertised, handles are retained and current; rectangles
         // use EGL's bottom-left origin, with validated physical-buffer coordinates.
+        let swap_profile = bead_core::profile::Span::new("gl_swap");
         let ok = unsafe {
             (self.swap_damage)(
                 display,
@@ -548,6 +549,7 @@ impl Transport {
                 i32::try_from(damage.len())?,
             )
         };
+        drop(swap_profile);
         if ok == 0 {
             return Err("EGL damage swap failed".into());
         }
@@ -582,6 +584,169 @@ fn gl_proc<T: Copy>(display: &Display, name: &std::ffi::CStr) -> Result<T> {
     // SAFETY: T is the extern "system" signature GL defines for `name`; sizes checked above.
     Ok(unsafe { std::mem::transmute_copy(&address) })
 }
+/// B0347: GPU time of traced draws (`BEAD_FRAME_TRACE`), from two GL timestamp queries per draw.
+/// Results are read on a later draw once available, never waited for; nothing runs when tracing
+/// is off or a query proc is missing.
+const GPU_RING: usize = 8;
+const GL_TIMESTAMP: u32 = 0x8E28;
+const GL_QUERY_RESULT: u32 = 0x8866;
+const GL_QUERY_RESULT_AVAILABLE: u32 = 0x8867;
+static GPU_TIMER_DISABLED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+struct QueryProcs {
+    generate: unsafe extern "system" fn(i32, *mut u32),
+    delete: GlDelete,
+    counter: unsafe extern "system" fn(u32, u32),
+    available: unsafe extern "system" fn(u32, u32, *mut i32),
+    result: unsafe extern "system" fn(u32, u32, *mut u64),
+}
+/// Pending items, oldest first, capped at `GPU_RING`: a full ring drops its oldest and counts it.
+struct Ring<T> {
+    items: std::collections::VecDeque<T>,
+    dropped: u64,
+}
+impl<T> Default for Ring<T> {
+    fn default() -> Self {
+        Self {
+            items: std::collections::VecDeque::new(),
+            dropped: 0,
+        }
+    }
+}
+impl<T> Ring<T> {
+    fn push(&mut self, item: T) -> Option<T> {
+        let old = (self.items.len() >= GPU_RING).then(|| {
+            self.dropped += 1;
+            self.items.pop_front()
+        });
+        self.items.push_back(item);
+        old.flatten()
+    }
+    /// The oldest item if `ready`: later ones wait behind it, so results come out in order.
+    fn take_ready(&mut self, ready: impl FnOnce(&T) -> bool) -> Option<T> {
+        if self.items.front().is_some_and(ready) {
+            self.items.pop_front()
+        } else {
+            None
+        }
+    }
+}
+struct Pending {
+    queries: [u32; 2],
+    label: String,
+    draw: u64,
+}
+#[derive(Default)]
+struct GpuTimer {
+    procs: Option<QueryProcs>,
+    ring: Ring<Pending>,
+    open: Option<Pending>,
+    draws: u64,
+}
+impl GpuTimer {
+    /// The context must be current. Disables the probe for the process when a proc is missing.
+    fn load(&mut self, display: &Display) {
+        use std::sync::atomic::Ordering::Relaxed;
+        if self.procs.is_some()
+            || !bead_core::profile::frame_trace()
+            || GPU_TIMER_DISABLED.load(Relaxed)
+        {
+            return;
+        }
+        let procs = (|| -> Result<QueryProcs> {
+            Ok(QueryProcs {
+                generate: gl_proc(display, c"glGenQueries")?,
+                delete: gl_proc(display, c"glDeleteQueries")?,
+                counter: gl_proc(display, c"glQueryCounter")?,
+                available: gl_proc(display, c"glGetQueryObjectiv")?,
+                result: gl_proc(display, c"glGetQueryObjectui64v")?,
+            })
+        })();
+        match procs {
+            Ok(procs) => self.procs = Some(procs),
+            Err(error) => {
+                if !GPU_TIMER_DISABLED.swap(true, Relaxed) {
+                    println!("GPU_TIMER disabled reason={error}");
+                }
+            }
+        }
+    }
+    /// Stamp the start of a draw and emit the earlier draws that finished.
+    fn begin(&mut self, stage: &'static str, label: impl FnOnce() -> String) {
+        let Some(procs) = self.procs.as_ref() else {
+            return;
+        };
+        self.draws += 1;
+        while let Some(done) = self.ring.take_ready(|p| {
+            let mut ready = 0;
+            // SAFETY: the context is current and `p.queries[1]` is a live query of it.
+            unsafe { (procs.available)(p.queries[1], GL_QUERY_RESULT_AVAILABLE, &mut ready) };
+            ready != 0
+        }) {
+            let mut ns = 0u64;
+            // SAFETY: as above; the result is available, so this does not wait.
+            unsafe { (procs.result)(done.queries[1], GL_QUERY_RESULT, &mut ns) };
+            let mut start = 0u64;
+            // SAFETY: as above.
+            unsafe { (procs.result)(done.queries[0], GL_QUERY_RESULT, &mut start) };
+            // SAFETY: the queries belong to this current context.
+            unsafe { (procs.delete)(2, done.queries.as_ptr()) };
+            bead_core::profile::trace(stage, || {
+                format!(
+                    "surface={} gpu_ms={:.3} frames_late={} dropped_total={}",
+                    done.label,
+                    ns.saturating_sub(start) as f64 / 1e6,
+                    self.draws - done.draw,
+                    self.ring.dropped
+                )
+            });
+        }
+        // A draw that failed before `end` left its start stamp behind.
+        if let Some(stale) = self.open.take() {
+            // SAFETY: the queries belong to this current context.
+            unsafe { (procs.delete)(2, stale.queries.as_ptr()) };
+        }
+        let mut queries = [0u32; 2];
+        // SAFETY: the context is current; two names are written.
+        unsafe {
+            (procs.generate)(2, queries.as_mut_ptr());
+            (procs.counter)(queries[0], GL_TIMESTAMP);
+        }
+        self.open = Some(Pending {
+            queries,
+            label: label(),
+            draw: self.draws,
+        });
+    }
+    /// Stamp the end of the draw `begin` opened.
+    fn end(&mut self) {
+        let (Some(procs), Some(open)) = (self.procs.as_ref(), self.open.take()) else {
+            return;
+        };
+        // SAFETY: the context is current and the query was generated by `begin`.
+        unsafe { (procs.counter)(open.queries[1], GL_TIMESTAMP) };
+        if let Some(old) = self.ring.push(open) {
+            // SAFETY: as above.
+            unsafe { (procs.delete)(2, old.queries.as_ptr()) };
+        }
+    }
+    /// The context changed under the renderer: its query names mean nothing now.
+    fn forget(&mut self) {
+        self.ring.items.clear();
+        self.open = None;
+    }
+}
+impl Drop for GpuTimer {
+    fn drop(&mut self) {
+        if let Some(procs) = self.procs.as_ref() {
+            for pending in self.ring.items.iter().chain(self.open.iter()) {
+                // SAFETY: dropped with its renderer while the context is current, like its
+                // other GL objects.
+                unsafe { (procs.delete)(2, pending.queries.as_ptr()) };
+            }
+        }
+    }
+}
 /// Pixels for a fader image: uploaded here, or a texture the upload thread already made (the
 /// fader owns it from then on and deletes it).
 pub enum Pixels<'a> {
@@ -602,6 +767,7 @@ pub struct WallpaperFader {
     size: (u32, u32),
     last: (f32, WallpaperBlend),
     delete: GlDelete,
+    gpu: GpuTimer,
     /// Wall milliseconds of `new`: the renderer and canvas, then the two uploads (B0316).
     pub setup_ms: (f64, f64),
 }
@@ -633,8 +799,11 @@ impl WallpaperFader {
             })
         }?;
         let canvas = femtovg::Canvas::new(renderer)?;
+        let mut gpu = GpuTimer::default();
+        gpu.load(display);
         Ok(Self {
             canvas,
+            gpu,
             from: None,
             to: None,
             size,
@@ -746,12 +915,14 @@ impl WallpaperFader {
         }
     }
     /// Draw the blend to the current EGL surface; the caller presents it.
-    pub fn draw(&mut self, blend: f32, mode: WallpaperBlend) {
+    pub fn draw(&mut self, output: &str, blend: f32, mode: WallpaperBlend) {
         self.last = (blend, mode);
+        self.gpu.begin("gpu_fade", || output.to_owned());
         self.canvas.set_size(self.size.0, self.size.1, 1.);
         self.canvas.set_render_target(femtovg::RenderTarget::Screen);
         self.paint(blend, mode);
         self.canvas.flush();
+        self.gpu.end();
     }
     /// Make the last drawn blend the new `from` (at rest the shown image already is) and take
     /// `to`: a retarget with no jump.
@@ -1036,6 +1207,7 @@ pub struct GlRenderer {
     /// B0338: every texture's charge, apart from the views that baked the pixels.
     texture_budget: Option<bead_core::cache::Budget>,
     texture_peak: usize,
+    gpu: GpuTimer,
 }
 /// B0338: one `native-gl-images` budget per renderer: its textures live and die with its canvas.
 const TEXTURE_LIMIT: usize = 64 * bead_core::cache::MIB;
@@ -1656,9 +1828,13 @@ impl Renderer for GlRenderer {
             self.images.clear();
             self.group = None;
             self.group_charge = None;
+            self.gpu.forget();
         }
         self.context = Some(target.context);
         self.upload(target.display)?;
+        self.gpu.load(target.display);
+        self.gpu
+            .begin("gpu_draw", || format!("{}x{}", target.width, target.height));
         let frame = self.cache.frame.as_ref().ok_or("unprepared layer tree")?;
         let canvas = self.canvas.as_mut().ok_or("GL canvas missing")?;
         canvas.set_size(target.width, target.height, 1.);
@@ -1737,6 +1913,7 @@ impl Renderer for GlRenderer {
         let flush_profile = bead_core::profile::Span::new("gl_flush");
         canvas.flush();
         drop(flush_profile);
+        self.gpu.end();
         // A non-fading motion never samples an opacity group. A renderer reused
         // from a fading view must not keep that view's full-size target alive.
         if scene.opacity >= 1. && scene.motion.as_ref().is_some_and(|motion| !motion.fade) {
@@ -1974,5 +2151,37 @@ mod texture_budget_tests {
             "the next open starts at the kept texture"
         );
         drop(kept);
+    }
+}
+
+#[cfg(test)]
+mod gpu_ring_tests {
+    use super::{GPU_RING, Ring};
+
+    #[test]
+    fn results_come_out_in_order_and_only_when_available() {
+        let mut ring = Ring::default();
+        for n in 0..3 {
+            assert_eq!(ring.push(n), None);
+        }
+        // 1 is ready but 0 is not: nothing is emitted out of order.
+        assert_eq!(ring.take_ready(|n| *n != 0), None);
+        assert_eq!(ring.take_ready(|_| true), Some(0));
+        assert_eq!(ring.take_ready(|_| true), Some(1));
+        assert_eq!(ring.take_ready(|n| *n != 2), None);
+        assert_eq!(ring.take_ready(|_| true), Some(2));
+        assert_eq!(ring.take_ready(|_| true), None);
+    }
+
+    #[test]
+    fn a_full_ring_drops_the_oldest_and_counts_it() {
+        let mut ring = Ring::default();
+        for n in 0..GPU_RING {
+            assert_eq!(ring.push(n), None);
+        }
+        assert_eq!(ring.push(100), Some(0));
+        assert_eq!(ring.push(101), Some(1));
+        assert_eq!((ring.items.len(), ring.dropped), (GPU_RING, 2));
+        assert_eq!(ring.take_ready(|_| true), Some(2));
     }
 }
