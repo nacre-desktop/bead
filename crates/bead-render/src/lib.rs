@@ -1329,9 +1329,8 @@ fn skip_font_file(path: &std::path::Path, error: &std::io::Error) {
 fn scene_fonts(scene: &Scene) -> Result<SharedFontSystem> {
     let fresh =
         || load_scene_fonts(scene).map(|fonts| std::sync::Arc::new(std::sync::Mutex::new(fonts)));
-    // Do not cache an implicit system font database whose file set is unknown.
     if scene.font_files.is_empty() {
-        return fresh();
+        return system_fonts();
     }
     let locale = scene_locale();
     let mut stamp = Vec::with_capacity(scene.font_files.len());
@@ -1357,9 +1356,9 @@ fn scene_fonts(scene: &Scene) -> Result<SharedFontSystem> {
             },
         });
     }
-    // Nothing listed is present: system fonts, uncached like an empty list.
+    // Nothing listed is present: the system fonts, like an empty list.
     if stamp.is_empty() {
-        return fresh();
+        return system_fonts();
     }
     let mut index = font_pool_index()
         .lock()
@@ -1406,6 +1405,79 @@ fn scene_fonts(scene: &Scene) -> Result<SharedFontSystem> {
     // Only the renderer/caller owns font data; the bounded index cannot keep it
     // alive after the existing idle/close teardown drops the renderer's pool.
     Ok(fonts)
+}
+/// B0350: the system database, loaded once per process and locale. fontdb maps
+/// font files lazily, so what stays resident is face metadata, not font bytes.
+type SystemStamp = Vec<(std::path::PathBuf, Option<std::time::SystemTime>)>;
+static SYSTEM_FONTS: std::sync::Mutex<Option<(SystemStamp, String, SharedFontSystem)>> =
+    std::sync::Mutex::new(None);
+/// shortcut: fontdb's fontconfig `<dir>` list is not parsed, so a custom one is
+/// not stamped; upgrade when a host lists fonts outside the standard directories.
+fn system_font_dirs() -> Vec<std::path::PathBuf> {
+    let var = |name| std::env::var_os(name).filter(|value| !value.is_empty());
+    let home = var("HOME").map(std::path::PathBuf::from);
+    let mut dirs = vec![
+        var("XDG_DATA_HOME")
+            .map(|data| std::path::PathBuf::from(data).join("fonts"))
+            .or(home.as_ref().map(|home| home.join(".local/share/fonts")))
+            .unwrap_or_default(),
+        home.map(|home| home.join(".fonts")).unwrap_or_default(),
+    ];
+    let data_dirs = var("XDG_DATA_DIRS").unwrap_or_else(|| "/usr/local/share:/usr/share".into());
+    dirs.extend(std::env::split_paths(&data_dirs).map(|dir| dir.join("fonts")));
+    dirs.extend(["/usr/share/fonts".into(), "/usr/local/share/fonts".into()]);
+    dirs
+}
+/// Modification times of the directories and their immediate subdirectories;
+/// an absent directory stamps as `None`.
+fn system_font_stamp(dirs: &[std::path::PathBuf]) -> SystemStamp {
+    let modified = |path: std::path::PathBuf| {
+        let time = std::fs::metadata(&path).and_then(|m| m.modified()).ok();
+        (path, time)
+    };
+    let mut stamp = Vec::new();
+    for dir in dirs {
+        stamp.push(modified(dir.clone()));
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            continue;
+        };
+        let mut subdirs: Vec<_> = entries
+            .flatten()
+            .map(|entry| entry.path())
+            .filter(|path| path.is_dir())
+            .collect();
+        subdirs.sort();
+        stamp.extend(subdirs.into_iter().map(modified));
+    }
+    stamp
+}
+fn cached_system_fonts(
+    stamp: SystemStamp,
+    locale: String,
+    load: impl FnOnce() -> Result<FontSystem>,
+) -> Result<SharedFontSystem> {
+    let mut cached = SYSTEM_FONTS
+        .lock()
+        .unwrap_or_else(|poison| poison.into_inner());
+    if let Some((old_stamp, old_locale, fonts)) = cached.as_ref()
+        && *old_stamp == stamp
+        && *old_locale == locale
+    {
+        return Ok(fonts.clone());
+    }
+    let start = Instant::now();
+    let fonts = std::sync::Arc::new(std::sync::Mutex::new(load()?));
+    bead_core::vprintln!(
+        "PROFILE stage=font_load ms={:.3} files=system faces={}",
+        start.elapsed().as_secs_f64() * 1000.,
+        fonts.lock().map_or(0, |fonts| fonts.db().len())
+    );
+    *cached = Some((stamp, locale, fonts.clone()));
+    Ok(fonts)
+}
+fn system_fonts() -> Result<SharedFontSystem> {
+    let stamp = system_font_stamp(&system_font_dirs());
+    cached_system_fonts(stamp, scene_locale(), || Ok(FontSystem::new()))
 }
 fn load_scene_fonts(scene: &Scene) -> Result<FontSystem> {
     let start = Instant::now();
@@ -4272,6 +4344,39 @@ mod tests {
         // Every file missing: system fonts, no Err.
         std::fs::remove_dir_all(&dir).unwrap();
         assert!(width_ok(&scene));
+    }
+    #[test]
+    fn system_fonts_are_cached_until_the_stamp_changes() {
+        let dir = std::env::temp_dir().join(format!("bead-sysfont-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("sub")).unwrap();
+        let dirs = [dir.clone(), dir.join("absent")];
+        let stamp = system_font_stamp(&dirs);
+        assert_eq!(stamp.len(), 3);
+        assert!(stamp[2].1.is_none());
+        let load = || {
+            let db = fontdb::Database::new();
+            Ok(FontSystem::new_with_locale_and_db("en-US".into(), db))
+        };
+        let first = cached_system_fonts(stamp.clone(), "b0350-test".into(), load).unwrap();
+        let again =
+            cached_system_fonts(stamp.clone(), "b0350-test".into(), || panic!("reloaded")).unwrap();
+        assert!(std::sync::Arc::ptr_eq(&first, &again));
+        let mut changed = stamp;
+        changed[0].1 = Some(std::time::UNIX_EPOCH);
+        let second = cached_system_fonts(changed, "b0350-test".into(), load).unwrap();
+        assert!(!std::sync::Arc::ptr_eq(&first, &second));
+        std::fs::remove_dir_all(&dir).unwrap();
+        // The real system database: an empty file list reuses one Arc, and the
+        // retained cost is reported for the spec (run with --nocapture).
+        let scene = Scene {
+            font_files: Vec::new(),
+            ..font_pool_scene()
+        };
+        let (one, two) = (scene_fonts(&scene).unwrap(), scene_fonts(&scene).unwrap());
+        assert!(std::sync::Arc::ptr_eq(&one, &two));
+        let faces = one.lock().unwrap().db().faces().count();
+        let bytes = faces * std::mem::size_of::<fontdb::FaceInfo>();
+        eprintln!("B0350 system faces={faces} info_bytes={bytes}");
     }
     fn width_ok(scene: &Scene) -> bool {
         text_width(scene, "office café", "IBM Plex Sans", 17.).is_ok() && scene_fonts(scene).is_ok()
