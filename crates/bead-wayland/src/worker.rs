@@ -922,6 +922,7 @@ impl SceneSource for Source {
                             let animation_frame =
                                 matches!(&event, UiEvent::Model(values) if values.is_empty());
                             let reload = matches!(event, UiEvent::Reload);
+                            let data_update = matches!(&event, UiEvent::Model(values) if !values.is_empty());
                             // Detaching or docking gives the panel another look: once it
                             // is accepted, the rasters only the old look used can go.
                             let look_change = matches!(event, UiEvent::PanelDetached(_));
@@ -990,6 +991,34 @@ impl SceneSource for Source {
                             let look_change = look_change
                                 || accepted_resource_revision != Some(resource_revision);
                             bead_core::profile::mark("worker_layout_ready");
+                            // B0351: nobody sees a closed panel's pixels, and its next open re-stages
+                            // anyway. A data update only advances the source: no bake, no host commit.
+                            if idle
+                                && data_update
+                                && fault.is_none()
+                                && !resume
+                                && scene.motion.as_ref().is_some_and(|motion| !motion.open)
+                                && source.validate().is_ok()
+                            {
+                                source.commit();
+                                wakeup(UiEvent::Worker(Arc::new(Packet {
+                                    resume,
+                                    animation_frame,
+                                    phase: Phase::Settled,
+                                    token,
+                                    scene: None,
+                                    mirror: Some(Mirror::read(
+                                        source.as_ref(),
+                                        &cache,
+                                        stack_bytes,
+                                        &mut mirrored,
+                                    )),
+                                    error: None,
+                                    reload,
+                                    wallpaper_palette,
+                                })));
+                                continue;
+                            }
                             needs_trim = true;
                             let bake_profile = bead_core::profile::Span::new("bake");
                             let mut baked = bake(&mut cache, &mut scene, &scales);
@@ -3159,6 +3188,82 @@ mod tests {
         assert!(matches!(&ready, UiEvent::Worker(packet) if matches!(packet.phase, Phase::Ready)));
         assert!(source.stage(ready).unwrap().is_some());
         (source, receiver)
+    }
+    struct ClosedPanel(Arc<AtomicUsize>);
+    impl SceneSource for ClosedPanel {
+        fn watch(
+            &mut self,
+            _: Box<dyn Fn(Result<(), String>) + Send>,
+        ) -> Result<(), Box<dyn Error>> {
+            Ok(())
+        }
+        fn stage(&mut self, _: UiEvent) -> Result<Option<Scene>, Box<dyn Error>> {
+            self.0.fetch_add(1, Ordering::SeqCst);
+            let mut view = scene();
+            view.motion = Some(bead_render::Motion {
+                id: "panel".into(),
+                open: false,
+                duration: 0.3,
+                return_duration: None,
+                return_curve: None,
+                auto_open: false,
+                spring: false,
+                curve: None,
+                edge: bead_core::Edge::Top,
+                slide_distance: None,
+                scale_from: None,
+                fade: false,
+                reveal: false,
+                progress: 0.,
+                parts: Vec::new(),
+                art: None,
+                body: None,
+            });
+            Ok(Some(view))
+        }
+        fn validate(&self) -> Result<(), Box<dyn Error>> {
+            Ok(())
+        }
+        fn state_summary(&self) -> String {
+            String::new()
+        }
+        fn commit(&mut self) -> bool {
+            true
+        }
+        fn error_scene(&mut self, _: String) -> Scene {
+            scene()
+        }
+    }
+    #[test]
+    fn a_closed_panel_data_update_advances_the_source_without_baking() {
+        let stages = Arc::new(AtomicUsize::new(0));
+        let counter = stages.clone();
+        let mut source = Source::new(
+            Box::new(move || Ok(Box::new(ClosedPanel(counter)))),
+            scene(),
+        );
+        let (sender, receiver) = mpsc::channel();
+        source.services(Box::new(move |event| {
+            let _ = sender.send(event);
+        }));
+        let model = || UiEvent::Model([("tick".to_string(), bead_core::Value::Bool(true))].into());
+        let next = || match receiver.recv_timeout(Duration::from_secs(2)).unwrap() {
+            UiEvent::Worker(packet) => packet,
+            _ => panic!("a worker packet"),
+        };
+        source.set_idle(true);
+        for _ in 0..3 {
+            source.stage(model()).unwrap();
+            let packet = next();
+            assert!(matches!(packet.phase, Phase::Settled) && packet.scene.is_none());
+        }
+        assert_eq!(stages.load(Ordering::SeqCst), 3, "the source still ran");
+        // Open: every stage bakes and hands the host its candidate.
+        source.set_idle(false);
+        source.stage(model()).unwrap();
+        let packet = next();
+        assert!(matches!(packet.phase, Phase::Ready));
+        assert!(!packet.scene.as_ref().unwrap().prepared.is_empty());
     }
     #[test]
     fn a_preparation_queued_behind_a_stage_runs_before_that_stage_waits_for_its_ack() {
