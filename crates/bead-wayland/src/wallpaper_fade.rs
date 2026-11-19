@@ -1479,6 +1479,7 @@ impl App {
                     wl_surface,
                     &self.qh,
                     PresentationData {
+                        content: false,
                         surface: wl_surface.clone(),
                         generation: *revision,
                         source_epoch: 0,

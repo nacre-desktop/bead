@@ -991,6 +991,8 @@ struct FrameData {
     source_epoch: u64,
 }
 struct PresentationData {
+    /// A companion frame committed after the open request's first fresh panel scene (B0346).
+    content: bool,
     source_epoch: u64,
     visibility: u64,
     update: u64,

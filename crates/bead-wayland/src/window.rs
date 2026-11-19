@@ -827,6 +827,7 @@ impl App {
                 surface,
                 &self.qh,
                 PresentationData {
+                    content: false,
                     visibility: 0,
                     source_epoch: win.epoch,
                     update: win.ui_serial,

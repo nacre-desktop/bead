@@ -478,6 +478,8 @@ impl App {
         {
             return Ok(());
         }
+        // B0346: the open is timed from here, before an old panel is released.
+        let requested = Instant::now();
         // A missing output must fail before retiring the old worker/surface.
         self.validate_panel_output(output)?;
         let warm = self.select_panel(name)?;
@@ -489,7 +491,7 @@ impl App {
         {
             spec.engages_decorations = anchor.is_none() && original.engages_decorations;
         }
-        self.start_panel_with_source(output, open, warm)
+        self.start_panel_with_source(output, open, warm, requested)
     }
     pub(super) fn open_panel(&mut self, output: Option<&str>) -> Result<(), String> {
         self.request_panel(None, output, true)
@@ -682,13 +684,14 @@ impl App {
         )
     }
     pub(super) fn start_panel(&mut self, output: Option<&str>, open: bool) -> Result<(), String> {
-        self.start_panel_with_source(output, open, None)
+        self.start_panel_with_source(output, open, None, Instant::now())
     }
     fn start_panel_with_source(
         &mut self,
         output: Option<&str>,
         open: bool,
         warm: Option<warm::Entry>,
+        requested: Instant,
     ) -> Result<(), String> {
         bead_core::profile::mark("panel_admission");
         let _busy = bead_core::profile::Busy::new("start_panel");
@@ -699,7 +702,7 @@ impl App {
                 self.panel_runtime.is_some(),
             )
         });
-        let result = self.start_panel_inner(output, open, warm);
+        let result = self.start_panel_inner(output, open, warm, requested);
         if let Some((wall, cpu, retained)) = traced {
             bead_core::profile::trace("start_panel", || {
                 format!(
@@ -718,6 +721,7 @@ impl App {
         output: Option<&str>,
         open: bool,
         warm: Option<warm::Entry>,
+        requested: Instant,
     ) -> Result<(), String> {
         if open && self.panel_name.as_deref() == Some("wallpaper") {
             eprintln!(
@@ -771,9 +775,14 @@ impl App {
         self.panel_close_epoch = self.panel_close_epoch.wrapping_add(1);
         self.panel_target = open;
         self.panel_frame_until = None;
-        if open && std::env::var_os("BEAD_ACCEPTANCE_PANEL_LATENCY").is_some() {
-            self.acceptance_panel_open_started = Some((self.panel_close_epoch, Instant::now()));
-        }
+        self.panel_open = open.then(|| protocols::PanelOpen {
+            epoch: self.panel_close_epoch,
+            requested,
+            cold: self.panel_runtime.is_none() && warm.is_none(),
+            name: self.panel_name.clone().unwrap_or_else(|| "-".into()),
+            content: false,
+            first_frame_seen: false,
+        });
         if open {
             self.panel_gpu_suspended = false;
             // B0338: PANEL_GPU_SUSPENDED's gl_texture_peak covers this open.
@@ -884,6 +893,9 @@ impl App {
                 .and_then(|name| self.warm_sources.take(false, name))
         });
         let reused = warm.is_some();
+        if reused && let Some(open) = &mut self.panel_open {
+            open.cold = false;
+        }
         self.panel_epoch = warm
             .as_ref()
             .map_or_else(|| self.next_epoch(), |entry| entry.epoch);
@@ -1099,11 +1111,6 @@ impl App {
         if self.panel_runtime.is_none() || self.companion.is_none() {
             return;
         }
-        if std::env::var_os("BEAD_ACCEPTANCE_PANEL_LATENCY").is_some()
-            && matches!(&event, UiEvent::PanelVisibility(true))
-        {
-            self.panel_open_latency_started = Some((self.panel_close_epoch, Instant::now()));
-        }
         let (bar, panel, content, kind, keyboard) = (
             self.options.bar,
             self.options.panel,
@@ -1219,6 +1226,7 @@ impl App {
         self.prewarm_attempted = false;
         self.notify_panel_owner(UiEvent::PanelDismissed);
         self.panel_target = false;
+        self.panel_open = None;
         self.edges_panel_changed(true);
         if self
             .options
@@ -1379,6 +1387,7 @@ impl App {
         }
         let retired_panel_epoch = self.panel_epoch;
         self.panel_target = false;
+        self.panel_open = None;
         self.panel_ambient = false;
         self.panel_center = None;
         self.panel_anchor = None;

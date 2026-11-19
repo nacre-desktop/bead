@@ -2283,6 +2283,8 @@ impl App {
                         &wl_surface,
                         qh,
                         PresentationData {
+                            content: s.companion
+                                && self.panel_open.as_ref().is_some_and(|o| o.content),
                             source_epoch,
                             visibility: if s.companion {
                                 self.panel_close_epoch
@@ -3061,6 +3063,8 @@ impl App {
                             &wl_surface,
                             qh,
                             PresentationData {
+                                content: s.companion
+                                    && self.panel_open.as_ref().is_some_and(|o| o.content),
                                 source_epoch: if s.companion { self.panel_epoch } else { 0 },
                                 visibility: if s.companion {
                                     self.panel_close_epoch
@@ -3419,6 +3423,8 @@ impl App {
                         &wl_surface,
                         qh,
                         PresentationData {
+                            content: s.companion
+                                && self.panel_open.as_ref().is_some_and(|o| o.content),
                             source_epoch: if s.companion { self.panel_epoch } else { 0 },
                             visibility: if s.companion {
                                 self.panel_close_epoch
@@ -3580,6 +3586,8 @@ impl App {
                             &wl_surface,
                             qh,
                             PresentationData {
+                                content: s.companion
+                                    && self.panel_open.as_ref().is_some_and(|o| o.content),
                                 source_epoch: if s.companion { self.panel_epoch } else { 0 },
                                 visibility: if s.companion {
                                     self.panel_close_epoch
@@ -3809,6 +3817,7 @@ impl App {
                     &wl_surface,
                     qh,
                     PresentationData {
+                        content: s.companion && self.panel_open.as_ref().is_some_and(|o| o.content),
                         source_epoch: if s.companion { self.panel_epoch } else { 0 },
                         visibility: if s.companion {
                             self.panel_close_epoch

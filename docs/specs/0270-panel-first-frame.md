@@ -2,7 +2,7 @@
 
 Where a panel open spends the time between the click and the first presented frame, and the root
 cause fixed here (the second, a GL transport per panel, is pending a desktop gate). Harness:
-`bead run examples/bar-with-panels` under a private headless sway (two 120 Hz outputs, `BEAD_FRAME_TRACE=1 BEAD_ACCEPTANCE_PANEL_LATENCY=1`,
+`bead run examples/bar-with-panels` under a private headless sway (two 120 Hz outputs, `BEAD_FRAME_TRACE=1 BEAD_ACCEPTANCE_PANEL_LATENCY=1`, which adds `PANEL_FIRST_FRAME_LATENCY`,
 `BEAD_PROFILE_INPUT=1` for stage marks); the status button opens a 488x332 surface whose 120 px body
 reveals with a shadow, the calendar a 260x128 one.
 
@@ -11,7 +11,7 @@ reveals with a shadow, the calendar a 260x128 one.
 |---|---:|---:|
 | worker thread + Luau VM + build + layout 3.8 → bake done (shadow raster dominates) | 10.6 | 6.9 |
 | first commit (UI `prepare` 2.2 → 0.6, paint 0.4) | 14.3 | 8.9 |
-| first frame presented (`PANEL_OPEN_LATENCY`) | 26-34 | 14.3 |
+| first frame presented (`PANEL_FIRST_FRAME_LATENCY`) | 26-34 | 14.3 |
 | reopen: first commit after its configure / presented; calendar cold / reopen | 0.2 / 29-32; 12.9 / 14.0 | 0.5 / 16; 13.0 / 14.5 |
 | open-animation frame gap max (120 Hz; target <= 12) | 16 (reopen 23) | 8.5 |
 
@@ -39,3 +39,5 @@ Idle-footprint rule: keep the context while closed if it costs at most ~10 MiB (
 Kept trim and grace (B0339): a close keeps only the image textures the last frame drew (a texture's `touched` equals the renderer's frame serial); the rest and their `native-gl-images` charges go. The kept renderer lives for `KEPT_GL_GRACE` (300 s). If the panel is then still closed from the same close, the renderer goes (canvas and textures deleted surfaceless), the transport too unless warm mode, a wallpaper run or a GL bar holds it, the heap is trimmed, and the panel takes the CPU snapshot close path (`PANEL_GPU_SUSPENDED shared_context_retained=false kept_renderer=false snapshot=true reason=grace`); the next open is the CPU-first open. dev-1 llvmpipe (grace shortened to 5 s in the measure copy only): closed with the kept context 183 MiB VmRSS / 93 MiB anon / 72 threads, after the grace 139 / 49 / 7, flat over 5 grace cycles; a reopen while kept paints GL in 14 ms with no decode, one after the grace paints its CPU snapshot in 2.0 ms and promotes after the motion (18 frames, the old 284-293 ms gap).
 Cold-open warm-up draw (B0342): the `bead-gl-prepare` worker's shader prewarm (`PreparedTransport::new`, span `panel_shader_prewarm`) also draws once, inside that span, into a 16x16 offscreen image with each femtovg program the panel paint uses (FillColor fill and stencil stroke, the concave fill's Stencil pass, FillImage from an uploaded 16x16 image, the anti-alias-off TextureCopyUnclipped blit; the panel paint draws no gradients or femtovg text), then flushes and runs `glFinish`, so the context's first-draw driver work happens off the main thread. A failed warm-up draw is ignored (its GL error flags are drained); only shader setup errors fail the prewarm. Its canvas, programs and images are still dropped, so the panel's own canvas compiles its programs again on the first GL frame.
 First GL frame spans (B0342, `BEAD_PROFILE_INPUT`): `gl_canvas_new` (the renderer's `OpenGl::new` and `Canvas::new`), `gl_image_upload` (the texture create/update loop of each upload) and `gl_flush` (`canvas.flush()`) split the `gl_draw` mark.
+
+(B0346) Two markers, both from the open request (before an old panel is released), with `name=` the panel (`-` if none) and `cold=` true when no resident panel, retained snapshot or warm source was reused. `PANEL_OPEN_LATENCY name= cold= ms_to_first_content_frame= monotonic_ns=` is always on and ends at the first presented companion frame of that open whose scene is newer than the request (not the fallback, not a retained snapshot). `PANEL_FIRST_FRAME_LATENCY name= cold= ms_to_first_frame=` needs `BEAD_ACCEPTANCE_PANEL_LATENCY` and ends at the first presented frame of any kind.

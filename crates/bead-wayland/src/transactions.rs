@@ -1089,6 +1089,9 @@ impl App {
                 self.ui_serial += 1;
                 if self.processing_panel {
                     self.panel_ui_serial = self.ui_serial;
+                    if let Some(open) = &mut self.panel_open {
+                        open.content = true;
+                    }
                 } else {
                     self.primary_ui_serial = self.ui_serial;
                 }

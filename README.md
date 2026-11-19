@@ -66,7 +66,7 @@ Read the last three rows together: during interaction Bead's daemon does much of
 
 ### Opening panels on a real desktop
 
-Time from the open request to the first content frame, from Nacre's always-on `PANEL_OPEN_LATENCY` lines during real use on 16 Nov 2026 from 08:54 (Bead `4deea4a0` in Nacre `f65c4559e`, `nacre-niri`, a laptop at 2880x1800 scale 1.5 with a 120 Hz external monitor at 3440x1440 scale 1). One frame at 120 Hz is 8.33 ms.
+Time from the open request to the first content frame, from the always-on `PANEL_OPEN_LATENCY` lines (Bead's own, with `cold=`, since B0346; these figures came from Nacre's emitter) during real use on 16 Nov 2026 from 08:54 (Bead `4deea4a0` in Nacre `f65c4559e`, `nacre-niri`, a laptop at 2880x1800 scale 1.5 with a 120 Hz external monitor at 3440x1440 scale 1). One frame at 120 Hz is 8.33 ms.
 
 | Surface | Median | Range | n |
 | --- | ---: | ---: | ---: |

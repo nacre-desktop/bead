@@ -538,6 +538,49 @@ impl App {
     }
 }
 
+/// B0346: one panel open request, timed to the first presented frame with real content.
+pub(super) struct PanelOpen {
+    pub(super) epoch: u64,
+    pub(super) requested: Instant,
+    pub(super) cold: bool,
+    pub(super) name: String,
+    /// A fresh worker scene has been committed since the request; the fallback and a retained
+    /// snapshot are committed before it.
+    pub(super) content: bool,
+    pub(super) first_frame_seen: bool,
+}
+impl PanelOpen {
+    /// Ends the open when a presented frame of its epoch was committed with fresh content.
+    fn take_first_content(open: &mut Option<Self>, epoch: u64, content: bool) -> Option<Self> {
+        let fresh = open.as_ref().is_some_and(|o| o.epoch == epoch && content);
+        if fresh { open.take() } else { None }
+    }
+}
+#[cfg(test)]
+mod panel_open_latency_tests {
+    use super::*;
+    fn open(epoch: u64) -> Option<PanelOpen> {
+        Some(PanelOpen {
+            epoch,
+            requested: Instant::now(),
+            cold: true,
+            name: "p".into(),
+            content: false,
+            first_frame_seen: false,
+        })
+    }
+    #[test]
+    fn only_a_content_frame_of_the_same_epoch_ends_the_open_once() {
+        let mut o = open(7);
+        // The fallback and the retained snapshot are committed before content.
+        assert!(PanelOpen::take_first_content(&mut o, 7, false).is_none());
+        // A content frame of another epoch is not this open's.
+        assert!(PanelOpen::take_first_content(&mut o, 8, true).is_none());
+        assert!(o.is_some());
+        assert!(PanelOpen::take_first_content(&mut o, 7, true).is_some());
+        assert!(PanelOpen::take_first_content(&mut o, 7, true).is_none());
+    }
+}
 impl Dispatch<WpPresentationFeedback, PresentationData> for App {
     fn event(
         state: &mut Self,
@@ -583,19 +626,34 @@ impl Dispatch<WpPresentationFeedback, PresentationData> for App {
             return;
         }
         if matches!(&event, wp_presentation_feedback::Event::Presented { .. })
-            && let Some((open_epoch, started)) = state.acceptance_panel_open_started
-            && open_epoch == data.visibility
             && state
                 .surfaces
                 .iter()
                 .any(|surface| surface.companion && surface.wl_surface() == &data.surface)
+            && let Some(open) = &mut state.panel_open
+            && open.epoch == data.visibility
         {
-            state.acceptance_panel_open_started = None;
-            eprintln!(
-                "PANEL_OPEN_LATENCY name=panel ms_to_first_content_frame={:.3} monotonic_ns={}",
-                started.elapsed().as_secs_f64() * 1000.,
-                super::monotonic_ns()
-            );
+            if !open.first_frame_seen && std::env::var_os("BEAD_ACCEPTANCE_PANEL_LATENCY").is_some()
+            {
+                eprintln!(
+                    "PANEL_FIRST_FRAME_LATENCY name={} cold={} ms_to_first_frame={:.3}",
+                    open.name,
+                    open.cold,
+                    open.requested.elapsed().as_secs_f64() * 1000.
+                );
+            }
+            open.first_frame_seen = true;
+            if let Some(open) =
+                PanelOpen::take_first_content(&mut state.panel_open, data.visibility, data.content)
+            {
+                eprintln!(
+                    "PANEL_OPEN_LATENCY name={} cold={} ms_to_first_content_frame={:.3} monotonic_ns={}",
+                    open.name,
+                    open.cold,
+                    open.requested.elapsed().as_secs_f64() * 1000.,
+                    super::monotonic_ns()
+                );
+            }
         }
         let mut frame_interval_update = None;
         if let Some(s) = state

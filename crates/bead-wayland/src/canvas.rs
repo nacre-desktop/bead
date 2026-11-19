@@ -819,6 +819,7 @@ impl App {
                     layer.wl_surface(),
                     &self.qh,
                     PresentationData {
+                        content: false,
                         source_epoch: canvas.epoch,
                         visibility: 0,
                         update: canvas.scene.resource_revision,
@@ -1134,6 +1135,7 @@ impl App {
                 &surface,
                 &self.qh,
                 PresentationData {
+                    content: false,
                     source_epoch: canvas.epoch,
                     visibility: 0,
                     update: canvas.scene.resource_revision,
