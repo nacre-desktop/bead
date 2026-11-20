@@ -791,6 +791,8 @@ impl SceneSource for Source {
                 let mut queue = VecDeque::new();
                 let mut token = 0;
                 let mut idle = false;
+                // B0363: once an open scene was staged, a close must reach the host before stages settle.
+                let mut opened = false;
                 let mut needs_trim = false;
                 let mut accepted_resource_revision = None;
                 let mut mirrored = Arc::new(Mirror::default());
@@ -995,8 +997,12 @@ impl SceneSource for Source {
                             bead_core::profile::mark("worker_layout_ready");
                             // B0351: nobody sees a closed panel's pixels, and its next open re-stages
                             // anyway. A data update or palette only advances the source:
-                            // no bake, no host commit. The staged scene says closed, even if never opened.
+                            // no bake, no host commit. Closed means the host already holds a closed
+                            // scene (idle), or the panel never opened; the stage that closes an open
+                            // panel still bakes, or the host never runs its close.
+                            opened |= scene.motion.as_ref().is_some_and(|motion| motion.open);
                             if closed_settles
+                                && (idle || !opened)
                                 && fault.is_none()
                                 && !resume
                                 && scene.motion.as_ref().is_some_and(|motion| !motion.open)
@@ -3294,10 +3300,21 @@ mod tests {
             source.stage(UiEvent::Worker(accepted)).unwrap();
             assert!(source.commit());
         }
-        // Reopen after closed settles: the first scene is baked.
+        // B0363: the data update that closes an open panel bakes, so the host runs the close.
         open.store(false, Ordering::SeqCst);
         source.stage(model()).unwrap();
+        let packet = next();
+        assert!(matches!(packet.phase, Phase::Ready));
+        source.stage(UiEvent::Worker(packet)).unwrap();
+        source.commit();
+        let accepted = next();
+        source.stage(UiEvent::Worker(accepted)).unwrap();
+        assert!(source.commit());
+        // Once the host holds the closed scene it says idle, and later updates settle.
+        source.set_idle(true);
+        source.stage(model()).unwrap();
         assert!(matches!(next().phase, Phase::Settled));
+        // Reopen after closed settles: the first scene is baked.
         open.store(true, Ordering::SeqCst);
         source.stage(UiEvent::Relayout).unwrap();
         assert!(matches!(next().phase, Phase::Ready));
