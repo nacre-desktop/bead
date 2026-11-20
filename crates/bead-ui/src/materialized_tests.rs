@@ -935,7 +935,7 @@ fn hover_only_child_fades_in_with_its_group_and_keyboard_focus_without_luau_or_l
 }
 
 #[test]
-fn fade_scales_an_untinted_image_opacity_and_a_shadow_alpha_but_leaves_a_tint_to_its_colour() {
+fn fade_scales_an_image_opacity_tinted_or_not_and_a_shadow_alpha() {
     let rect = bead_render::Rect::new(0., 0., 8., 8.);
     let mut image = Primitive::image(rect, "a.png");
     if let Primitive::Image { opacity, .. } = &mut image {
@@ -949,7 +949,7 @@ fn fade_scales_an_untinted_image_opacity_and_a_shadow_alpha_but_leaves_a_tint_to
     }
     crate::materialized::fade(&mut tinted, 0.5);
     assert!(
-        matches!(tinted, Primitive::Image { tint: Some(c), opacity, .. } if c[3] == 100 && opacity == 1.)
+        matches!(tinted, Primitive::Image { tint: Some(c), opacity, .. } if c[3] == 200 && opacity == 0.5)
     );
     let mut shadow = Primitive::Shadow {
         rect,

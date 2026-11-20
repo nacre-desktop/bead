@@ -8311,6 +8311,33 @@ mod tests {
         assert_eq!(key(1.), key(0.5));
     }
     #[test]
+    fn tinted_image_opacity_keeps_the_raster_and_matches_folding_it_into_the_tint() {
+        let tinted = |opacity, alpha| {
+            let mut scene = image_scene_at(opacity);
+            if let Primitive::Image { tint, .. } = &mut scene.primitives[0] {
+                *tint = Some([10, 20, 30, alpha]);
+            }
+            scene
+        };
+        let key = |opacity| {
+            let mut h = std::collections::hash_map::DefaultHasher::new();
+            hash_primitive(&tinted(opacity, 200).primitives[0], true, &mut h);
+            h.finish()
+        };
+        assert_eq!(key(1.), key(0.5));
+        assert_eq!(key(1.), key(0.2));
+        let mut cache = TreeCache::default();
+        let drawn = render_image(&mut cache, &tinted(0.5, 200));
+        assert_eq!(
+            cache.frame.as_ref().unwrap().items[0].primitive.opacity(),
+            0.5
+        );
+        let folded = render_image(&mut TreeCache::default(), &tinted(1., 100));
+        for (a, b) in drawn.iter().zip(&folded) {
+            assert!(a.abs_diff(*b) <= 1, "{a} vs {b}");
+        }
+    }
+    #[test]
     fn scrolling_retention_tracks_only_the_accepted_visible_window_and_reverses_pixels() {
         for scale in [1., 1.5] {
             for total in [80, 800] {

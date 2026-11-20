@@ -23,7 +23,7 @@ The design review's parked framework asks (0274 "Not built"): hover-only childre
 
 ## Limits
 
-- Untinted images, shadows and graphs inside a hover-only child do not fade (no primitive opacity).
+- Graphs inside a hover-only child do not fade (no alpha). Images, tinted or not, fade through their draw-time opacity (B0361).
 - Clips inside a sliding reflow child stay at its new place; press scale keeps clips (the content only shrinks).
 - Only pinned shadows are cached as whole pixmaps. Any other radius/blur/scale (a status peek's shadow while it moves) is still
   composited per frame from the per-axis template cache (0270); a general whole-shadow cache is not part of this unit.

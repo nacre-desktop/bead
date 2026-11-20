@@ -1258,7 +1258,6 @@ pub(super) fn fade(primitive: &mut Primitive, alpha: f32) {
                 fade(c);
             }
         }
-        Primitive::Image { tint: Some(c), .. } => fade(c),
         Primitive::Image { opacity, .. } => *opacity *= alpha,
         Primitive::Shadow { alpha: a, .. } => *a *= alpha,
         // shortcut: a graph has no alpha and stays drawn, add one if a hover-only graph ever needs it.
