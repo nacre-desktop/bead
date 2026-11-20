@@ -6,6 +6,10 @@
 //! start-up and hot-plug path) is the one place that owns anchors, size and margins.
 //! Wallpaper surfaces are separate and untouched.
 use super::*;
+/// App mode never creates the bar-shaped primary surface, whatever the shell control says.
+pub(super) fn bar_off(app_mode: bool, control: &dyn ShellControl) -> bool {
+    app_mode || !control.bar_enabled()
+}
 impl App {
     pub(super) fn set_hidden(&mut self, hidden: bool) {
         if self.hidden == hidden {
@@ -63,7 +67,7 @@ impl App {
         let Some(control) = self.options.control.clone() else {
             return;
         };
-        self.set_bar_off(!control.bar_enabled());
+        self.set_bar_off(bar_off(self.options.app.is_some(), &*control));
         #[cfg(feature = "native-gl")]
         self.set_wallpaper_warm(control.wallpaper_warm());
         if self.panel_target
@@ -103,5 +107,23 @@ impl App {
                 eprintln!("DECORATION_ERROR {error}");
             }
         }
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    struct BarOn(bool);
+    impl ShellControl for BarOn {
+        fn watch(&self, _: Box<dyn Fn() + Send + Sync>) {}
+        fn bar_enabled(&self) -> bool {
+            self.0
+        }
+    }
+    #[test]
+    fn app_mode_keeps_the_bar_off_whatever_the_control_says() {
+        assert!(bar_off(true, &BarOn(true)));
+        assert!(bar_off(true, &BarOn(false)));
+        assert!(!bar_off(false, &BarOn(true)));
+        assert!(bar_off(false, &BarOn(false)));
     }
 }

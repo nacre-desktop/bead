@@ -543,7 +543,7 @@ impl EdgeState {
     }
     fn tab_outcome(&mut self, outcome: String) {
         if self.tab_outcome != outcome {
-            eprintln!("LIP_TAB {outcome}");
+            bead_core::vprintln!("LIP_TAB {outcome}");
             self.tab_outcome = outcome;
         }
     }

@@ -757,6 +757,8 @@ impl App {
         });
         self.slots.push(g);
         self.in_slot(id, |app| app.become_pearl(native));
+        // The resident no longer has the panel: its lips must redraw their free pill.
+        self.edges_panel_changed(true);
         if let Err(error) = self.sync_all_decorations() {
             eprintln!("DECORATION_ERROR {error}");
         }

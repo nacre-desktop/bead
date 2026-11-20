@@ -655,7 +655,7 @@ pub fn run_runtime(
         control.watch(Box::new(move || {
             let _ = sender.send(UiEvent::ControlChanged);
         }));
-        app.bar_off = !control.bar_enabled();
+        app.bar_off = crate::hidden::bar_off(app.options.app.is_some(), &*control);
         app.decoration_variant = control.decoration_variant();
         #[cfg(feature = "native-gl")]
         app.set_wallpaper_warm(control.wallpaper_warm());
