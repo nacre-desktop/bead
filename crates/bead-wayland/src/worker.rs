@@ -922,7 +922,9 @@ impl SceneSource for Source {
                             let animation_frame =
                                 matches!(&event, UiEvent::Model(values) if values.is_empty());
                             let reload = matches!(event, UiEvent::Reload);
-                            let data_update = matches!(&event, UiEvent::Model(values) if !values.is_empty());
+                            // Not empty-Model frames: a closing animation runs on them.
+                            let closed_settles = matches!(&event, UiEvent::Model(values) if !values.is_empty())
+                                || matches!(&event, UiEvent::WallpaperPalette(_));
                             // Detaching or docking gives the panel another look: once it
                             // is accepted, the rasters only the old look used can go.
                             let look_change = matches!(event, UiEvent::PanelDetached(_));
@@ -992,9 +994,9 @@ impl SceneSource for Source {
                                 || accepted_resource_revision != Some(resource_revision);
                             bead_core::profile::mark("worker_layout_ready");
                             // B0351: nobody sees a closed panel's pixels, and its next open re-stages
-                            // anyway. A data update only advances the source: no bake, no host commit.
-                            if idle
-                                && data_update
+                            // anyway. A data update or palette only advances the source:
+                            // no bake, no host commit. The staged scene says closed, even if never opened.
+                            if closed_settles
                                 && fault.is_none()
                                 && !resume
                                 && scene.motion.as_ref().is_some_and(|motion| !motion.open)
@@ -3189,7 +3191,7 @@ mod tests {
         assert!(source.stage(ready).unwrap().is_some());
         (source, receiver)
     }
-    struct ClosedPanel(Arc<AtomicUsize>);
+    struct ClosedPanel(Arc<AtomicUsize>, Arc<std::sync::atomic::AtomicBool>);
     impl SceneSource for ClosedPanel {
         fn watch(
             &mut self,
@@ -3202,7 +3204,7 @@ mod tests {
             let mut view = scene();
             view.motion = Some(bead_render::Motion {
                 id: "panel".into(),
-                open: false,
+                open: self.1.load(Ordering::SeqCst),
                 duration: 0.3,
                 return_duration: None,
                 return_curve: None,
@@ -3235,11 +3237,12 @@ mod tests {
         }
     }
     #[test]
-    fn a_closed_panel_data_update_advances_the_source_without_baking() {
+    fn a_closed_panel_settles_data_and_palette_but_bakes_animation_frames() {
         let stages = Arc::new(AtomicUsize::new(0));
-        let counter = stages.clone();
+        let open = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let (counter, flag) = (stages.clone(), open.clone());
         let mut source = Source::new(
-            Box::new(move || Ok(Box::new(ClosedPanel(counter)))),
+            Box::new(move || Ok(Box::new(ClosedPanel(counter, flag)))),
             scene(),
         );
         let (sender, receiver) = mpsc::channel();
@@ -3247,23 +3250,57 @@ mod tests {
             let _ = sender.send(event);
         }));
         let model = || UiEvent::Model([("tick".to_string(), bead_core::Value::Bool(true))].into());
+        let events: [fn() -> UiEvent; 3] = [
+            || UiEvent::Model([("tick".to_string(), bead_core::Value::Bool(true))].into()),
+            || UiEvent::Model(Default::default()),
+            || UiEvent::WallpaperPalette([("surface".to_string(), [1, 2, 3, 4])].into()),
+        ];
         let next = || match receiver.recv_timeout(Duration::from_secs(2)).unwrap() {
             UiEvent::Worker(packet) => packet,
             _ => panic!("a worker packet"),
         };
-        source.set_idle(true);
-        for _ in 0..3 {
-            source.stage(model()).unwrap();
+        // Never told idle: the staged scene alone says closed.
+        for n in [0, 2] {
+            source.stage(events[n]()).unwrap();
             let packet = next();
             assert!(matches!(packet.phase, Phase::Settled) && packet.scene.is_none());
+            assert_eq!(
+                packet.wallpaper_palette().is_some(),
+                n == 2,
+                "palette rides the Settled packet"
+            );
         }
-        assert_eq!(stages.load(Ordering::SeqCst), 3, "the source still ran");
-        // Open: every stage bakes and hands the host its candidate.
-        source.set_idle(false);
-        source.stage(model()).unwrap();
+        assert_eq!(stages.load(Ordering::SeqCst), 2, "the source still ran");
+        // An empty-Model frame drives a closing animation: it bakes although the scene is closed.
+        source.stage(events[1]()).unwrap();
         let packet = next();
         assert!(matches!(packet.phase, Phase::Ready));
-        assert!(!packet.scene.as_ref().unwrap().prepared.is_empty());
+        source.stage(UiEvent::Worker(packet)).unwrap();
+        source.commit();
+        let accepted = next();
+        source.stage(UiEvent::Worker(accepted)).unwrap();
+        assert!(source.commit());
+        // Open: every stage bakes and hands the host its candidate.
+        open.store(true, Ordering::SeqCst);
+        for event in events {
+            source.stage(event()).unwrap();
+            let packet = next();
+            assert!(matches!(packet.phase, Phase::Ready));
+            assert!(!packet.scene.as_ref().unwrap().prepared.is_empty());
+            assert!(source.stage(UiEvent::Worker(packet)).unwrap().is_some());
+            source.commit();
+            let accepted = next();
+            assert!(accepted.is_accepted());
+            source.stage(UiEvent::Worker(accepted)).unwrap();
+            assert!(source.commit());
+        }
+        // Reopen after closed settles: the first scene is baked.
+        open.store(false, Ordering::SeqCst);
+        source.stage(model()).unwrap();
+        assert!(matches!(next().phase, Phase::Settled));
+        open.store(true, Ordering::SeqCst);
+        source.stage(UiEvent::Relayout).unwrap();
+        assert!(matches!(next().phase, Phase::Ready));
     }
     #[test]
     fn a_preparation_queued_behind_a_stage_runs_before_that_stage_waits_for_its_ack() {
