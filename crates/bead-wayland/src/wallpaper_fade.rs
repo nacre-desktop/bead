@@ -747,6 +747,7 @@ impl App {
             .any(|s| s.name == output && s.revision == revision);
         if installed {
             self.apply_palette_step(target, true);
+            self.sync_decoration_variant();
         }
     }
 
@@ -837,6 +838,10 @@ impl App {
         let began = std::time::Instant::now();
         let cpu = bead_core::profile::thread_cpu_ns();
         self.apply_palette_step(palette, last);
+        if last {
+            // The deferred variant syncs here even when no ControlChanged follows (B0362).
+            self.sync_decoration_variant();
+        }
         self.palette_step_cpu_ns += bead_core::profile::thread_cpu_ns().saturating_sub(cpu);
         let ms = ms_since(began);
         for run in self

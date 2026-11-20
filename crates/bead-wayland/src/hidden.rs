@@ -100,14 +100,29 @@ impl App {
         if let Err(error) = self.set_dismiss_enabled(dismiss) {
             eprintln!("DISMISS_INPUT_ERROR {error}");
         }
+        self.sync_decoration_variant();
+    }
+    /// Re-rasters the decoration tiles when the control's variant moved (B0362). Inside a palette
+    /// tween (about 1 s at most) every variant change waits for its end, so a tween rasters once.
+    pub(super) fn sync_decoration_variant(&mut self) {
+        let Some(control) = self.options.control.clone() else {
+            return;
+        };
         let variant = control.decoration_variant();
-        if variant != self.decoration_variant {
+        if decoration_resync(
+            self.palette_tween.is_some(),
+            variant,
+            self.decoration_variant,
+        ) {
             self.decoration_variant = variant;
             if let Err(error) = self.sync_all_decorations() {
                 eprintln!("DECORATION_ERROR {error}");
             }
         }
     }
+}
+fn decoration_resync(tween: bool, variant: u64, seen: u64) -> bool {
+    !tween && variant != seen
 }
 #[cfg(test)]
 mod tests {
@@ -125,5 +140,15 @@ mod tests {
         assert!(bar_off(true, &BarOn(false)));
         assert!(!bar_off(false, &BarOn(true)));
         assert!(bar_off(false, &BarOn(false)));
+    }
+    #[test]
+    fn decorations_resync_once_after_the_tween_not_during_it() {
+        // 20 steps bump the variant: nothing syncs mid-tween, one sync at the end.
+        let syncs = (1..=20)
+            .filter(|&v| decoration_resync(v < 20, v, v - 1))
+            .count();
+        assert_eq!(syncs, 1);
+        assert!(!decoration_resync(false, 5, 5), "no change, no sync");
+        assert!(decoration_resync(false, 6, 5), "no tween: at once");
     }
 }
