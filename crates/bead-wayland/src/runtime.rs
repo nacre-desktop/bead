@@ -1414,8 +1414,9 @@ impl App {
                                 &waiting.palette,
                             )
                         });
-                if let Some(waiting) = self.wallpaper_palette_outputs.take() {
-                    self.wallpaper_palette_settled(&waiting.palette, false);
+                if let Some(mut waiting) = self.wallpaper_palette_outputs.take() {
+                    waiting.accepted = false;
+                    self.finish_wallpaper_palette_group(waiting);
                 }
                 for output in retries {
                     self.request_wallpaper(&output);
@@ -1627,6 +1628,20 @@ impl App {
         palette: &std::collections::BTreeMap<String, [u8; 4]>,
         accepted: bool,
     ) {
+        self.settle_wallpaper_palette(palette, accepted, false);
+    }
+
+    /// A palette group that just finished: its surfaces kept their old buffers until now.
+    pub(super) fn finish_wallpaper_palette_group(&mut self, waiting: PendingPalette) {
+        self.settle_wallpaper_palette(&waiting.palette, waiting.accepted, true);
+    }
+
+    fn settle_wallpaper_palette(
+        &mut self,
+        palette: &std::collections::BTreeMap<String, [u8; 4]>,
+        accepted: bool,
+        group: bool,
+    ) {
         if let Some(output) = self.active_output.clone()
             && let Some(waiting) = &mut self.wallpaper_palette_outputs
         {
@@ -1653,7 +1668,10 @@ impl App {
         if matching.is_empty() {
             if accepted && self.wallpaper_palette.as_ref() != Some(palette) {
                 self.restore_wallpaper_palette();
-            } else if accepted {
+            } else if accepted && group {
+                // B0367: only a finished group holds buffers back. A palette tween step drew its
+                // own output's surfaces when its scene was installed; redrawing every surface here
+                // forced unpaced draws of the bars and of an at-rest panel that took no step.
                 self.draw_palette_group();
             }
             return;
@@ -1718,7 +1736,7 @@ impl App {
             return;
         }
         let waiting = self.wallpaper_palette_outputs.take().unwrap();
-        self.wallpaper_palette_settled(&waiting.palette, waiting.accepted);
+        self.finish_wallpaper_palette_group(waiting);
     }
 
     fn draw_palette_group(&mut self) {

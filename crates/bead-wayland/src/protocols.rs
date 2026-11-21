@@ -822,7 +822,7 @@ impl OutputHandler for App {
             false
         };
         if finish_palette && let Some(waiting) = self.wallpaper_palette_outputs.take() {
-            self.wallpaper_palette_settled(&waiting.palette, waiting.accepted);
+            self.finish_wallpaper_palette_group(waiting);
         }
         if self.panel_output.as_ref() == Some(&output) {
             self.release_panel();
