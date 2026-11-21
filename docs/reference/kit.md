@@ -22,7 +22,7 @@
 - `List`, `ListRow`, `Card`, `TextInput`, `Pill`: scrolling, row, container, input, and compact row primitives; `Card { shadow = true }` draws the panel shadow (spec 0280).
 - `Badge`: 15 px count pill anchored to its parent's top-right corner (spec 0264); `text`, `tone` (fill role; ink is its on-colour or `surface`), optional `top`/`right`/`fill`/`color`; hidden for `""` or `"0"`.
 - `Bar`, `Panel`, `Popover`, `Tooltip`: edge-placed containers; `edge`, dimensions and children; `Popover` and `Tooltip` sit `bar_size` plus spacing from that edge. `Peek` is an alias of `Popover`.
-- `CollectionSwitcher`, `CollectionSwitcherMenu`: collection selection; `groups` (`{id, label}`), `current`, `on_toggle` / `on_switch`, `on_rename`, `editing`, `actions`.
+- `CollectionSwitcher`, `CollectionSwitcherMenu`: collection selection; `groups` (`{id, label}`), `current`, `on_toggle` / `on_switch`, `on_rename`, `editing`, `actions`. Every menu row is the kit's 40 px control height; `CollectionSwitcherMenuHeight(props)` returns the menu's natural content height for the same props, so a host can size its popout (B0366).
 - `LevelMeter`, `HelpText`, `Swatch`: meter, helper copy, and color sample primitives.
 - `FormRow`, `ToggleRow`, `ChoiceRow`, `NumberRow`, `TextRow`, `ListEditor`, `InfoRow`, `ChipsRow`, `DeviceRow`: settings/form rows; label, value, enabled, description and row-specific callbacks.
 - `PickerList`: searchable item list; items, field, selection callback.

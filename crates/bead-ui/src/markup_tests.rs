@@ -598,16 +598,22 @@ return ui.Column{id="root",width=600,height=800,gap=8,
     assert!(texts.contains(&"Cancel"));
     assert!(texts.contains(&"Desk name"));
     assert!(texts.contains(&"Set current wallpaper"));
-    for (id, label) in [("save-name", "Save"), ("cancel-name", "Cancel")] {
+    // B0366: every menu row is the kit's 40 px control height, so a body-size label is not clipped.
+    for (id, label) in [
+        ("save-name", "Save"),
+        ("cancel-name", "Cancel"),
+        ("rename-two", "Rename"),
+        ("host-wallpaper", "Set current wallpaper"),
+    ] {
         let node = s
             .current_nodes
             .iter()
             .find(|node| node.id.ends_with(id))
-            .unwrap_or_else(|| panic!("missing {id} editor action"));
+            .unwrap_or_else(|| panic!("missing {id} menu row"));
         let bounds = rect(&node.draw);
         assert!(
-            bounds.w >= 88. && bounds.h >= 36.,
-            "{id} target is too small: {bounds:?}"
+            bounds.w >= 88. && bounds.h == 40.,
+            "{id} target is not a 40 px row: {bounds:?}"
         );
         assert!(
             s.current.primitives.iter().any(|primitive| matches!(
@@ -615,7 +621,9 @@ return ui.Column{id="root",width=600,height=800,gap=8,
                 Primitive::Text { text, rect, .. }
                     if *text == label
                         && rect.x >= bounds.x
+                        && rect.y >= bounds.y
                         && rect.x + rect.w <= bounds.x + bounds.w
+                        && rect.y + rect.h <= bounds.y + bounds.h
             )),
             "{label} label must fit inside its button target: {bounds:?}"
         );
@@ -686,6 +694,54 @@ return ui.Box{id="root",width=400,height=300,
     let scene = s.click(x, y).unwrap().unwrap();
     s.commit(scene);
     assert_eq!(s.stores.get("created"), Some(&Value::Bool(true)));
+}
+
+/// B0366: the height helper matches the menu's laid-out natural height for the same props.
+#[test]
+fn collection_switcher_menu_height_matches_its_natural_layout() {
+    let f = fixture();
+    write_palette(&f);
+    fs::write(
+        f.0.join("ui/behavior.luau"),
+        r#"return {stores={name=""},actions={a=function() end},computed={}}"#,
+    )
+    .unwrap();
+    for editing in ["nil", r#"{value="name",label="Desk name"}"#] {
+        fs::write(
+            f.0.join("ui/main.luau"),
+            format!(
+                r#"local ui=require("bead.ui") local kit=require("bead.kit")
+local p={{id="menu",groups={{{{id="one",label="One"}},{{id="two"}}}},on_switch="a",on_rename="a",on_create="a",
+  on_commit="a",on_cancel="a",editing={editing},actions={{{{id="x",label="Set",action="a"}}}}}}
+return ui.Row{{id="root",width=600,height=800,align="start",
+ kit.CollectionSwitcherMenu(p),
+ kit.Button{{id="probe",width=10,text="p",on_activate=ui.action("a"),height=kit.CollectionSwitcherMenuHeight(p)}}}}
+"#
+            ),
+        )
+        .unwrap();
+        let mut s = f.session();
+        s.entry = "ui/main.luau".into();
+        let scene = s.reload().unwrap();
+        s.commit(scene);
+        let bounds = |suffix: &str| {
+            rect(
+                &s.current_nodes
+                    .iter()
+                    .find(|node| node.id.ends_with(suffix))
+                    .unwrap_or_else(|| panic!("missing {suffix}"))
+                    .draw,
+            )
+        };
+        // The menu spans its first row's top to its last row's bottom.
+        let (first, last) = (bounds("group-one"), bounds("host-x"));
+        assert!(bounds("probe").h > 0.);
+        assert_eq!(
+            bounds("probe").h,
+            last.y + last.h - first.y,
+            "editing={editing}"
+        );
+    }
 }
 
 fn nested_scroll_session(inner_content: &str) -> (Fixture, Session) {

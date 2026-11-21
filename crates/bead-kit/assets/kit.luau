@@ -592,10 +592,8 @@ return function(ui, tokens)
             aria_label=p.switcher_label or current.label or tostring(index),
             on_activate=p.on_toggle and ui.action(p.on_toggle) or nil}
     end
-    -- Generic menu body intended for the host's popout surface. Hosts own any app-specific
-    -- state and can show an editor by setting `editing={value=<store key>,label=<text>}`.
-    -- Supply a bounded `height` and bound `scroll` value to keep long group lists usable.
-    function kit.CollectionSwitcherMenu(p)
+    -- Every row is the kit's 40 px control height, so labels fit at the body text size.
+    local function collection_rows(p)
         local groups=value(p.groups,{})
         local current_id=value(p.current,nil)
         local rows={}
@@ -603,7 +601,7 @@ return function(ui, tokens)
             local label=group.label or tostring(i)
             rows[#rows+1]=kit.ListRow{id="group-"..tostring(group.id),text=label,selected=group.id==current_id,
                 aria_label=label,on_activate=p.on_switch and ui.action(p.on_switch,group.id) or nil}
-            if p.on_rename then rows[#rows+1]=kit.Button{id="rename-"..tostring(group.id),height=32,
+            if p.on_rename then rows[#rows+1]=kit.Button{id="rename-"..tostring(group.id),
                 text=p.rename_label or "Rename",aria_label=(p.rename_label or "Rename").." "..label,
                 on_activate=ui.action(p.on_rename,group.id)} end
         end
@@ -611,18 +609,29 @@ return function(ui, tokens)
             rows[#rows+1]=kit.TextInput{id="group-name",text=ui.bind(p.editing.value),placeholder=p.editing.label,
                 aria_label=p.editing.label,on_activate=ui.action(p.on_commit)}
             rows[#rows+1]=ui.Row{id="editor-actions",width="fill",height=40,shrink=0,gap=tokens.spacing.xs,align="center",justify="end",
-                kit.Button{id="save-name",width=88,height=36,shrink=0,text=p.save_label or "Save",on_activate=ui.action(p.on_commit)},
-                kit.Button{id="cancel-name",width=88,height=36,shrink=0,text=p.cancel_label or "Cancel",on_activate=ui.action(p.on_cancel)}}
-        elseif p.on_create then rows[#rows+1]=kit.Button{id="create",height=36,text=p.create_label or "Create",
+                kit.Button{id="save-name",width=88,shrink=0,text=p.save_label or "Save",on_activate=ui.action(p.on_commit)},
+                kit.Button{id="cancel-name",width=88,shrink=0,text=p.cancel_label or "Cancel",on_activate=ui.action(p.on_cancel)}}
+        elseif p.on_create then rows[#rows+1]=kit.Button{id="create",text=p.create_label or "Create",
             on_activate=ui.action(p.on_create)} end
         for _,action in ipairs(p.actions or {}) do
-            rows[#rows+1]=kit.Button{id="host-"..tostring(action.id),height=36,text=action.label,
+            rows[#rows+1]=kit.Button{id="host-"..tostring(action.id),text=action.label,
                 aria_label=action.label,on_activate=ui.action(action.action,action.arg)}
         end
+        return rows
+    end
+    -- Generic menu body intended for the host's popout surface. Hosts own any app-specific
+    -- state and can show an editor by setting `editing={value=<store key>,label=<text>}`.
+    -- Supply a bounded `height` and bound `scroll` value to keep long group lists usable.
+    function kit.CollectionSwitcherMenu(p)
         local menu={id=p.id,width=p.width or 240,height=p.height,gap=tokens.spacing.xs,scroll=p.scroll}
-        for _,row in ipairs(rows) do table.insert(menu,row) end
+        for _,row in ipairs(collection_rows(p)) do table.insert(menu,row) end
         if p.height then return ui.Scroll(menu) end
         return ui.Column(menu)
+    end
+    -- The menu's natural content height for the same props, so a host can size its popout.
+    function kit.CollectionSwitcherMenuHeight(p)
+        local n=#collection_rows(p)
+        return n*40+math.max(n-1,0)*tokens.spacing.xs
     end
     kit.Peek=kit.Popover
     function kit.Tooltip(p) return kit.Popover(props(p,{width=180,padding=tokens.spacing.sm})) end
