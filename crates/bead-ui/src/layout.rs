@@ -169,6 +169,7 @@ pub const PROPERTIES: &[&str] = &[
     "on_drop",
     "blur",
     "opacity",
+    "scale",
     "start_angle",
     "sweep_angle",
     "stroke_width",
@@ -275,6 +276,9 @@ pub struct ViewSpec {
     /// `Item.opacity`, B0349: no offscreen group, so overlaps show through; nested values multiply).
     /// The post-layout `materialized::apply_opacity` applies it, so layout emits no factor.
     pub opacity: f32,
+    /// `scale` (B0364): this view and its subtree scale about its laid-out centre; nested values
+    /// multiply. Post-layout, like `opacity`: `materialized::place_static` and the patch apply it.
+    pub scale: f32,
     pub start_angle: f32,
     pub sweep_angle: f32,
     pub stroke_width: f32,
@@ -337,30 +341,116 @@ struct Build {
     text_style: crate::text_style::TextStyle,
     /// One clock per build: every `ui.animated` marker samples the same instant.
     now_ns: u64,
+    /// Track points of the view's markers so far, capped at `TRACK_POINTS`.
+    points: std::cell::Cell<usize>,
+}
+impl Build {
+    /// A marker's value at this build's clock; its track points count toward the view's cap.
+    fn sample(&self, marker: &Json, source: &Source) -> Result<f64, Diagnostic> {
+        let marker =
+            Marker::parse(marker).ok_or_else(|| source.error("invalid animation marker"))?;
+        let points = self.points.get() + marker.points();
+        if points > TRACK_POINTS {
+            return Err(source.error(format!(
+                "a view's animation tracks carry more than {TRACK_POINTS} points"
+            )));
+        }
+        self.points.set(points);
+        Ok(marker.sample(self.now_ns))
+    }
+}
+/// Most keyframe points all the tracks of one view may carry (B0364).
+pub(crate) const TRACK_POINTS: usize = 32768;
+#[cfg(test)]
+thread_local! {
+    /// A test's fixed marker clock for both the layout and the patch.
+    pub(crate) static PINNED_CLOCK: std::cell::Cell<Option<u64>> =
+        const { std::cell::Cell::new(None) };
+}
+/// `clock`, unless a test pinned the marker clock.
+pub(crate) fn marker_clock(clock: u64) -> u64 {
+    #[cfg(test)]
+    let clock = PINNED_CLOCK.get().unwrap_or(clock);
+    clock
 }
 /// The `ui.animated` marker inside a property value, if it is one.
 pub(crate) fn marker(value: &Json) -> Option<&Json> {
     value.get("__animate")
 }
-/// Whether the marker's motion still runs at `now_ns`.
-pub(crate) fn marker_active(marker: &Json, now_ns: u64) -> bool {
-    let start = marker.get("start").and_then(Json::as_u64).unwrap_or(0);
-    let duration = marker.get("duration").and_then(Json::as_f64).unwrap_or(0.);
-    marker.get("loop").and_then(Json::as_bool) == Some(true)
-        || now_ns < start.saturating_add((duration * 1e9) as u64)
+/// A `ui.animated` marker parsed once (B0364): the driver's motion and, for a track, `keys`
+/// (strictly increasing driver values) with one of `values` each, 2..=128 of them.
+pub(crate) struct Marker {
+    from: f64,
+    to: f64,
+    start: u64,
+    duration: f64,
+    curve: bead_core::animation::Curve,
+    looping: bool,
+    track: Option<Vec<[f64; 2]>>,
 }
-/// The marker's value at `now_ns`; `None` when it is malformed.
-pub(crate) fn sample(marker: &Json, now_ns: u64) -> Option<f64> {
-    let number = |key: &str| marker.get(key).and_then(Json::as_f64);
-    let (from, to, duration) = (number("from")?, number("to")?, number("duration")?);
-    let start = marker.get("start").and_then(Json::as_u64)?;
-    let curve = bead_core::animation::Curve::parse(marker.get("curve")?.as_str()?)?;
-    let mut t = now_ns.saturating_sub(start) as f64 / (duration.max(1e-9) * 1e9);
-    if marker.get("loop").and_then(Json::as_bool) == Some(true) {
-        t = t.rem_euclid(2.);
-        t = if t > 1. { 2. - t } else { t };
+impl Marker {
+    /// `None` when the marker or its track is malformed.
+    pub(crate) fn parse(marker: &Json) -> Option<Self> {
+        let number = |key: &str| marker.get(key).and_then(Json::as_f64);
+        let list = |key: &str| marker.get(key)?.as_array();
+        let track = if marker.get("keys").is_none() {
+            None
+        } else {
+            let (keys, values) = (list("keys")?, list("values")?);
+            let track = keys
+                .iter()
+                .zip(values)
+                .map(|(k, v)| Some([k.as_f64()?, v.as_f64()?]))
+                .collect::<Option<Vec<_>>>()?;
+            // JSON numbers are always finite (non-finite ones serialise as null).
+            if keys.len() != values.len()
+                || !(2..=128).contains(&keys.len())
+                || track.windows(2).any(|w| w[0][0] >= w[1][0])
+            {
+                return None;
+            }
+            Some(track)
+        };
+        Some(Self {
+            from: number("from")?,
+            to: number("to")?,
+            start: marker.get("start").and_then(Json::as_u64)?,
+            duration: number("duration")?,
+            curve: bead_core::animation::Curve::parse(marker.get("curve")?.as_str()?)?,
+            looping: marker.get("loop").and_then(Json::as_bool) == Some(true),
+            track,
+        })
     }
-    Some(from + (to - from) * f64::from(curve.ease(t.clamp(0., 1.) as f32)))
+    /// The value at `now_ns`: the driver's eased sample, mapped piecewise-linearly through the
+    /// track and clamped to its first and last values. Layout and patch share this one sampler.
+    pub(crate) fn sample(&self, now_ns: u64) -> f64 {
+        let mut t = now_ns.saturating_sub(self.start) as f64 / (self.duration.max(1e-9) * 1e9);
+        if self.looping {
+            t = t.rem_euclid(2.);
+            t = if t > 1. { 2. - t } else { t };
+        }
+        let d =
+            self.from + (self.to - self.from) * f64::from(self.curve.ease(t.clamp(0., 1.) as f32));
+        let Some(track) = &self.track else {
+            return d;
+        };
+        match track.partition_point(|[key, _]| *key <= d) {
+            0 => track[0][1],
+            i if i == track.len() => track[i - 1][1],
+            i => {
+                let ([k0, v0], [k1, v1]) = (track[i - 1], track[i]);
+                v0 + (v1 - v0) * (d - k0) / (k1 - k0)
+            }
+        }
+    }
+    /// Whether the driver's motion still runs at `now_ns`.
+    pub(crate) fn active(&self, now_ns: u64) -> bool {
+        self.looping || now_ns < self.start.saturating_add((self.duration * 1e9) as u64)
+    }
+    /// The track's keyframe count (0 for a plain marker).
+    pub(crate) fn points(&self) -> usize {
+        self.track.as_ref().map_or(0, Vec::len)
+    }
 }
 fn number(p: &Props<'_>, name: &str, default: f32, source: &Source) -> Result<f32, Diagnostic> {
     match p.get(name) {
@@ -700,7 +790,7 @@ fn resolve_nested(
     value: &Json,
     resolve: &Resolve<'_>,
     source: &Source,
-    now_ns: u64,
+    host: &Build,
 ) -> Result<Option<Json>, Diagnostic> {
     let Json::Object(object) = value else {
         return Ok(None);
@@ -715,11 +805,9 @@ fn resolve_nested(
             );
             changed = true;
         } else if let Some(marker) = marker(inner) {
-            let value =
-                sample(marker, now_ns).ok_or_else(|| source.error("invalid animation marker"))?;
-            out.insert(key.clone(), Json::from(value));
+            out.insert(key.clone(), Json::from(host.sample(marker, source)?));
             changed = true;
-        } else if let Some(next) = resolve_nested(inner, resolve, source, now_ns)? {
+        } else if let Some(next) = resolve_nested(inner, resolve, source, host)? {
             out.insert(key.clone(), next);
             changed = true;
         }
@@ -760,12 +848,11 @@ impl ViewSpec {
                         serde_json::to_value(resolve(path)?).map_err(|e| raw.source.error(e))?,
                     );
                 } else if let Some(marker) = marker(value) {
-                    let value = sample(marker, host.now_ns)
-                        .ok_or_else(|| raw.source.error("invalid animation marker"))?;
-                    props.resolved.insert(name.clone(), Json::from(value));
+                    props
+                        .resolved
+                        .insert(name.clone(), Json::from(host.sample(marker, &raw.source)?));
                 } else if COLOR_PROPERTIES.contains(&name.as_str())
-                    && let Some(resolved) =
-                        resolve_nested(value, resolve, &raw.source, host.now_ns)?
+                    && let Some(resolved) = resolve_nested(value, resolve, &raw.source, host)?
                 {
                     props.resolved.insert(name.clone(), resolved);
                 }
@@ -805,6 +892,10 @@ impl ViewSpec {
             let opacity = number(p, "opacity", 1., source)?;
             if !(0. ..=1.).contains(&opacity) {
                 return Err(source.error("opacity must be 0..1"));
+            }
+            let scale = number(p, "scale", 1., source)?;
+            if scale <= 0. || scale > 8. {
+                return Err(source.error("scale must be above 0 and at most 8"));
             }
             let text_shadow_blur = number(p, "text_shadow_blur", 0., source)?;
             if !(0. ..=32.).contains(&text_shadow_blur) {
@@ -1269,6 +1360,7 @@ impl ViewSpec {
                 border_width: number(p, "border_width", 0., source)?,
                 blur: number(p, "blur", 0., source)?.clamp(0., 32.),
                 opacity,
+                scale,
                 start_angle,
                 sweep_angle,
                 stroke_width,
@@ -1417,7 +1509,8 @@ impl ViewSpec {
         let host = Build {
             default_family: crate::theme::with_sans_family(str::to_owned),
             text_style: crate::text_style::current(),
-            now_ns: bead_core::animation::build_clock(),
+            now_ns: marker_clock(bead_core::animation::build_clock()),
+            points: Default::default(),
         };
         build(
             raw,

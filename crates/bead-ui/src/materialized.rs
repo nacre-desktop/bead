@@ -8,7 +8,7 @@ use crate::{
     layout::{self, RawNode, ViewSpec, Widget},
 };
 use bead_core::Value;
-use bead_render::{Palette, Primitive, Scene};
+use bead_render::{Palette, Primitive, Rect, Scene};
 use std::{
     collections::{BTreeMap, BTreeSet},
     rc::Rc,
@@ -23,13 +23,9 @@ struct Text {
     muted: [u8; 4],
 }
 struct Scroll {
-    id: String,
+    layer: usize,
     binding: String,
     limit: f64,
-}
-struct ClipRegion {
-    id: String,
-    bounds: bead_render::Rect,
 }
 struct Floating {
     index: usize,
@@ -68,7 +64,7 @@ pub(super) fn patch_hits() -> usize {
 }
 /// A `ui.animated` marker in the view and what its sampled value patches.
 struct Animated {
-    marker: serde_json::Value,
+    marker: layout::Marker,
     kind: Animate,
 }
 enum Animate {
@@ -105,6 +101,8 @@ enum Animate {
     },
     /// `opacity`: the layer's subtree alpha, applied by `apply_opacity` (B0348, B0349).
     Opacity { layer: usize },
+    /// `scale`: the layer's subtree scale about its laid-out centre (B0364).
+    Scale { layer: usize },
     /// Any other property: the cached layout is stale until the motion ends.
     Layout { property: String },
 }
@@ -120,8 +118,9 @@ pub(super) struct Cached {
     /// When the scene was built: a motion finished by then is already at its target.
     built_ns: u64,
     animated: Vec<Animated>,
-    /// Static `opacity` of the views without a marker (layer, factor).
+    /// Static `opacity` and `scale` of the views without a marker (layer, factor).
     opacities: Vec<(usize, f32)>,
+    scales: Vec<(usize, f32)>,
     body_layer: Option<usize>,
     raw: Rc<RawNode>,
     scene: Scene,
@@ -135,14 +134,133 @@ pub(super) struct Cached {
     hover: Vec<Hover>,
     scroll: Vec<Scroll>,
     panel_open: Option<String>,
-    clip_regions: Vec<ClipRegion>,
     floating: Vec<Floating>,
+    /// Built when a translate, scale or scroll can move layers.
+    topology: Topology,
+    _charge: Option<bead_core::cache::Charge>,
+}
+/// The layer tree `Topology::place` follows, fixed until layout changes.
+#[derive(Default)]
+struct Topology {
+    /// Each layer's parent, which precedes it.
     parents: Vec<Option<usize>>,
-    scroll_layers: Vec<Option<usize>>,
-    clip_layers: Vec<Option<usize>>,
+    /// Whether the layer clips its descendants (`clip_children` or a scroll viewport).
+    clips: Vec<bool>,
     primitive_owners: Vec<usize>,
     node_owners: Vec<usize>,
-    _charge: Option<bead_core::cache::Charge>,
+}
+/// A layer's map p -> k*p + o.
+type Map = (f32, [f32; 2]);
+const IDENTITY: Map = (1., [0., 0.]);
+/// A layer's own [scale, dx, dy, the dy its children scroll by] for `Topology::place`.
+const UNMOVED: [f32; 4] = [1., 0., 0., 0.];
+impl Topology {
+    /// `None` when a primitive or node has no layer to follow.
+    fn new(view: &ViewSpec, scene: &Scene, nodes: &[Node], floating: &[Floating]) -> Option<Self> {
+        let layers: BTreeMap<&str, usize> = scene
+            .layers
+            .iter()
+            .enumerate()
+            .map(|(i, l)| (l.id.as_str(), i))
+            .collect();
+        let mut topology = Self {
+            parents: scene
+                .layers
+                .iter()
+                .map(|l| l.parent.as_deref().and_then(|id| layers.get(id).copied()))
+                .collect(),
+            clips: vec![false; scene.layers.len()],
+            primitive_owners: vec![usize::MAX; scene.primitives.len()],
+            node_owners: nodes
+                .iter()
+                .map(|n| layers.get(n.id.as_str()).copied())
+                .collect::<Option<_>>()?,
+        };
+        fn clips(view: &ViewSpec, layers: &BTreeMap<&str, usize>, out: &mut [bool]) {
+            if (view.clip_children || view.scroll.is_some())
+                && let Some(&layer) = layers.get(view.id.as_str())
+            {
+                out[layer] = true;
+            }
+            for child in &view.children {
+                clips(child, layers, out);
+            }
+        }
+        clips(view, &layers, &mut topology.clips);
+        for (owner, layer) in scene.layers.iter().enumerate() {
+            for index in layer.own.clone() {
+                topology.primitive_owners[index] = owner;
+            }
+        }
+        for floating in floating {
+            topology.primitive_owners[floating.index] = *layers.get(floating.node.as_str())?;
+        }
+        let ordered = topology
+            .parents
+            .iter()
+            .enumerate()
+            .all(|(i, p)| p.is_none_or(|p| p < i));
+        (ordered && !topology.primitive_owners.contains(&usize::MAX)).then_some(topology)
+    }
+    /// One pre-order pass (B0364): a layer's map is its parent's, after the parent's scroll, of
+    /// its own scale about its laid-out centre plus its translate delta. Primitives, layer bounds
+    /// and node boxes follow their layer once; clips are rebuilt below a clipping layer that moved.
+    fn place(&self, scene: &mut Scene, nodes: &mut [Node], own: &[[f32; 4]]) -> Vec<Map> {
+        let mut maps: Vec<Map> = Vec::with_capacity(own.len());
+        // The clip each layer's children get, and whether it moved.
+        let mut clips: Vec<(Option<Rect>, bool)> = Vec::with_capacity(own.len());
+        for (index, layer) in scene.layers.iter_mut().enumerate() {
+            let [s, dx, dy, _] = own[index];
+            let (_, [x, y]) = about(layer.bounds, s);
+            let (map, (clip, moved)) = match self.parents[index] {
+                Some(p) => {
+                    let (k, [px, py]) = maps[p];
+                    (
+                        (k * s, [k * (x + dx) + px, k * (y + dy + own[p][3]) + py]),
+                        clips[p],
+                    )
+                }
+                None => ((s, [x + dx, y + dy]), (None, false)),
+            };
+            if map != IDENTITY {
+                layer.bounds = map_rect(layer.bounds, map);
+            }
+            clips.push(if self.clips[index] {
+                let bounds = clip.map_or(layer.bounds, |c| c.intersect(layer.bounds));
+                (Some(bounds), moved || map != IDENTITY)
+            } else {
+                (clip, moved)
+            });
+            maps.push(map);
+        }
+        let moved_clip = |owner: usize| self.parents[owner].map(|p| clips[p]).filter(|c| c.1);
+        for (index, primitive) in scene.primitives.iter_mut().enumerate() {
+            let owner = self.primitive_owners[index];
+            affine(primitive, maps[owner]);
+            match moved_clip(owner) {
+                Some((Some(clip), _)) => {
+                    scene.clips.insert(index, clip);
+                }
+                Some((None, _)) => {
+                    scene.clips.remove(&index);
+                }
+                None => {}
+            }
+        }
+        for (node, &owner) in nodes.iter_mut().zip(&self.node_owners) {
+            affine(&mut node.draw, maps[owner]);
+            if let Some((clip, _)) = moved_clip(owner) {
+                node.clip = clip;
+            }
+        }
+        maps
+    }
+    fn bytes(&self) -> usize {
+        self.parents.capacity() * std::mem::size_of::<Option<usize>>()
+            + self.clips.capacity()
+            + (self.primitive_owners.capacity() + self.node_owners.capacity())
+                * std::mem::size_of::<usize>()
+    }
 }
 fn bindings(value: &serde_json::Value, out: &mut BTreeSet<String>) {
     if let Some(name) = value.get("__bind").and_then(|v| v.as_str()) {
@@ -225,9 +343,10 @@ impl Cached {
     ) -> Result<Option<Self>, Diagnostic> {
         let mut cached = Self {
             _charge: None,
-            built_ns: bead_core::animation::build_clock(),
+            built_ns: layout::marker_clock(bead_core::animation::build_clock()),
             animated: vec![],
-            opacities: view_opacities(view, scene),
+            opacities: view_factors(view, scene, |v| v.opacity),
+            scales: view_factors(view, scene, |v| v.scale),
             body_layer: view
                 .body
                 .as_ref()
@@ -243,13 +362,8 @@ impl Cached {
             hover: vec![],
             scroll: vec![],
             panel_open: None,
-            clip_regions: vec![],
             floating: vec![],
-            parents: vec![],
-            scroll_layers: vec![],
-            clip_layers: vec![],
-            primitive_owners: vec![],
-            node_owners: vec![],
+            topology: Topology::default(),
         };
         /// Layer and node positions by view id, built once per cache.
         struct Index<'a> {
@@ -326,7 +440,11 @@ impl Cached {
             let mut props: Vec<_> = raw.props.iter().collect();
             props.sort_unstable_by_key(|(name, _)| *name);
             for (property, value) in props {
+                // Parsed once here and sampled every frame; layout already rejected malformed ones.
                 if let Some(marker) = layout::marker(value) {
+                    let Some(marker) = layout::Marker::parse(marker) else {
+                        return Ok(false);
+                    };
                     let kind = match (property.as_str(), lookup.layers.get(view.id.as_str())) {
                         // A joined box moves its rect with the radius too: rebuild instead.
                         ("radius", _) if view.join_edge.is_none() => Animate::Radius {
@@ -354,17 +472,21 @@ impl Cached {
                             cached.opacities.retain(|(l, _)| *l != layer);
                             Animate::Opacity { layer }
                         }
+                        ("scale", Some(&layer)) => {
+                            cached.scales.retain(|(l, _)| *l != layer);
+                            Animate::Scale { layer }
+                        }
                         _ => Animate::Layout {
                             property: property.clone(),
                         },
                     };
-                    cached.animated.push(Animated {
-                        marker: marker.clone(),
-                        kind,
-                    });
+                    cached.animated.push(Animated { marker, kind });
                     continue;
                 }
                 if let Some(marker) = value.get("alpha").and_then(layout::marker) {
+                    let Some(marker) = layout::Marker::parse(marker) else {
+                        return Ok(false);
+                    };
                     let (index, slot) = match property.as_str() {
                         "fill" => (
                             primitive(|p| matches!(p, Primitive::Rounded { .. })),
@@ -413,10 +535,7 @@ impl Cached {
                             property: property.clone(),
                         },
                     };
-                    cached.animated.push(Animated {
-                        marker: marker.clone(),
-                        kind,
-                    });
+                    cached.animated.push(Animated { marker, kind });
                     continue;
                 }
                 let mut names = BTreeSet::new();
@@ -499,11 +618,11 @@ impl Cached {
         }
         fn scrolls(view: &ViewSpec, scene: &Scene, nodes: &[Node], out: &mut Vec<Scroll>) {
             if let Some(binding) = &view.scroll
-                && scene.layers.iter().any(|layer| layer.id == view.id)
+                && let Some(layer) = scene.layers.iter().position(|layer| layer.id == view.id)
                 && let Some(node) = nodes.iter().find(|node| node.id == view.id)
             {
                 out.push(Scroll {
-                    id: view.id.clone(),
+                    layer,
                     binding: binding.clone(),
                     limit: node.scroll_limit.unwrap_or(0.),
                 });
@@ -512,105 +631,29 @@ impl Cached {
                 scrolls(child, scene, nodes, out);
             }
         }
-        fn clip_regions(view: &ViewSpec, scene: &Scene, out: &mut Vec<ClipRegion>) {
-            if (view.clip_children || view.scroll.is_some())
-                && let Some(layer) = scene.layers.iter().find(|layer| layer.id == view.id)
-            {
-                out.push(ClipRegion {
-                    id: view.id.clone(),
-                    bounds: layer.bounds,
-                });
-            }
-            for child in &view.children {
-                clip_regions(child, scene, out);
-            }
-        }
         scrolls(view, scene, nodes, &mut cached.scroll);
-        clip_regions(view, scene, &mut cached.clip_regions);
         for scroll in &cached.scroll {
             cached
                 .values
                 .insert(scroll.binding.clone(), resolve(&scroll.binding)?);
         }
-        let mut owners = vec![false; scene.primitives.len()];
-        for layer in &scene.layers {
-            for index in layer.own.clone() {
-                if index < owners.len() {
-                    owners[index] = true;
-                }
-            }
-        }
         let focused = resolve("bead.focused").ok().and_then(|value| match value {
             Value::Text(id) => Some(id),
             _ => None,
         });
-        for (index, owned) in owners.iter().enumerate() {
-            if *owned {
-                continue;
-            }
-            let Some(id) = focused.as_deref() else {
-                return Ok(None);
-            };
-            let Some(node) = nodes.iter().find(|node| node.id == id) else {
-                return Ok(None);
-            };
-            let (Primitive::Rounded { rect: frame, .. }, Primitive::Rounded { rect: hit, .. }) =
-                (&scene.primitives[index], &node.draw)
-            else {
-                return Ok(None);
-            };
-            if frame.x != hit.x || frame.y != hit.y || frame.w != hit.w || frame.h != hit.h {
-                return Ok(None);
-            }
-            cached.floating.push(Floating {
-                index,
-                node: id.to_owned(),
-            });
-        }
-        let translated = cached
+        let Some(floating) = floating(scene, nodes, focused.as_deref()) else {
+            return Ok(None);
+        };
+        cached.floating = floating;
+        let moving = cached
             .animated
             .iter()
-            .any(|a| matches!(a.kind, Animate::Translate { .. }));
-        if !cached.scroll.is_empty() || translated {
-            cached.parents = Vec::with_capacity(scene.layers.len());
-            cached.scroll_layers = Vec::with_capacity(scene.layers.len());
-            cached.clip_layers = Vec::with_capacity(scene.layers.len());
-            cached.node_owners = Vec::with_capacity(nodes.len());
-            for layer in &scene.layers {
-                cached.parents.push(
-                    layer
-                        .parent
-                        .as_ref()
-                        .and_then(|id| scene.layers.iter().position(|l| &l.id == id)),
-                );
-                cached
-                    .scroll_layers
-                    .push(cached.scroll.iter().position(|s| s.id == layer.id));
-                cached
-                    .clip_layers
-                    .push(cached.clip_regions.iter().position(|c| c.id == layer.id));
-            }
-            cached.primitive_owners = vec![usize::MAX; scene.primitives.len()];
-            for (owner, layer) in scene.layers.iter().enumerate() {
-                for index in layer.own.clone() {
-                    cached.primitive_owners[index] = owner;
-                }
-            }
-            for floating in &cached.floating {
-                let Some(owner) = scene.layers.iter().position(|l| l.id == floating.node) else {
-                    return Ok(None);
-                };
-                cached.primitive_owners[floating.index] = owner;
-            }
-            for node in nodes {
-                let Some(owner) = scene.layers.iter().position(|l| l.id == node.id) else {
-                    return Ok(None);
-                };
-                cached.node_owners.push(owner);
-            }
-            if cached.primitive_owners.contains(&usize::MAX) {
+            .any(|a| matches!(a.kind, Animate::Translate { .. } | Animate::Scale { .. }));
+        if moving || !cached.scroll.is_empty() || !cached.scales.is_empty() {
+            let Some(topology) = Topology::new(view, scene, nodes, &cached.floating) else {
                 return Ok(None);
-            }
+            };
+            cached.topology = topology;
         }
         for name in cached
             .structural
@@ -623,12 +666,12 @@ impl Cached {
             cached.values.insert(name.to_owned(), resolve(name)?);
         }
         let bytes = layout::raw_bytes(&raw)
-            + (cached.parents.capacity()
-                + cached.scroll_layers.capacity()
-                + cached.clip_layers.capacity())
-                * std::mem::size_of::<Option<usize>>()
-            + (cached.primitive_owners.capacity() + cached.node_owners.capacity())
-                * std::mem::size_of::<usize>()
+            + cached.topology.bytes()
+            + cached
+                .animated
+                .iter()
+                .map(|a| std::mem::size_of::<Animated>() + a.marker.points() * 16)
+                .sum::<usize>()
             + cached
                 .scene
                 .primitives
@@ -694,18 +737,12 @@ impl Cached {
             + cached
                 .scroll
                 .iter()
-                .map(|s| s.id.capacity() + s.binding.capacity() + 96)
+                .map(|s| s.binding.capacity() + 96)
                 .sum::<usize>()
             + cached
                 .panel_open
                 .as_ref()
                 .map_or(0, |open| open.capacity() + 32)
-            + cached
-                .clip_regions
-                .iter()
-                .map(|region| region.id.capacity() + std::mem::size_of::<bead_render::Rect>() + 32)
-                .sum::<usize>();
-        let bytes = bytes
             + cached
                 .floating
                 .iter()
@@ -748,12 +785,10 @@ impl Cached {
             }
             return Ok(None);
         }
-        let now_ns = bead_core::animation::clock_ns();
+        let now_ns = layout::marker_clock(bead_core::animation::clock_ns());
         // A layout-affecting motion still running when this scene was built: relayout (no Luau).
         if let Some(property) = self.animated.iter().find_map(|a| match &a.kind {
-            Animate::Layout { property } if layout::marker_active(&a.marker, self.built_ns) => {
-                Some(property)
-            }
+            Animate::Layout { property } if a.marker.active(self.built_ns) => Some(property),
             _ => None,
         }) {
             if bead_core::profile::enabled() {
@@ -899,10 +934,13 @@ impl Cached {
                 }
             }
         }
+        let mut own = vec![UNMOVED; scene.layers.len()];
+        for &(layer, s) in &self.scales {
+            own[layer][0] = s;
+        }
+        let mut dimmed = vec![];
         for animated in &self.animated {
-            let Some(value) = layout::sample(&animated.marker, now_ns) else {
-                continue;
-            };
+            let value = animated.marker.sample(now_ns);
             match animated.kind {
                 Animate::Radius { rounded, shadow } => {
                     for index in [rounded, shadow].into_iter().flatten() {
@@ -986,117 +1024,32 @@ impl Cached {
                         _ => {}
                     }
                 }
-                Animate::Translate { .. } | Animate::Opacity { .. } | Animate::Layout { .. } => {}
+                Animate::Translate {
+                    layer,
+                    vertical,
+                    base,
+                } => own[layer][1 + usize::from(vertical)] += value as f32 - base,
+                Animate::Scale { layer } => own[layer][0] = (value as f32).clamp(0., 8.),
+                Animate::Opacity { layer } => dimmed.push((layer, value.clamp(0., 1.) as f32)),
+                Animate::Layout { .. } => {}
             }
         }
-        fn translate(primitive: &mut Primitive, dx: f32, dy: f32) {
-            match primitive {
-                Primitive::Arc { rect, .. }
-                | Primitive::Polyline { rect, .. }
-                | Primitive::Rounded { rect, .. }
-                | Primitive::Text { rect, .. }
-                | Primitive::Image { rect, .. }
-                | Primitive::Shadow { rect, .. }
-                | Primitive::Graph { rect, .. } => *rect = rect.translated(dx, dy),
+        for scroll in &self.scroll {
+            if let Some(Value::Number(new)) = changed.get(&scroll.binding) {
+                let old = match self.values.get(&scroll.binding) {
+                    Some(Value::Number(v)) => *v,
+                    _ => 0.,
+                };
+                own[scroll.layer][3] =
+                    old.clamp(0., scroll.limit) as f32 - new.clamp(0., scroll.limit) as f32;
             }
         }
-        let translated = self
-            .animated
-            .iter()
-            .any(|a| matches!(a.kind, Animate::Translate { .. }));
-        if translated || self.scroll.iter().any(|s| changed.contains_key(&s.binding)) {
-            // Ownership and clipping topology are invariant until layout changes.
-            // Follow cached indices instead of rebuilding String maps per frame.
-            let shift = |layer: usize| {
-                let (mut dx, mut dy) = (0., 0.);
-                // A translated view moves its own box and everything below it.
-                let mut at = Some(layer);
-                while let Some(index) = at {
-                    for animated in &self.animated {
-                        if let Animate::Translate {
-                            layer,
-                            vertical,
-                            base,
-                        } = animated.kind
-                            && layer == index
-                        {
-                            let delta = layout::sample(&animated.marker, now_ns)
-                                .map_or(0., |v| v as f32 - base);
-                            if vertical {
-                                dy += delta;
-                            } else {
-                                dx += delta;
-                            }
-                        }
-                    }
-                    at = self.parents[index];
-                }
-                let mut parent = self.parents[layer];
-                while let Some(index) = parent {
-                    if let Some(scroll) = self.scroll_layers[index] {
-                        let scroll = &self.scroll[scroll];
-                        let old = match self.values.get(&scroll.binding) {
-                            Some(Value::Number(v)) => *v,
-                            _ => 0.,
-                        };
-                        let new = match changed.get(&scroll.binding) {
-                            Some(Value::Number(v)) => *v,
-                            _ => old,
-                        };
-                        dy +=
-                            old.clamp(0., scroll.limit) as f32 - new.clamp(0., scroll.limit) as f32;
-                    }
-                    parent = self.parents[index];
-                }
-                (dx, dy)
-            };
-            let clip = |layer: usize| {
-                let mut result = None;
-                let mut parent = self.parents[layer];
-                while let Some(index) = parent {
-                    if let Some(region) = self.clip_layers[index] {
-                        let (dx, dy) = shift(index);
-                        let bounds = self.clip_regions[region].bounds.translated(dx, dy);
-                        result = Some(result.map_or(bounds, |previous: bead_render::Rect| {
-                            previous.intersect(bounds)
-                        }));
-                    }
-                    parent = self.parents[index];
-                }
-                result
-            };
-            for (index, primitive) in scene.primitives.iter_mut().enumerate() {
-                let owner = self.primitive_owners[index];
-                let (dx, dy) = shift(owner);
-                translate(primitive, dx, dy);
-                if let Some(bounds) = clip(owner) {
-                    scene.clips.insert(index, bounds);
-                } else {
-                    scene.clips.remove(&index);
-                }
-            }
-            for (index, layer) in scene.layers.iter_mut().enumerate() {
-                let (dx, dy) = shift(index);
-                layer.bounds = layer.bounds.translated(dx, dy);
-            }
-            for (index, node) in nodes.iter_mut().enumerate() {
-                let owner = self.node_owners[index];
-                let (dx, dy) = shift(owner);
-                translate(&mut node.draw, dx, dy);
-                node.clip = clip(owner);
-            }
-        }
-        // The body's parts and bounds follow whatever the patches above changed.
-        if let Some(motion) = &mut scene.motion
-            && motion.body.is_some()
-        {
-            for (index, original) in &mut motion.parts {
-                *original = scene.primitives[*index].clone();
-            }
-            if let Some(layer) = self.body_layer {
-                motion.body = Some(scene.layers[layer].bounds);
-            }
-        }
+        let maps = if own.iter().any(|o| *o != UNMOVED) {
+            self.topology.place(&mut scene, &mut nodes, &own)
+        } else {
+            vec![]
+        };
+        follow_body(&mut scene, self.body_layer);
         if let (Some(node), Some(ring)) = (focus_target, self.floating.first()) {
             let node = &nodes[node];
             if let Primitive::Rounded { rect, .. } = &mut scene.primitives[ring.index] {
@@ -1129,7 +1082,7 @@ impl Cached {
                         let at = cached_at - usize::from(removed.is_some_and(|r| r < cached_at));
                         let primitive = Primitive::Rounded {
                             rect: scene.layers[layer].bounds,
-                            radius: hover.radius,
+                            radius: hover.radius * maps.get(layer).map_or(1., |map| map.0),
                             fill: if hot { hover.hot.0 } else { hover.idle.0 },
                             border: None,
                             radial: None,
@@ -1142,29 +1095,97 @@ impl Cached {
         }
         // Last, so it also dims a hover box inserted above. shortcut: `motion.parts` keeps the
         // undimmed body of a panel motion, as `Poses::pose` does for a reveal fade.
-        let sampled = self.animated.iter().filter_map(|a| match a.kind {
-            Animate::Opacity { layer } => {
-                layout::sample(&a.marker, now_ns).map(|v| (layer, v.clamp(0., 1.) as f32))
-            }
-            _ => None,
-        });
-        apply_opacity(&mut scene, self.opacities.iter().copied().chain(sampled));
+        apply_opacity(&mut scene, self.opacities.iter().copied().chain(dimmed));
         Ok(Some((scene, nodes)))
     }
 }
-/// The `opacity` of every laid-out view that dims its subtree (layer, factor), the layout's value
-/// (a marker's sample at build time included).
-pub(super) fn view_opacities(view: &ViewSpec, scene: &Scene) -> Vec<(usize, f32)> {
+/// The primitives outside every layer: `None` unless each is the focus ring of `focused`.
+fn floating(scene: &Scene, nodes: &[Node], focused: Option<&str>) -> Option<Vec<Floating>> {
+    let mut owned = vec![false; scene.primitives.len()];
+    for layer in &scene.layers {
+        for index in layer.own.clone() {
+            if index < owned.len() {
+                owned[index] = true;
+            }
+        }
+    }
     let mut out = vec![];
-    if view.opacity < 1.
+    for (index, _) in owned.iter().enumerate().filter(|(_, owned)| !**owned) {
+        let id = focused?;
+        let node = nodes.iter().find(|node| node.id == id)?;
+        let (Primitive::Rounded { rect: frame, .. }, Primitive::Rounded { rect: hit, .. }) =
+            (&scene.primitives[index], &node.draw)
+        else {
+            return None;
+        };
+        if frame.x != hit.x || frame.y != hit.y || frame.w != hit.w || frame.h != hit.h {
+            return None;
+        }
+        out.push(Floating {
+            index,
+            node: id.to_owned(),
+        });
+    }
+    Some(out)
+}
+/// Each laid-out view whose `factor` (its `opacity` or `scale`) is not 1, as (layer, factor): the
+/// layout's value, a marker's sample at build time included.
+pub(super) fn view_factors(
+    view: &ViewSpec,
+    scene: &Scene,
+    factor: fn(&ViewSpec) -> f32,
+) -> Vec<(usize, f32)> {
+    let mut out = vec![];
+    if factor(view) != 1.
         && let Some(layer) = scene.layers.iter().position(|l| l.id == view.id)
     {
-        out.push((layer, view.opacity));
+        out.push((layer, factor(view)));
     }
     for child in &view.children {
-        out.extend(view_opacities(child, scene));
+        out.extend(view_factors(child, scene, factor));
     }
     out
+}
+/// Full layout's static `scale` (B0364), by the patch's own pass: after the cache copied the
+/// unscaled scene and before `apply_opacity`.
+pub(super) fn place_static(
+    view: &ViewSpec,
+    scene: &mut Scene,
+    nodes: &mut [Node],
+    focused: Option<&str>,
+) {
+    let scales = view_factors(view, scene, |v| v.scale);
+    // shortcut: a scene the patch cannot place either (a stray primitive) stays unscaled.
+    let Some(topology) = (!scales.is_empty())
+        .then(|| floating(scene, nodes, focused))
+        .flatten()
+        .and_then(|floating| Topology::new(view, scene, nodes, &floating))
+    else {
+        return;
+    };
+    let mut own = vec![UNMOVED; scene.layers.len()];
+    for (layer, s) in scales {
+        own[layer][0] = s;
+    }
+    topology.place(scene, nodes, &own);
+    let body = view
+        .body
+        .as_ref()
+        .and_then(|b| scene.layers.iter().position(|l| &l.id == b));
+    follow_body(scene, body);
+}
+/// A panel body's parts and bounds follow whatever was patched or placed.
+fn follow_body(scene: &mut Scene, body: Option<usize>) {
+    if let Some(motion) = &mut scene.motion
+        && motion.body.is_some()
+    {
+        for (index, original) in &mut motion.parts {
+            *original = scene.primitives[*index].clone();
+        }
+        if let Some(layer) = body {
+            motion.body = Some(scene.layers[layer].bounds);
+        }
+    }
 }
 /// Multiply the alpha of each layer's own and descendant primitives by its factor.
 pub(super) fn apply_opacity(scene: &mut Scene, factors: impl IntoIterator<Item = (usize, f32)>) {
@@ -1264,21 +1285,21 @@ pub(super) fn fade(primitive: &mut Primitive, alpha: f32) {
         Primitive::Graph { .. } => {}
     }
 }
-/// `primitive` scaled by `s` about the centre of `around` (a shadow keeps its margin).
-fn scale_about(primitive: &mut Primitive, around: bead_render::Rect, s: f32) {
-    let (cx, cy) = (around.x + around.w / 2., around.y + around.h / 2.);
-    let scaled = |r: bead_render::Rect| {
-        bead_render::Rect::new(cx + (r.x - cx) * s, cy + (r.y - cy) * s, r.w * s, r.h * s)
-    };
+/// `primitive` under `map` (B0364): rects, radii and text sizes scale; stroke and border widths,
+/// a shadow's blur margin and an image's bake_size do not.
+fn affine(primitive: &mut Primitive, map: Map) {
+    let k = map.0;
     match primitive {
+        _ if map == IDENTITY => {}
         Primitive::Rounded { rect, radius, .. } | Primitive::Image { rect, radius, .. } => {
-            *rect = scaled(*rect);
-            *radius *= s;
+            *rect = map_rect(*rect, map);
+            *radius *= k;
         }
         Primitive::Text { rect, size, .. } => {
-            *rect = scaled(*rect);
-            *size *= s;
+            *rect = map_rect(*rect, map);
+            *size *= k;
         }
+        // A pure move takes the arm below, so a shadow's rect stays bit-exact.
         Primitive::Shadow {
             rect,
             radius,
@@ -1286,26 +1307,38 @@ fn scale_about(primitive: &mut Primitive, around: bead_render::Rect, s: f32) {
             spread,
             dy,
             ..
-        } => {
+        } if k != 1. => {
             let m = *blur * 3. + *spread;
-            let inner = scaled(bead_render::Rect::new(
+            let inner = Rect::new(
                 rect.x + m,
                 rect.y + m - *dy,
                 rect.w - 2. * m,
                 rect.h - 2. * m,
-            ));
-            *rect = bead_render::Rect::new(
+            );
+            let inner = map_rect(inner, map);
+            *rect = Rect::new(
                 inner.x - m,
                 inner.y - m + *dy,
                 inner.w + 2. * m,
                 inner.h + 2. * m,
             );
-            *radius *= s;
+            *radius *= k;
         }
-        Primitive::Arc { rect, .. }
+        Primitive::Shadow { rect, .. }
+        | Primitive::Arc { rect, .. }
         | Primitive::Polyline { rect, .. }
-        | Primitive::Graph { rect, .. } => *rect = scaled(*rect),
+        | Primitive::Graph { rect, .. } => *rect = map_rect(*rect, map),
     }
+}
+fn map_rect(r: Rect, (k, [x, y]): Map) -> Rect {
+    Rect::new(r.x * k + x, r.y * k + y, r.w * k, r.h * k)
+}
+/// The map that scales by `s` about the centre of `r`.
+fn about(r: Rect, s: f32) -> Map {
+    (
+        s,
+        [(r.x + r.w / 2.) * (1. - s), (r.y + r.h / 2.) * (1. - s)],
+    )
 }
 impl Poses {
     /// Read the poses of a fresh layout; the motions of views that left are dropped.
@@ -1500,7 +1533,7 @@ impl Poses {
                     let s = 1. + (scale - 1.) * amount;
                     if s != 1. {
                         for primitive in &mut scene.primitives[range] {
-                            scale_about(primitive, bounds, s);
+                            affine(primitive, about(bounds, s));
                         }
                     }
                 }

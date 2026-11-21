@@ -1168,3 +1168,313 @@ fn close_on_leave_defaults_to_the_profile_delay_and_an_authored_one_wins() {
         "{authored:?}"
     );
 }
+
+/// B0364: the sampler both the layout and the patch use, tracks included.
+#[test]
+fn track_markers_map_the_driver_through_their_keys_linearly_and_clamp() {
+    use crate::layout::Marker;
+    let marker = |extra: serde_json::Value| {
+        let mut marker = serde_json::json!({"from": 0., "to": 1., "start": 0, "duration": 1.,
+            "curve": "linear", "loop": false});
+        let object = marker.as_object_mut().unwrap();
+        object.extend(extra.as_object().unwrap().clone());
+        Marker::parse(&marker)
+    };
+    let at = |seconds: f64| (seconds * 1e9) as u64;
+    let track = marker(serde_json::json!({"keys": [0.25, 0.5, 0.75], "values": [10, 30, 20.]}))
+        .expect("a track");
+    assert_eq!(track.points(), 3);
+    for (t, value) in [
+        (0.25, 10.),
+        (0.5, 30.),
+        (0.75, 20.),
+        (0.375, 20.),
+        (0.625, 25.),
+        (0., 10.),
+        (0.1, 10.),
+        (0.9, 20.),
+        (1., 20.),
+        (5., 20.),
+    ] {
+        assert_eq!(track.sample(at(t)), value, "t={t}");
+    }
+    // Keys are in the driver's value space, after its curve; a loop ping-pongs the driver.
+    let eased = marker(
+        serde_json::json!({"from": 2., "to": 4., "curve": "in-cubic",
+        "keys": [2, 4], "values": [0, 100]}),
+    )
+    .unwrap();
+    let d = 2. + 2. * f64::from(bead_core::animation::Curve::InCubic.ease(0.5));
+    assert_eq!(eased.sample(at(0.5)), (d - 2.) * 50.);
+    let looping =
+        marker(serde_json::json!({"loop": true, "keys": [0, 1], "values": [0, 8]})).unwrap();
+    assert_eq!(looping.sample(at(1.5)), looping.sample(at(0.5)));
+    assert_eq!(looping.sample(at(0.5)), 4.);
+    // Without keys the marker samples its driver, as before.
+    let plain = marker(serde_json::json!({"values": [5, 6]})).unwrap();
+    assert_eq!((plain.points(), plain.sample(at(0.25))), (0, 0.25));
+    let many = |n: usize| (0..n).collect::<Vec<_>>();
+    for bad in [
+        serde_json::json!({"keys": [0, 1], "values": [0]}),
+        serde_json::json!({"keys": [0], "values": [0]}),
+        serde_json::json!({"keys": many(129), "values": many(129)}),
+        serde_json::json!({"keys": [0, 0], "values": [1, 2]}),
+        serde_json::json!({"keys": [1, 0], "values": [1, 2]}),
+        serde_json::json!({"keys": [0, f64::NAN], "values": [1, 2]}),
+        serde_json::json!({"keys": [0, 1], "values": [1, f64::INFINITY]}),
+        serde_json::json!({"keys": [0, 1]}),
+        serde_json::json!({"keys": 1, "values": [1, 2]}),
+    ] {
+        assert!(marker(bad.clone()).is_none(), "{bad}");
+    }
+    assert_eq!(
+        marker(serde_json::json!({"keys": many(128), "values": many(128)}))
+            .unwrap()
+            .points(),
+        128
+    );
+}
+
+/// A hand-built track over a linear 0..1 driver of one second from clock 0 (B0364).
+const TRACK: &str = "local function track(keys, values) return {__animate={from=0,to=1,start=0,\
+duration=1,curve='linear',loop=false,keys=keys,values=values}} end\n";
+/// Equal up to float rounding: a patch moves the cached scene, a layout computes it afresh.
+fn assert_close(a: &serde_json::Value, b: &serde_json::Value, at: &str) {
+    use serde_json::Value as J;
+    match (a, b) {
+        (J::Number(x), J::Number(y)) => {
+            let (x, y) = (x.as_f64().unwrap(), y.as_f64().unwrap());
+            assert!((x - y).abs() < 1e-3, "{at}: {x} != {y}");
+        }
+        (J::Array(x), J::Array(y)) => {
+            assert_eq!(x.len(), y.len(), "{at}");
+            for (i, (x, y)) in x.iter().zip(y).enumerate() {
+                assert_close(x, y, &format!("{at}/{i}"));
+            }
+        }
+        (J::Object(x), J::Object(y)) => {
+            assert!(x.keys().eq(y.keys()), "{at}");
+            for (key, x) in x {
+                assert_close(x, &y[key], &format!("{at}.{key}"));
+            }
+        }
+        _ => assert_eq!(a, b, "{at}"),
+    }
+}
+/// What a frame paints and hit-tests: primitives, clips, node boxes and clips, layer bounds.
+fn frame(session: &Session, scene: &Scene) -> serde_json::Value {
+    let nodes = session.view_nodes();
+    let layers: Vec<_> = scene
+        .layers
+        .iter()
+        .filter(|l| !l.id.starts_with("@scrollbar:"))
+        .map(|l| l.bounds)
+        .collect();
+    let clips: Vec<_> = nodes.iter().map(|n| n.clip).collect();
+    serde_json::to_value((painted(scene, nodes), clips, layers)).unwrap()
+}
+fn pin(seconds: f64) {
+    crate::layout::PINNED_CLOCK.set(Some((seconds * 1e9) as u64));
+}
+
+#[test]
+fn track_patches_equal_a_full_layout_through_nested_scale_translate_clip_and_scroll() {
+    let view = format!(
+        "{TRACK}{}",
+        r#"local ui=require('bead.ui')
+return ui.Column{id='root',width=400,height=300,fill='surface',
+ ui.Box{id='outer',width=240,height=200,fill='primary',radius=8,border_color='onSurface',border_width=2,
+  scale=track({0,0.5,1},{1,1.5,0.5}),translate_x=track({0,1},{0,32}),opacity=track({0,1},{1,0.5}),
+  ui.Box{id='inner',width=120,height=60,fill='surfaceContainer',radius=4,clip_children=true,
+   translate_y=track({0,0.5,1},{0,16,-16}),scale=track({0,1},{1,2}),
+   ui.Text{id='label',text='Hi',width=50,height=20,font_size=12},
+   ui.Box{id='deep',width=40,height=40,fill='onSurface',translate_x=track({0,1},{0,24})}},
+  ui.Scroll{id='list',scroll=ui.bind('scroll'),width=120,height=40,
+   ui.Column{id='rows',width=120,
+    ui.Button{id='row1',text='Row 1',width=120,height=30,on_activate=ui.action('noop')},
+    ui.Button{id='row2',text='Row 2',width=120,height=30,on_activate=ui.action('noop')}}}}}"#
+    );
+    let behavior = "return {stores={scroll=0},actions={noop=function(s) end},computed={}}";
+    pin(0.);
+    let (_fixture, mut session) = interaction_fixture(&view, behavior);
+    let scroll = |offset: f64| BTreeMap::from([("scroll".into(), Value::Number(offset))]);
+    for t in [0.25, 0.5, 0.8, 1.] {
+        pin(0.);
+        rebuilt(&mut session, scroll(0.));
+        pin(t);
+        let hits = patch_hits();
+        let patched = session.update(scroll(10.)).unwrap().unwrap();
+        assert_eq!(patch_hits(), hits + 1, "t={t}: the frame is a patch");
+        session.commit(patched.clone());
+        let patched = frame(&session, &patched);
+        let full = rebuilt(&mut session, scroll(10.));
+        assert_close(&patched, &frame(&session, &full), &format!("t={t}"));
+    }
+    // At t = 1 the subtree is really placed: outer at half size, inner twice its own.
+    let inner = layer_bounds(&session.current, "inner");
+    assert!(
+        (inner.w - 120.).abs() < 1e-3 && (inner.h - 60.).abs() < 1e-3,
+        "{inner:?}"
+    );
+    crate::layout::PINNED_CLOCK.set(None);
+}
+
+#[test]
+fn scale_prop_and_marker_scale_text_and_radius_but_not_strokes() {
+    let view = format!(
+        "{TRACK}{}",
+        r#"local ui=require('bead.ui')
+return ui.Row{id='root',width=300,height=120,fill='surface',
+ ui.Box{id='group',width=100,height=60,fill='primary',radius=6,border_color='onSurface',border_width=2,{{S}}
+  ui.Text{id='label',text='Hi',width=50,height=20,font_size=10},
+  ui.Arc{id='arc',width=20,height=20,stroke_width=3,color='primary'}}}"#
+    );
+    let behavior = "return {stores={},actions={},computed={}}";
+    pin(0.5);
+    let scene = |s: &str| {
+        let (fixture, mut session) = interaction_fixture(&view.replace("{{S}}", s), behavior);
+        let full = session.reload().unwrap();
+        session.commit(full.clone());
+        (fixture, session, full)
+    };
+    let (_plain, _, plain) = scene("");
+    let (fixture, mut session, scaled) = scene("scale=1.5,");
+    let (_sampled, _, sampled) = scene("scale=track({0,1},{1.5,1.5}),");
+    assert_eq!(
+        json(&scaled),
+        json(&sampled),
+        "a static scale equals a marker's"
+    );
+    assert_eq!(json(&scene("scale=1,").2), json(&plain));
+    let group = |scene: &Scene| match scene
+        .primitives
+        .iter()
+        .find(|p| matches!(p, Primitive::Rounded { fill, .. } if fill == &[138, 180, 248, 255]))
+    {
+        Some(Primitive::Rounded {
+            rect,
+            radius,
+            border,
+            ..
+        }) => (*rect, *radius, border.unwrap().1),
+        _ => panic!("no group box"),
+    };
+    let arc = |scene: &Scene| match scene
+        .primitives
+        .iter()
+        .find(|p| matches!(p, Primitive::Arc { .. }))
+    {
+        Some(Primitive::Arc {
+            rect, stroke_width, ..
+        }) => (*rect, *stroke_width),
+        _ => panic!("no arc"),
+    };
+    let ((rect, radius, border), (box_rect, ..)) = (group(&scaled), group(&plain));
+    assert_eq!((rect.w, rect.h, radius, border), (150., 90., 9., 2.));
+    let centre = |r: Rect| [r.x + r.w / 2., r.y + r.h / 2.];
+    assert_close(
+        &serde_json::json!(centre(rect)),
+        &serde_json::json!(centre(box_rect)),
+        "about the laid-out centre",
+    );
+    assert_eq!(text_of(&scaled, "Hi").1, 15.);
+    assert_eq!((arc(&scaled).0.w, arc(&scaled).1), (30., 3.));
+    // The patch of a statically scaled view lands on the same scene.
+    let hits = patch_hits();
+    let patched = session.relayout().unwrap().unwrap();
+    assert_eq!(patch_hits(), hits + 1);
+    assert_close(
+        &serde_json::to_value(&patched.primitives).unwrap(),
+        &serde_json::to_value(&scaled.primitives).unwrap(),
+        "patch",
+    );
+    for bad in ["scale=0,", "scale=9,", "scale=-1,"] {
+        fs::write(fixture.0.join("ui/main.luau"), view.replace("{{S}}", bad)).unwrap();
+        let error = session.reload().err().expect("an invalid scale");
+        assert!(
+            error
+                .message
+                .contains("scale must be above 0 and at most 8"),
+            "{bad}: {error}"
+        );
+    }
+    crate::layout::PINNED_CLOCK.set(None);
+}
+
+#[test]
+fn a_view_over_the_track_point_cap_fails_with_a_diagnostic() {
+    let view = |boxes: usize| {
+        let track = serde_json::json!({"__animate": {"from": 0., "to": 1., "start": 0,
+            "duration": 1., "curve": "linear", "loop": false,
+            "keys": (0..128).collect::<Vec<_>>(), "values": vec![0.; 128]}});
+        let source = serde_json::json!({"file": "ui/main.luau", "line": 1});
+        let child = |i: usize| {
+            serde_json::json!({"kind": "box", "props": {"id": format!("b{i}"), "translate_x": track},
+                "children": [], "source": source, "scope": null})
+        };
+        let raw: crate::layout::RawNode = serde_json::from_value(serde_json::json!({
+            "kind": "column", "props": {"id": "root"},
+            "children": (0..boxes).map(child).collect::<Vec<_>>(), "source": source, "scope": null}))
+        .unwrap();
+        crate::layout::ViewSpec::from_raw(&raw, &|_: &str| Ok(Value::Bool(false))).map(|_| ())
+    };
+    assert!(view(256).is_ok(), "exactly 32768 points fit");
+    let error = view(257).expect_err("over the cap");
+    assert!(error.message.contains("more than 32768 points"), "{error}");
+}
+
+/// B0364 rough timing, not asserted: a ~190-node view with ~130 track markers (16 subtrees,
+/// 9-46 keys) patched per frame. `SCALE=1` adds scale tracks (absent before B0364).
+#[test]
+#[ignore = "timing probe: cargo test --release -p bead-ui --lib patch_timing_probe -- --ignored --nocapture"]
+fn patch_timing_probe() {
+    let scale = std::env::var("SCALE").is_ok_and(|v| v == "1");
+    let view = r#"local ui=require('bead.ui')
+local d=ui.animated('d',ui.resolve_for_check(ui.bind('target')),60,'linear')
+local function track(n,base,amp)
+ local a=d.__animate
+ local m={from=a.from,to=a.to,start=a.start,duration=a.duration,curve=a.curve,loop=a.loop,keys={},values={}}
+ for i=1,n do m.keys[i]=(i-1)/(n-1) m.values[i]=base+amp*math.sin(i) end
+ return {__animate=m}
+end
+local root={id='root',width=800,height=600,fill='surface'}
+for p=1,16 do
+ local n=9+(p*7)%38
+ local pearl={id='p'..p,width=40,height=40,fill='primary',radius=20,
+  translate_x=track(n,0,20),translate_y=track(n,0,30),opacity=track(n,0.5,0.4){{SCALE}}}
+ for c=1,11 do
+  local leaf={width=3,height=3,fill='onSurface'}
+  if c<=5 then leaf.translate_y=track(n,0,4) end
+  pearl[c]=ui.Box(leaf)
+ end
+ root[p]=ui.Box(pearl)
+end
+return ui.Row(root)"#
+        .replace("{{SCALE}}", if scale { ",scale=track(n,1,0.2)" } else { "" });
+    let behavior = "return {stores={target=0},actions={},computed={}}";
+    let (_fixture, mut session) = interaction_fixture(&view, behavior);
+    let scene = session
+        .update(BTreeMap::from([("target".into(), Value::Number(1.))]))
+        .unwrap()
+        .unwrap();
+    session.commit(scene);
+    let generation = session.generation.as_ref().unwrap();
+    let (hits, mut times) = (patch_hits(), vec![]);
+    for _ in 0..400 {
+        let start = std::time::Instant::now();
+        let (scene, _) = generation
+            .materialize(&session.stores, &session.palette, session.viewport)
+            .unwrap();
+        times.push(start.elapsed().as_secs_f64() * 1e6);
+        std::hint::black_box(scene);
+    }
+    let patched = patch_hits() - hits;
+    times.sort_by(f64::total_cmp);
+    println!(
+        "PATCH_PROBE scale={scale} layers={} frames=400 patched={patched} min_us={:.1} median_us={:.1} p90_us={:.1}",
+        session.current.layers.len(),
+        times[0],
+        times[200],
+        times[360]
+    );
+}

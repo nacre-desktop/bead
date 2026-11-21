@@ -1045,9 +1045,15 @@ impl Generation {
                     viewport,
                 )?;
             }
-            // After the cache copy, which keeps the undimmed scene its patches start from.
-            let dimmed = crate::materialized::view_opacities(&view, &result.scene);
-            crate::materialized::apply_opacity(&mut result.scene, dimmed);
+            // After the cache copy, which keeps the unscaled, undimmed scene its patches start from.
+            let focused = match stores.get("bead.focused") {
+                Some(Value::Text(id)) => Some(id.as_str()),
+                _ => None,
+            };
+            let (scene, nodes) = (&mut result.scene, &mut result.nodes);
+            crate::materialized::place_static(&view, scene, nodes, focused);
+            let dimmed = crate::materialized::view_factors(&view, scene, |v| v.opacity);
+            crate::materialized::apply_opacity(scene, dimmed);
             return Ok((result.scene, result.nodes));
         }
         Ok((self.scene(stores, palette, true)?, self.nodes.clone()))
