@@ -1319,6 +1319,46 @@ return ui.Column{id='root',width=400,height=300,fill='surface',
     crate::layout::PINNED_CLOCK.set(None);
 }
 
+/// B0365: the markers `ui.track` builds are what the sampler reads, through layout and the patch.
+#[test]
+fn ui_track_markers_move_and_scale_a_box_through_layout_and_the_patch() {
+    let view = r#"local ui=require('bead.ui')
+local drive=ui.animated('d',1,60,'linear',0)
+return ui.Row{id='root',width=300,height=120,fill='surface',
+ ui.Box{id='b',width=100,height=40,fill='primary',translate_x=ui.track(drive,{0,.5,1},{0,40,100}),scale=ui.track(drive,{0,1},{1,2})}}"#;
+    let (_fixture, mut session) =
+        interaction_fixture(view, "return {stores={},actions={},computed={}}");
+    // The driver runs 60 s from the build, so the live build clock is its start to a few ms (< 0.3 px).
+    let base = bead_core::animation::clock_ns();
+    let primary = |scene: &Scene| match scene
+        .primitives
+        .iter()
+        .find(|p| matches!(p, Primitive::Rounded { fill, .. } if fill == &[138, 180, 248, 255]))
+    {
+        Some(Primitive::Rounded { rect, .. }) => *rect,
+        _ => panic!("no box"),
+    };
+    for d in [0., 0.25, 0.5, 1_f64] {
+        let (tx, scale) = (80. * d.min(0.5) + 120. * (d - 0.5).max(0.), 1. + d);
+        crate::layout::PINNED_CLOCK.set(Some(base + (d * 60. * 1e9) as u64));
+        let hits = patch_hits();
+        let patched = session.relayout().unwrap().unwrap();
+        assert_eq!(patch_hits(), hits + 1, "d={d}: the patch path");
+        session.commit(patched.clone());
+        let full = session.reload().unwrap();
+        session.commit(full.clone());
+        for (path, scene) in [("patch", &patched), ("layout", &full)] {
+            let r = primary(scene);
+            let (w, h) = (100. * scale, 40. * scale);
+            let want = [50. + tx - w / 2., 20. - h / 2., w, h];
+            for (got, want) in [r.x, r.y, r.w, r.h].map(f64::from).into_iter().zip(want) {
+                assert!((got - want).abs() < 0.3, "d={d} {path}: {r:?} vs {want:?}");
+            }
+        }
+    }
+    crate::layout::PINNED_CLOCK.set(None);
+}
+
 #[test]
 fn scale_prop_and_marker_scale_text_and_radius_but_not_strokes() {
     let view = format!(

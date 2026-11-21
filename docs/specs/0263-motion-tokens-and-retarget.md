@@ -268,8 +268,8 @@ Root `Panel{palette_tween = false}` (`Scene::palette_at_rest`) gets only a palet
 
 `ui.track(driver, keys, values)` (B0365) turns a `ui.animated` or `ui.pulse` marker into a track: the marker's `__animate` object (`from`, `to`, `start`, `duration`, `curve`, `loop`) plus `keys` and `values`. `keys` are n in 2..=128 finite, strictly increasing numbers in the driver's value space, `values` n finite numbers. The sampled value is the piecewise-linear interpolation of `values` over `keys` at the driver's sample `d`, clamped to `values[1]` below `keys[1]` and to `values[n]` above `keys[n]`. The driver table is copied, never mutated; `ui.range(driver)` returns its `from, to`.
 
-Tracks ride the patch path (B0364): no Luau, `view_ir` or layout per frame for `translate_x`/`translate_y`, `scale` (B0364), `opacity`, `radius`, `alpha` and `mix`. Any other prop still relayouts, as a plain marker does.
+Tracks ride the patch path (B0364): no Luau, `view_ir` or layout per frame for `translate_x`/`translate_y`, `scale`, `opacity`, `radius`, `alpha` and `mix`. `scale` (0 < scale <= 8) scales a view and its subtree about its laid-out centre after layout (nested scales multiply and compose with translate and scroll; rects, radii, text size and hit boxes scale, stroke and border widths, shadow blur and `bake_size` do not; text re-rasters while it changes). A malformed track is an "invalid animation marker". Any other prop still relayouts, as a plain marker does.
 
 Retarget is unchanged from the sections above: a new binding value rebuilds the view once, and the view emits new tracks over the new `from..to` (the driver retargets from its current value, so the keys the view passes should span that range).
 
-Caps: 128 keys per track and 32768 track points per view.
+Caps: 128 keys per track and 32768 track points per view in total (B0364 enforces both).
