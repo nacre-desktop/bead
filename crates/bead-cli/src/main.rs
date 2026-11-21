@@ -803,6 +803,23 @@ mod tests {
         assert!(error.contains("icon \"no-such-icon\""), "{error}");
         let _ = std::fs::remove_dir_all(p);
     }
+    /// B0365: `bead check` accepts `ui.track` and `ui.range` on a `ui.animated` driver.
+    #[test]
+    fn check_accepts_keyframe_tracks() {
+        let p = folder(&format!("{}\n[layer]\nedge='top'\nsize=36\n", base()));
+        std::fs::write(
+            p.join("view/main.luau"),
+            "local ui=require('bead.ui'); local d=ui.animated('x',1,0.2,'linear',0); local from,to=ui.range(d)\nreturn ui.Box{id='b',width=20,height=20,translate_x=ui.track(d,{from,to},{0,12}),translate_y=ui.track(d,{0,.5,1},{0,-4,0})}\n",
+        )
+        .unwrap();
+        std::fs::write(
+            p.join("view/behavior.luau"),
+            "return {stores={},actions={},computed={}}\n",
+        )
+        .unwrap();
+        App::load(&p).unwrap().check().unwrap();
+        let _ = std::fs::remove_dir_all(p);
+    }
     /// B0268: a bar with an image renders under the CPU renderer. A bare `FolderView`
     /// refused the renderer's CPU preparation, so `bead run` showed "Reload failed".
     #[test]

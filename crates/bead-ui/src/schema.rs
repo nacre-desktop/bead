@@ -19,6 +19,8 @@ pub fn luau() -> String {
         ("animate", "(string,number,number,string)->number"),
         ("animated", "(string,number,number,string,number?)->any"),
         ("pulse", "(string,number,number,number)->any"),
+        ("track", "(any,{number},{number})->any"),
+        ("range", "(any)->(number,number)"),
         ("mix", "(any,any,any)->any"),
         (
             "motion",

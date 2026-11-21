@@ -263,3 +263,13 @@ Every tween takes one step per 60 Hz frame of its duration: `steps = clamp(round
 ### Palette at rest (B0333)
 
 Root `Panel{palette_tween = false}` (`Scene::palette_at_rest`) gets only a palette tween's final palette; a normal open panel keeps every step. `apply_palette_step` takes `last` and notifies the panel when `last || (open && !palette_at_rest)`, so a closed retained panel is re-staged once at the end with no prop; a cut counts as last and a retarget delivers the new tween's final step (the old one never ends). Fenced changes (`prepare_wallpaper_palette_group`, a panel joining a fence) are unchanged, and steps are unfenced, so skipping them leaves B0332's settle rule alone. Skipped steps are counted as ` panel_steps_skipped=N` on WALLPAPER_FADE_FINISH (only when nonzero). Slots and other retained panels get no steps through another path: they take the current palette when started.
+
+### Keyframe tracks (B0364/B0365)
+
+`ui.track(driver, keys, values)` (B0365) turns a `ui.animated` or `ui.pulse` marker into a track: the marker's `__animate` object (`from`, `to`, `start`, `duration`, `curve`, `loop`) plus `keys` and `values`. `keys` are n in 2..=128 finite, strictly increasing numbers in the driver's value space, `values` n finite numbers. The sampled value is the piecewise-linear interpolation of `values` over `keys` at the driver's sample `d`, clamped to `values[1]` below `keys[1]` and to `values[n]` above `keys[n]`. The driver table is copied, never mutated; `ui.range(driver)` returns its `from, to`.
+
+Tracks ride the patch path (B0364): no Luau, `view_ir` or layout per frame for `translate_x`/`translate_y`, `scale` (B0364), `opacity`, `radius`, `alpha` and `mix`. Any other prop still relayouts, as a plain marker does.
+
+Retarget is unchanged from the sections above: a new binding value rebuilds the view once, and the view emits new tracks over the new `from..to` (the driver retargets from its current value, so the keys the view passes should span that range).
+
+Caps: 128 keys per track and 32768 track points per view.

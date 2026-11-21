@@ -109,6 +109,16 @@ ui.Box { id = "badge", width = 16, height = 16, radius = 8,
 
 `ui.animated(key, target, duration, curve[, from])` and `ui.pulse(key, period, lo, hi)` return markers instead of numbers: the view is built once and the paint stage samples the value every frame, so animation frames run no Luau. A marker on `fill`/`color`/`border_color` (through `ui.alpha` or `ui.mix`), `radius`, `join` or `translate_x`/`translate_y` is patched into the cached scene; on any other property (width, height, left, ...) the layout is recomputed without Luau. `ui.animated` retargets from its current value and starts a fresh key at `from` (default: the target); `ui.pulse` loops `lo -> hi -> lo` every `period` until the key leaves the view and holds at `hi` under reduced motion.
 
+`ui.track(driver, keys, values)` returns a marker whose value is a piecewise-linear function of the `driver` (a `ui.animated` or `ui.pulse` marker, not another track): `keys` are 2 to 128 strictly increasing finite numbers in the driver's own value space, `values` one finite number per key, and the sample clamps to the first and last value outside the keys. `ui.range(driver)` returns the driver's `from, to` (for `ui.pulse`, `lo, hi`; for `ui.animated` without `from`, the first build has `from == to`). Tracks patch like the marker they wrap, so several props can follow one driver with no Luau per frame; bad input is a Luau error.
+
+```lua
+-- A dot that moves along a curve as one driver runs 0 -> 1 (from = 0 starts a fresh key at 0).
+local drive = ui.animated("dot", open and 1 or 0, m.duration.open, m.curve.out_cubic, 0)
+ui.Box { width = 8, height = 8, radius = 4, fill = "primary",
+    translate_x = ui.track(drive, { 0, 1 }, { 0, 120 }),
+    translate_y = ui.track(drive, { 0, .5, 1 }, { 0, -30, 0 }) }
+```
+
 ## Interaction poses
 
 Spec [0280](../specs/0280-kit-batch3.md). The snippet paints with `surfaceContainer` and `onSurface`, so use a palette that defines them, like [`examples/kit-gallery/palette.json`](../../examples/kit-gallery/palette.json). These follow the pointer and focus without running Luau or laying out again: the paint stage samples them on every frame, and a view that uses none costs nothing.

@@ -1127,6 +1127,67 @@ fn radial_scene(radial: &str) -> Result<Vec<Primitive>, Diagnostic> {
     session.reload().map(|scene| scene.primitives)
 }
 
+fn track_scene(body: &str) -> Result<Vec<Primitive>, Diagnostic> {
+    let f = fixture();
+    fs::write(
+        f.0.join("ui/main.luau"),
+        format!(
+            "local ui=require('bead.ui')\nlocal function fails(f,msg) local ok,e=pcall(f) assert(not ok and string.find(e,msg,1,true),msg..' / '..tostring(e)) end\n{body}\nreturn ui.Box{{id='b',width=48,height=48,fill='surface'}}"
+        ),
+    )
+    .unwrap();
+    let mut session = f.session();
+    session.entry = "ui/main.luau".into();
+    session.reload().map(|scene| scene.primitives)
+}
+
+#[test]
+fn tracks_carry_the_driver_marker_plus_keys_and_values_and_bad_input_is_an_error() {
+    let ok = r#"
+local d = ui.animated('k', 10, 0.2, 'linear', 2)
+local before = {d.__animate.from, d.__animate.to, d.__animate.start, d.__animate.duration, d.__animate.curve, d.__animate.loop}
+local t = ui.track(d, {2, 6, 10}, {0, 5, -1})
+local a, b = t.__animate, d.__animate
+for _, f in {'from', 'to', 'start', 'duration', 'curve', 'loop'} do assert(a[f] == b[f], f) end
+assert(#a.keys == 3 and a.keys[2] == 6 and #a.values == 3 and a.values[3] == -1)
+assert(b.keys == nil and b.values == nil and before[1] == b.from and before[3] == b.start)
+local from, to = ui.range(d)
+assert(from == 2 and to == 10)
+local plain_from, plain_to = ui.range(ui.animated('j', 7, 0.2, 'linear'))
+assert(plain_from == 7 and plain_to == 7)
+local lo, hi = ui.range(ui.pulse('p', 1, 0.25, 0.75))
+assert(lo == 0.25 and hi == 0.75 and ui.pulse('p2', 1, 0, 1).__animate.loop == true)
+local _ = ui.range(t)
+local pulsed = ui.track(ui.pulse('p3', 1, 0, 1), {0, 1}, {0, 9})
+assert(pulsed.__animate.loop == true and #pulsed.__animate.keys == 2)
+"#;
+    track_scene(ok).unwrap_or_else(|e| panic!("{}", e.message));
+    let wide = |n: usize| {
+        let list: Vec<_> = (1..=n).map(|i| i.to_string()).collect();
+        format!("{{{}}}", list.join(","))
+    };
+    let bad = format!(
+        r#"
+local d = ui.animated('k', 10, 0.2, 'linear')
+fails(function() ui.track(5, {{0, 1}}, {{0, 1}}) end, 'needs a ui.animated or ui.pulse marker')
+fails(function() ui.track({{}}, {{0, 1}}, {{0, 1}}) end, 'needs a ui.animated or ui.pulse marker')
+fails(function() ui.range('x') end, 'needs a ui.animated or ui.pulse marker')
+fails(function() ui.track(ui.track(d, {{0, 1}}, {{0, 1}}), {{0, 1}}, {{0, 1}}) end, 'not already a track')
+fails(function() ui.track(d, {{0, 1}}, {{0, 1, 2}}) end, 'same length')
+fails(function() ui.track(d, {{0}}, {{0}}) end, 'track keys must be an array of 2 to 128')
+fails(function() ui.track(d, {keys129}, {keys129}) end, 'track keys must be an array of 2 to 128')
+assert(#ui.track(d, {keys128}, {keys128}).__animate.values == 128)
+fails(function() ui.track(d, {{2, 1}}, {{0, 1}}) end, 'strictly increasing')
+fails(function() ui.track(d, {{0, 0/0}}, {{0, 1}}) end, 'track keys must be finite')
+fails(function() ui.track(d, {{0, 1}}, {{0, math.huge}}) end, 'track values must be finite')
+fails(function() ui.track(d, {{0, 1}}, {{0, 'x'}}) end, 'track values must be finite')
+"#,
+        keys129 = wide(129),
+        keys128 = wide(128),
+    );
+    track_scene(&bad).unwrap_or_else(|e| panic!("{}", e.message));
+}
+
 #[test]
 fn radial_layers_parse_into_the_box_and_every_bad_value_is_a_markup_error() {
     let layers = |p: &[Primitive]| {

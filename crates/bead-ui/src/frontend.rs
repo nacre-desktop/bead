@@ -201,6 +201,37 @@ return function(ui, constructors, allowed, arrayMarker)
         return {__animate=ui.__pulse(string_arg(key, "pulse key"), number_arg(period, "pulse period"),
             number_arg(lo, "pulse low"), number_arg(hi, "pulse high"))}
     end
+    local function driver_of(value, label)
+        local marker = type(value) == "table" and value.__animate
+        if type(marker) ~= "table" or type(marker.from) ~= "number" then error(label .. " needs a ui.animated or ui.pulse marker", 3) end
+        return marker
+    end
+    local function track_numbers(list, label)
+        local n = type(list) == "table" and #list or 0
+        if n < 2 or n > 128 then error(label .. " must be an array of 2 to 128 numbers", 3) end
+        for i = 1, n do
+            local v = list[i]
+            if type(v) ~= "number" or v ~= v or math.abs(v) == math.huge then error(label .. " must be finite numbers", 3) end
+        end
+        return table.clone(list)
+    end
+    -- Piecewise-linear keyframes over the driver's value; the sampler reads keys and values off the marker.
+    ui.track = function(driver, keys, values)
+        local marker = driver_of(driver, "ui.track")
+        if marker.keys ~= nil then error("ui.track needs a driver that is not already a track", 2) end
+        local out = table.clone(marker)
+        out.keys, out.values = track_numbers(keys, "track keys"), track_numbers(values, "track values")
+        if #out.keys ~= #out.values then error("track keys and values need the same length", 2) end
+        for i = 2, #out.keys do
+            if out.keys[i] <= out.keys[i - 1] then error("track keys must be strictly increasing", 2) end
+        end
+        return {__animate=out}
+    end
+    -- A ui.animated driver's from, to (ui.pulse: lo, hi): the span its tracks' keys should cover.
+    ui.range = function(driver)
+        local marker = driver_of(driver, "ui.range")
+        return marker.from, marker.to
+    end
     table.freeze(ui.motion.duration); table.freeze(ui.motion.panel); table.freeze(ui.motion.curve); table.freeze(ui.motion)
     ui.action = function(name, argument)
         return {name=string_arg(name, "action name"), argument=argument}
