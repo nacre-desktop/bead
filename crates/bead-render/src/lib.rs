@@ -1142,6 +1142,7 @@ pub enum ResourceTarget<'a> {
     #[cfg(feature = "native-gl")]
     Gl {
         display: &'a glutin::display::Display,
+        warm: &'a std::cell::Cell<Option<gl::WarmCanvas>>,
     },
 }
 pub trait Renderer {

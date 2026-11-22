@@ -3279,6 +3279,7 @@ impl App {
                                 width: native_w,
                                 height: native_h,
                                 context: transport.generation,
+                                warm: &transport.warm,
                             }),
                             Damage::full(native_w, native_h),
                         )?;
@@ -3348,6 +3349,7 @@ impl App {
                             width: w as u32,
                             height: h as u32,
                             context: transport.generation,
+                            warm: &transport.warm,
                         }),
                         Damage::full(w as u32, h as u32),
                     );
@@ -3386,6 +3388,7 @@ impl App {
                         width: w as u32,
                         height: h as u32,
                         context: transport.generation,
+                        warm: &transport.warm,
                     }),
                     Damage::full(w as u32, h as u32),
                 )?;

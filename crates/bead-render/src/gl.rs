@@ -36,7 +36,17 @@ pub struct Transport {
     surfaceless: bool,
     /// B0334: process-unique per transport (so per context): a kept canvas names its context.
     pub generation: u64,
+    /// B0376: the prewarm's canvas until the first renderer drawing here claims it.
+    pub warm: std::cell::Cell<Option<WarmCanvas>>,
 }
+/// B0376: the B0342 prewarm's canvas: its programs are compiled and have drawn once on this
+/// context, so the renderer that claims it compiles nothing on its first frame. Never dropped (a
+/// drop deletes GL names in whatever context is current); an unclaimed one goes with its context.
+// shortcut: an unclaimed canvas leaks its small heap; drop it bound if prewarms go unclaimed often.
+pub struct WarmCanvas(std::mem::ManuallyDrop<femtovg::Canvas<femtovg::renderer::OpenGl>>);
+// SAFETY: the canvas moves whole with its context, which is current on no thread while it moves,
+// and no clone of its Rc state lives outside it.
+unsafe impl Send for WarmCanvas {}
 fn next_generation() -> u64 {
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
     NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
@@ -57,6 +67,7 @@ pub struct PreparedTransport {
     pub display: Display,
     swap_damage: DamageSwap,
     surfaceless: bool,
+    warm: Option<WarmCanvas>,
 }
 fn assert_send<T: Send>() {}
 const _: fn() = assert_send::<PreparedTransport>;
@@ -104,9 +115,9 @@ impl PreparedTransport {
                 return Err(Box::new(error));
             }
         };
-        let context = if supports_surfaceless {
+        let (context, warm) = if supports_surfaceless {
             match warm_surfaceless(context, &display) {
-                Ok(context) => context,
+                Ok((context, warm)) => (context, Some(warm)),
                 Err(error) => {
                     drop(config);
                     if let Err(cleanup_error) = unsafe { terminate_exclusive(&display) } {
@@ -118,7 +129,7 @@ impl PreparedTransport {
                 }
             }
         } else {
-            context
+            (context, None)
         };
         Ok(Self {
             context: Some(context),
@@ -126,6 +137,7 @@ impl PreparedTransport {
             display,
             swap_damage,
             surfaceless: supports_surfaceless,
+            warm,
         })
     }
 
@@ -144,6 +156,7 @@ impl PreparedTransport {
             swap_damage: self.swap_damage,
             surfaceless: self.surfaceless,
             generation: next_generation(),
+            warm: self.warm.take().into(),
         }
     }
 
@@ -236,14 +249,17 @@ unsafe fn initialize_display(
     Ok((display, config, swap_damage, supports_surfaceless))
 }
 
-fn warm_surfaceless(context: NotCurrentContext, display: &Display) -> Result<NotCurrentContext> {
+fn warm_surfaceless(
+    context: NotCurrentContext,
+    display: &Display,
+) -> Result<(NotCurrentContext, WarmCanvas)> {
     match context {
         NotCurrentContext::Egl(context) => {
             let current = context.make_current_surfaceless()?;
-            let warmed = (|| -> Result<()> {
+            let warmed = (|| -> Result<_> {
                 let _span = bead_core::profile::Span::new("panel_shader_prewarm");
-                // SAFETY: this worker owns the current context. These temporary
-                // resources are dropped here; no !Send Canvas crosses threads.
+                // SAFETY: this worker owns the current context. The canvas leaves with it
+                // (B0376), as a WarmCanvas.
                 let renderer = unsafe {
                     femtovg::renderer::OpenGl::new_from_function_cstr(|name| {
                         display.get_proc_address(name).cast()
@@ -252,12 +268,11 @@ fn warm_surfaceless(context: NotCurrentContext, display: &Display) -> Result<Not
                 let mut canvas = femtovg::Canvas::new(renderer)?;
                 // B0342: best effort; a failed warm-up draw never costs the GL path.
                 let _ = warm_draw(&mut canvas, display);
-                Ok(())
+                Ok(WarmCanvas(std::mem::ManuallyDrop::new(canvas)))
             })();
             // Unbind even if shader setup failed, before the caller retires EGL.
             let context = current.make_not_current()?;
-            warmed?;
-            Ok(NotCurrentContext::Egl(context))
+            Ok((NotCurrentContext::Egl(context), warmed?))
         }
         #[allow(unreachable_patterns)]
         _ => Err("surfaceless warmup requires EGL".into()),
@@ -349,6 +364,8 @@ pub struct GlTarget<'a> {
     pub height: u32,
     /// The transport's `generation`.
     pub context: u64,
+    /// The transport's `warm`.
+    pub warm: &'a std::cell::Cell<Option<WarmCanvas>>,
 }
 impl Transport {
     /// Release a process-owned EGL display, including the driver's display pool.
@@ -374,6 +391,7 @@ impl Transport {
             swap_damage,
             surfaceless,
             generation: next_generation(),
+            warm: None.into(),
         })
     }
     /// B0317: start the upload thread on a context shared with this transport's. It lives until
@@ -1496,7 +1514,11 @@ impl GlRenderer {
         }
         Ok(())
     }
-    fn upload(&mut self, display: &Display) -> Result<()> {
+    fn upload(
+        &mut self,
+        display: &Display,
+        warm: &std::cell::Cell<Option<WarmCanvas>>,
+    ) -> Result<()> {
         let frame = self.cache.frame.as_ref().ok_or("unprepared layer tree")?;
         for payload in frame.items.iter().filter_map(|item| item.image.as_ref()) {
             if let Some(error) = payload.failure() {
@@ -1519,16 +1541,23 @@ impl GlRenderer {
             return Err(Box::new(crate::tree::ResourcesPending { images: pending }));
         }
 
-        if self.canvas.is_none() {
-            let _span = bead_core::profile::Span::new("gl_canvas_new");
-            // SAFETY: Transport made its retained context current on this thread.
-            let renderer = unsafe {
-                femtovg::renderer::OpenGl::new_from_function_cstr(|name| {
-                    display.get_proc_address(name).cast()
-                })
-            }?;
-            self.canvas = Some(femtovg::Canvas::new(renderer)?);
-        }
+        claim_canvas(
+            &mut self.canvas,
+            || {
+                warm.take()
+                    .map(|WarmCanvas(canvas)| std::mem::ManuallyDrop::into_inner(canvas))
+            },
+            || {
+                let _span = bead_core::profile::Span::new("gl_canvas_new");
+                // SAFETY: Transport made its retained context current on this thread.
+                let renderer = unsafe {
+                    femtovg::renderer::OpenGl::new_from_function_cstr(|name| {
+                        display.get_proc_address(name).cast()
+                    })
+                }?;
+                Ok(femtovg::Canvas::new(renderer)?)
+            },
+        )?;
         let budget = self.texture_budget();
         let frame = self.cache.frame.as_ref().ok_or("unprepared layer tree")?;
         let canvas = self.canvas.as_mut().ok_or("GL canvas missing")?;
@@ -1812,10 +1841,10 @@ impl Renderer for GlRenderer {
     }
     fn stage_resources(&mut self, target: crate::ResourceTarget<'_>) -> Result<()> {
         #[allow(irrefutable_let_patterns)]
-        let crate::ResourceTarget::Gl { display } = target else {
+        let crate::ResourceTarget::Gl { display, warm } = target else {
             return Err("GL resource target missing".into());
         };
-        self.upload(display)?;
+        self.upload(display, warm)?;
         let address = display.get_proc_address(c"glGetError");
         if address.is_null() {
             return Err("missing glGetError".into());
@@ -1857,7 +1886,7 @@ impl Renderer for GlRenderer {
             self.gpu.forget();
         }
         self.context = Some(target.context);
-        self.upload(target.display)?;
+        self.upload(target.display, target.warm)?;
         self.gpu.load(target.display);
         self.gpu
             .begin("gpu_draw", || format!("{}x{}", target.width, target.height));
@@ -1952,6 +1981,21 @@ impl Renderer for GlRenderer {
     }
 }
 
+/// B0376: a renderer's first canvas is its transport's prewarm canvas while that is unclaimed;
+/// only without one does `new` compile the programs on this thread.
+fn claim_canvas<C>(
+    canvas: &mut Option<C>,
+    warm: impl FnOnce() -> Option<C>,
+    new: impl FnOnce() -> Result<C>,
+) -> Result<()> {
+    if canvas.is_none() {
+        *canvas = Some(match warm() {
+            Some(warm) => warm,
+            None => new()?,
+        });
+    }
+    Ok(())
+}
 fn group_size(scene: &Scene, frame: &crate::tree::Frame) -> (u32, u32) {
     (
         (scene.bounds.w * frame.scale).ceil() as u32,
@@ -1995,6 +2039,29 @@ mod group_tests {
                 "{opacity} {fade} {opening} {current}"
             );
         }
+    }
+}
+#[cfg(test)]
+mod warm_canvas_tests {
+    use super::claim_canvas;
+
+    /// B0376: a cold or post-grace open's first frame draws with the prewarm canvas, so the main
+    /// thread compiles no programs; the transport's one warm canvas goes to one renderer.
+    #[test]
+    fn the_first_renderer_draws_with_the_prewarm_canvas_and_compiles_nothing() {
+        let warm = std::cell::Cell::new(Some("prewarm"));
+        let compiled = std::cell::Cell::new(0);
+        let new = || {
+            compiled.set(compiled.get() + 1);
+            Ok("compiled")
+        };
+        let mut first = None;
+        claim_canvas(&mut first, || warm.take(), new).unwrap();
+        claim_canvas(&mut first, || warm.take(), new).unwrap();
+        assert_eq!((first, compiled.get()), (Some("prewarm"), 0));
+        let mut second = None;
+        claim_canvas(&mut second, || warm.take(), new).unwrap();
+        assert_eq!((second, compiled.get()), (Some("compiled"), 1));
     }
 }
 

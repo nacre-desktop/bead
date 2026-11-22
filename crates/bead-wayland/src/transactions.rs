@@ -1027,6 +1027,7 @@ impl App {
                         self.renderer
                             .stage_resources(bead_render::ResourceTarget::Gl {
                                 display: &transport.display,
+                                warm: &transport.warm,
                             })?;
                     }
                     #[cfg(feature = "wgpu")]
