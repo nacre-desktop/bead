@@ -1446,6 +1446,98 @@ return ui.Row{id='root',width=300,height=120,fill='surface',
     crate::layout::PINNED_CLOCK.set(None);
 }
 
+/// B0370: a view whose box moves `to` px at a 30 s pin (the driver runs 60 s), optionally in a memo.
+fn track_view(to: u32, memo: bool) -> String {
+    let b = format!(
+        "ui.Box{{id='b',width=100,height=40,fill='primary',translate_x=ui.track(drive,{{0,1}},{{0,{to}}})}}"
+    );
+    let b = if memo {
+        format!("ui.memo('m',{{}},function() return {b} end)")
+    } else {
+        b
+    };
+    format!(
+        "local ui=require('bead.ui')\nlocal drive=ui.animated('d',1,60,'linear',0)\nlocal _=ui.resolve_for_check(ui.bind('n'))\nreturn ui.Row{{id='root',width=300,height=120,fill='surface',{b}}}"
+    )
+}
+fn box_x(scene: &Scene) -> f32 {
+    match scene
+        .primitives
+        .iter()
+        .find(|p| matches!(p, Primitive::Rounded { fill, .. } if fill == &[138, 180, 248, 255]))
+    {
+        Some(Primitive::Rounded { rect, .. }) => rect.x,
+        _ => panic!("no box"),
+    }
+}
+const N_STORE: &str = "return {stores={n=0},actions={},computed={}}";
+fn set_n(session: &mut Session, n: u32) -> Scene {
+    let scene = session
+        .update(BTreeMap::from([("n".into(), Value::Number(n.into()))]))
+        .unwrap()
+        .unwrap();
+    session.commit(scene.clone());
+    scene
+}
+
+/// B0370: a kept raw re-lays out from its tokens after other views built on the thread.
+#[test]
+fn tracks_of_a_kept_raw_outlive_other_views_builds() {
+    let (_a, mut first) = interaction_fixture(&track_view(80, false), N_STORE);
+    let (_b, mut other) = interaction_fixture(&track_view(40, false), N_STORE);
+    crate::layout::PINNED_CLOCK.set(Some(bead_core::animation::clock_ns() + 30_000_000_000));
+    assert!((box_x(&set_n(&mut first, 1)) - 40.).abs() < 0.3);
+    for n in 1..=4 {
+        set_n(&mut other, n);
+    }
+    frontend::reset_eval_calls();
+    let overlay =
+        Palette::parse(br#"{"formatVersion":1,"colours":{"onSurfaceVariant":"ff0000"}}"#).unwrap();
+    let after = first.set_runtime_palette(overlay).unwrap().unwrap();
+    assert_eq!(
+        frontend::eval_calls(),
+        0,
+        "the kept raw is served without Luau"
+    );
+    assert!((box_x(&after) - 40.).abs() < 0.3);
+    crate::layout::PINNED_CLOCK.set(None);
+}
+
+/// B0370: equal points share a token while held (so an unchanged view keeps its raw identity);
+/// a dead token resolves to nothing.
+#[test]
+fn equal_tracks_share_a_token_while_held_and_expire_after() {
+    use crate::layout::{hand_over_track, tracks_begin_build};
+    let token = |h: &crate::layout::TrackHandle| serde_json::to_value(h).unwrap();
+    let held = hand_over_track(vec![[0., 1.], [1., 2.]]);
+    let same = hand_over_track(vec![[0., 1.], [1., 2.]]);
+    assert_eq!(token(&held), token(&same));
+    assert_ne!(
+        token(&held),
+        token(&hand_over_track(vec![[0., 1.], [1., 3.]]))
+    );
+    let marker = |t| serde_json::json!({"from":0,"to":1,"start":0,"duration":1,"curve":"linear","loop":false,"track":t});
+    assert!(layout::Marker::parse(&marker(token(&held))).is_some());
+    let gone = token(&held);
+    drop((held, same));
+    tracks_begin_build();
+    assert!(
+        layout::Marker::parse(&marker(gone)).is_none(),
+        "a dead token is an invalid marker"
+    );
+}
+
+/// B0370: a track inside `ui.memo` stays in the JSON, so a memo hit keeps sampling it.
+#[test]
+fn memo_tracks_sample_on_every_rebuild() {
+    let (_f, mut session) = interaction_fixture(&track_view(80, true), N_STORE);
+    crate::layout::PINNED_CLOCK.set(Some(bead_core::animation::clock_ns() + 30_000_000_000));
+    for n in 1..=3 {
+        assert!((box_x(&set_n(&mut session, n)) - 40.).abs() < 0.3, "n={n}");
+    }
+    crate::layout::PINNED_CLOCK.set(None);
+}
+
 #[test]
 fn scale_prop_and_marker_scale_text_and_radius_but_not_strokes() {
     let view = format!(

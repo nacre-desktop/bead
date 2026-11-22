@@ -7,8 +7,11 @@ use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as Json;
 use std::{
+    cell::RefCell,
     collections::{BTreeMap, BTreeSet},
+    hash::{Hash, Hasher},
     path::{Path, PathBuf},
+    rc::Rc,
 };
 use taffy::prelude::*;
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -359,6 +362,70 @@ impl Build {
         Ok(marker.sample(self.now_ns))
     }
 }
+/// One `ui.track`'s (key, value) pairs, shared by the view tree's token and every parsed marker.
+pub(crate) type Track = Rc<[[f64; 2]]>;
+/// The Luau-side handle; it serializes as its token (as `GraphHandle` does), so the view tree
+/// carries one number per track and parsing it never copies the points.
+pub(crate) struct TrackHandle {
+    token: u64,
+    data: Track,
+}
+impl TrackHandle {
+    pub(crate) fn data(&self) -> Track {
+        self.data.clone()
+    }
+}
+impl Serialize for TrackHandle {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_u64(self.token)
+    }
+}
+impl mlua::UserData for TrackHandle {}
+#[derive(Default)]
+struct Tracks {
+    next: u64,
+    tokens: FxHashMap<u64, std::rc::Weak<[[f64; 2]]>>,
+    /// Content hash -> token; a hit is confirmed by full equality.
+    by_hash: FxHashMap<u64, u64>,
+}
+thread_local! {
+    static TRACKS: RefCell<Tracks> = RefCell::default();
+}
+/// A track lives while a handle, a build's `fresh` list, the frontend's last result or a
+/// parsed marker holds it; an evaluating build drops the dead entries.
+pub(crate) fn tracks_begin_build() {
+    TRACKS.with_borrow_mut(|t| {
+        t.tokens.retain(|_, weak| weak.strong_count() > 0);
+        let tokens = &t.tokens;
+        t.by_hash.retain(|_, token| tokens.contains_key(token));
+    });
+}
+/// Equal content shares its token and data while anything holds it, so an unchanged view
+/// keeps its raw identity and Cached::patch still matches across rebuilds.
+pub(crate) fn hand_over_track(points: Vec<[f64; 2]>) -> TrackHandle {
+    let mut hasher = rustc_hash::FxHasher::default();
+    for [key, value] in &points {
+        (key.to_bits(), value.to_bits()).hash(&mut hasher);
+    }
+    let hash = hasher.finish();
+    TRACKS.with_borrow_mut(|t| {
+        let same = t.by_hash.get(&hash).and_then(|token| {
+            let data = t.tokens.get(token)?.upgrade()?;
+            (*data == *points).then_some((*token, data))
+        });
+        let (token, data) = same.unwrap_or_else(|| {
+            let data: Track = points.into();
+            t.next += 1;
+            t.tokens.insert(t.next, Rc::downgrade(&data));
+            t.by_hash.insert(hash, t.next);
+            (t.next, data)
+        });
+        TrackHandle { token, data }
+    })
+}
+fn resolve_track(token: u64) -> Option<Track> {
+    TRACKS.with_borrow(|t| t.tokens.get(&token)?.upgrade())
+}
 /// Most keyframe points all the tracks of one view may carry (B0364).
 pub(crate) const TRACK_POINTS: usize = 32768;
 #[cfg(test)]
@@ -386,14 +453,16 @@ pub(crate) struct Marker {
     duration: f64,
     curve: bead_core::animation::Curve,
     looping: bool,
-    track: Option<Vec<[f64; 2]>>,
+    track: Option<Track>,
 }
 impl Marker {
     /// `None` when the marker or its track is malformed.
     pub(crate) fn parse(marker: &Json) -> Option<Self> {
         let number = |key: &str| marker.get(key).and_then(Json::as_f64);
         let list = |key: &str| marker.get(key)?.as_array();
-        let track = if marker.get("keys").is_none() {
+        let track = if let Some(token) = marker.get("track") {
+            Some(resolve_track(token.as_u64()?)?)
+        } else if marker.get("keys").is_none() {
             None
         } else {
             let (keys, values) = (list("keys")?, list("values")?);
@@ -409,7 +478,7 @@ impl Marker {
             {
                 return None;
             }
-            Some(track)
+            Some(track.into())
         };
         Some(Self {
             from: number("from")?,
@@ -449,7 +518,7 @@ impl Marker {
     }
     /// The track's keyframe count (0 for a plain marker).
     pub(crate) fn points(&self) -> usize {
-        self.track.as_ref().map_or(0, Vec::len)
+        self.track.as_ref().map_or(0, |track| track.len())
     }
 }
 fn number(p: &Props<'_>, name: &str, default: f32, source: &Source) -> Result<f32, Diagnostic> {

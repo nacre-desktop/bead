@@ -5,7 +5,7 @@ use crate::{
     layout::{RawNode, Widget},
 };
 use bead_core::Value;
-use mlua::{Function, Lua, LuaSerdeExt, Table, VmState};
+use mlua::{Function, IntoLuaMulti, Lua, LuaSerdeExt, Table, VmState};
 use std::{
     cell::RefCell,
     collections::{BTreeMap, BTreeSet},
@@ -125,6 +125,44 @@ fn compiled_prelude(
     Ok(prelude)
 }
 
+/// `ui.track`'s keys and values as (key, value) pairs; `Err` carries the Luau error message.
+fn track_points(
+    keys: &mlua::Value,
+    values: &mlua::Value,
+    spent: usize,
+) -> Result<Vec<[f64; 2]>, String> {
+    let numbers = |list: &mlua::Value, label: &str| {
+        let table = match list {
+            mlua::Value::Table(table) if (2..=128).contains(&table.raw_len()) => table,
+            _ => return Err(format!("{label} must be an array of 2 to 128 numbers")),
+        };
+        (1..=table.raw_len())
+            .map(|i| match table.raw_get::<mlua::Value>(i) {
+                Ok(mlua::Value::Integer(n)) => Ok(n as f64),
+                Ok(mlua::Value::Number(n)) if n.is_finite() => Ok(n),
+                _ => Err(format!("{label} must be finite numbers")),
+            })
+            .collect::<Result<Vec<_>, _>>()
+    };
+    let (keys, values) = (
+        numbers(keys, "track keys")?,
+        numbers(values, "track values")?,
+    );
+    if keys.len() != values.len() {
+        return Err("track keys and values need the same length".into());
+    }
+    if keys.windows(2).any(|w| w[0] >= w[1]) {
+        return Err("track keys must be strictly increasing".into());
+    }
+    if spent + keys.len() > crate::layout::TRACK_POINTS {
+        return Err(format!(
+            "a view's animation tracks carry more than {} points",
+            crate::layout::TRACK_POINTS
+        ));
+    }
+    Ok(keys.into_iter().zip(values).map(|(k, v)| [k, v]).collect())
+}
+
 pub trait FrontEnd {
     fn build(
         &self,
@@ -142,7 +180,8 @@ return function(name)
 end
 "#;
 /// Host callbacks that read the current build (stores, measurements, fragments).
-const BRIDGED: [&str; 9] = [
+const BRIDGED: [&str; 10] = [
+    "__track",
     "text_width",
     "text_line_height",
     "preview_value",
@@ -218,8 +257,16 @@ return function(ui, constructors, allowed, arrayMarker)
     -- Piecewise-linear keyframes over the driver's value; the sampler reads keys and values off the marker.
     ui.track = function(driver, keys, values)
         local marker = driver_of(driver, "ui.track")
-        if marker.keys ~= nil then error("ui.track needs a driver that is not already a track", 2) end
+        if marker.keys ~= nil or marker.track ~= nil then error("ui.track needs a driver that is not already a track", 2) end
         local out = table.clone(marker)
+        -- Rust owns the points and hands back a token; inside ui.memo it returns nothing and the
+        -- arrays stay in the JSON, so a cached fragment never depends on a token.
+        local handle, message = ui.__track(keys, values)
+        if message then error(message, 2) end
+        if handle then
+            out.track = handle
+            return {__animate=out}
+        end
         out.keys, out.values = track_numbers(keys, "track keys"), track_numbers(values, "track values")
         if #out.keys ~= #out.values then error("track keys and values need the same length", 2) end
         for i = 2, #out.keys do
@@ -384,6 +431,8 @@ pub struct LuauFrontEnd {
     fragments: RefCell<bead_core::cache::Lru<(String, String), std::rc::Rc<Fragment>>>,
     fragment_budget: bead_core::cache::Budget,
     materialized: RefCell<Option<Materialized>>,
+    /// The tracks the last built tree names by token: they live exactly as long as that tree.
+    tracks: RefCell<Vec<crate::layout::Track>>,
     prelude: Arc<CompiledPrelude>,
     _compiled_charge: bead_core::cache::Charge,
     values_budget: bead_core::cache::Budget,
@@ -694,6 +743,7 @@ impl LuauFrontEnd {
             vm_build_bytes: std::cell::Cell::new(0),
             vm: RefCell::new(None),
             materialized: RefCell::new(None),
+            tracks: RefCell::default(),
             prelude,
             animations: Default::default(),
             plugins: plugins.map(|(root, mount)| (root, mount.grants)),
@@ -1075,6 +1125,9 @@ impl FrontEnd for LuauFrontEnd {
         let dependency_overflow = std::cell::Cell::new(false);
         let scopes = RefCell::new(Vec::<BTreeMap<String, Value>>::new());
         let fragments = RefCell::new(Vec::<std::rc::Rc<Fragment>>::new());
+        // Tracks handed to Rust in this build, kept alive until the result is stored.
+        let fresh = RefCell::new(Vec::<crate::layout::Track>::new());
+        let track_points_spent = std::cell::Cell::new(0usize);
         let fragment_remaining = std::cell::Cell::new(8 * bead_core::cache::MIB);
         let upstream = resolve;
         let record = |name: &str| {
@@ -1193,6 +1246,24 @@ impl FrontEnd for LuauFrontEnd {
                         }
                     }
                     Ok(width)
+                })?,
+            )?;
+            host.set(
+                "__track",
+                scope.create_function(|lua, (keys, values): (mlua::Value, mlua::Value)| {
+                    // Inside ui.memo the prelude keeps the arrays in the JSON instead.
+                    if !scopes.borrow().is_empty() {
+                        return Ok(mlua::MultiValue::new());
+                    }
+                    match track_points(&keys, &values, track_points_spent.get()) {
+                        Ok(points) => {
+                            track_points_spent.set(track_points_spent.get() + points.len());
+                            let handle = crate::layout::hand_over_track(points);
+                            fresh.borrow_mut().push(handle.data());
+                            lua.create_ser_userdata(handle)?.into_lua_multi(lua)
+                        }
+                        Err(message) => (mlua::Value::Nil, message).into_lua_multi(lua),
+                    }
                 })?,
             )?;
             host.set(
@@ -1558,6 +1629,7 @@ impl FrontEnd for LuauFrontEnd {
             let eval_profile = bead_core::profile::Span::new("markup_eval");
             #[cfg(test)]
             EVAL_CALLS.set(EVAL_CALLS.get() + 1);
+            crate::layout::tracks_begin_build();
             let node: mlua::Value = vm.chunk(entry, bytes)?.call(())?;
             drop(eval_profile);
             let _serde_profile = bead_core::profile::Span::new("markup_serde");
@@ -1610,7 +1682,10 @@ impl FrontEnd for LuauFrontEnd {
             let reads = reads.into_inner();
             let widths = widths.into_inner();
             let windows = windows.into_inner();
+            // The tree names these tracks by token, so its charge counts their points.
+            let tracks = fresh.into_inner();
             let bytes = raw_bytes
+                + tracks.iter().map(|track| track.len() * 16).sum::<usize>()
                 + reads
                     .iter()
                     .map(|(k, v)| k.capacity() + 64 + bead_core::cache::value_bytes(v))
@@ -1630,6 +1705,7 @@ impl FrontEnd for LuauFrontEnd {
                             + 64
                     })
                     .sum::<usize>();
+            *self.tracks.borrow_mut() = tracks;
             *self.materialized.borrow_mut() = None;
             // A tree built mid-motion holds interpolated `ui.animate` numbers: never serve it again.
             if !dependency_overflow.get()

@@ -1149,8 +1149,8 @@ local before = {d.__animate.from, d.__animate.to, d.__animate.start, d.__animate
 local t = ui.track(d, {2, 6, 10}, {0, 5, -1})
 local a, b = t.__animate, d.__animate
 for _, f in {'from', 'to', 'start', 'duration', 'curve', 'loop'} do assert(a[f] == b[f], f) end
-assert(#a.keys == 3 and a.keys[2] == 6 and #a.values == 3 and a.values[3] == -1)
-assert(b.keys == nil and b.values == nil and before[1] == b.from and before[3] == b.start)
+assert(a.track ~= nil and a.keys == nil and a.values == nil)
+assert(b.track == nil and before[1] == b.from and before[3] == b.start)
 local from, to = ui.range(d)
 assert(from == 2 and to == 10)
 local plain_from, plain_to = ui.range(ui.animated('j', 7, 0.2, 'linear'))
@@ -1159,7 +1159,7 @@ local lo, hi = ui.range(ui.pulse('p', 1, 0.25, 0.75))
 assert(lo == 0.25 and hi == 0.75 and ui.pulse('p2', 1, 0, 1).__animate.loop == true)
 local _ = ui.range(t)
 local pulsed = ui.track(ui.pulse('p3', 1, 0, 1), {0, 1}, {0, 9})
-assert(pulsed.__animate.loop == true and #pulsed.__animate.keys == 2)
+assert(pulsed.__animate.loop == true and pulsed.__animate.track ~= nil)
 "#;
     track_scene(ok).unwrap_or_else(|e| panic!("{}", e.message));
     let wide = |n: usize| {
@@ -1176,7 +1176,7 @@ fails(function() ui.track(ui.track(d, {{0, 1}}, {{0, 1}}), {{0, 1}}, {{0, 1}}) e
 fails(function() ui.track(d, {{0, 1}}, {{0, 1, 2}}) end, 'same length')
 fails(function() ui.track(d, {{0}}, {{0}}) end, 'track keys must be an array of 2 to 128')
 fails(function() ui.track(d, {keys129}, {keys129}) end, 'track keys must be an array of 2 to 128')
-assert(#ui.track(d, {keys128}, {keys128}).__animate.values == 128)
+assert(ui.track(d, {keys128}, {keys128}).__animate.track ~= nil)
 fails(function() ui.track(d, {{2, 1}}, {{0, 1}}) end, 'strictly increasing')
 fails(function() ui.track(d, {{0, 0/0}}, {{0, 1}}) end, 'track keys must be finite')
 fails(function() ui.track(d, {{0, 1}}, {{0, math.huge}}) end, 'track values must be finite')
@@ -1186,6 +1186,14 @@ fails(function() ui.track(d, {{0, 1}}, {{0, 'x'}}) end, 'track values must be fi
         keys128 = wide(128),
     );
     track_scene(&bad).unwrap_or_else(|e| panic!("{}", e.message));
+}
+
+#[test]
+fn track_points_past_the_view_cap_are_an_error() {
+    track_scene(
+        "local d=ui.animated('k',10,0.2,'linear') local k={} for i=1,128 do k[i]=i end\nfor _=1,256 do ui.track(d,k,k) end\nfails(function() ui.track(d,k,k) end,'carry more than 32768 points')",
+    )
+    .unwrap_or_else(|e| panic!("{}", e.message));
 }
 
 #[test]
