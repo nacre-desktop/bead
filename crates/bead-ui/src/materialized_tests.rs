@@ -1518,3 +1518,100 @@ return ui.Row(root)"#
         times[360]
     );
 }
+
+/// B0369 move-build timing, not asserted: every iteration moves the bound target, so markup re-runs,
+/// the patch misses and view_ir, layout and the cache copy all run. A generic view of items, dots and
+/// a ring on one `ui.animated` driver. `SHAPE=tap`: 12 tracked items (+9 static), 109 tracks, ~930
+/// points, ~240 nodes; `SHAPE=jump`: 35 items, 362 tracks, ~8.3k points, ~360 nodes. `TRACKS=0`: the
+/// same view with static props; `bare`: compute every track's keys and values, draw static props;
+/// `only`: also call `ui.track`, drop the track. Stage spans follow `MOVE_PROBE warm` with
+/// `BEAD_PROFILE_INPUT=1`.
+#[test]
+#[ignore = "timing probe: BEAD_PROFILE_INPUT=1 SHAPE=jump cargo test -p bead-ui --lib move_build_probe -- --ignored --nocapture"]
+fn move_build_probe() {
+    const VIEW: &str = r#"local ui=require('bead.ui')
+local t=ui.resolve_for_check(ui.bind('target'))
+local d=ui.animated('d',t+SPAN,0.5,'out-quint',t)
+local a,b=ui.range(d)
+local lo,hi,count=math.min(a,b)-0.5,math.max(a,b)+0.5,0
+-- A catenary-like curve over the driver position x for the thing at slot s.
+local function curve(x,s) local u=(x-s)/8 return math.cosh(u)*0.6-math.sqrt(1+u*u)*0.4 end
+local function tx(c) return 30*c end
+local function ty(c) return 12*c end
+local function sc(c) return math.clamp(1+0.1*c,0.5,2) end
+local function op(c) return math.clamp(0.7+0.3*c,0,1) end
+local function prop(live,s,fn)
+ local static=fn(curve(hi,s))
+ if MODE=='0' or not live then return static end
+ count+=1
+ local n,keys,values=KLO+(count*7)%KW,{},{}
+ for i=1,n do local x=lo+(hi-lo)*(i-1)/(n-1) keys[i]=x values[i]=fn(curve(x,s)) end
+ if MODE=='bare' then return static end
+ local track=ui.track(d,keys,values)
+ return MODE=='only' and static or track
+end
+local function points() local p={} for i=1,256 do p[i]={(i-1)/255,0.5+0.4*math.sin(i/20)} end return p end
+local deco={gap=4}
+for r=1,10 do local row={gap=2} for c=1,6 do row[c]=ui.Box{width=20,height=20,fill='primary',radius=4} end deco[r]=ui.Row(row) end
+local strip={gap=8,height=120}
+for j=1,ITEMS+IDLE do
+ local s,live=j-6,j<=ITEMS
+ local dist=math.max(0,-s,s-SPAN)
+ strip[j]=ui.Button{id='i'..j,width=44,height=44,on_activate=ui.action('noop'),
+  translate_x=prop(live,s,tx),translate_y=prop(live,s,ty),scale=prop(live,s,sc),opacity=prop(live,s,op),
+  ui.Box{width=40,height=40,
+   ui.Box{width=40,height=40,fill='primary',opacity=prop(live,s,op)},
+   ui.Box{width=40,height=40,fill='onSurface',opacity=prop(live and dist<2.5,s,op)},
+   ui.Box{width=40,height=40,fill='onSurface',opacity=prop(live and dist<2.5,s,op)},
+   ui.Box{width=40,height=40,fill='surface',opacity=prop(live and dist<0.7,s,op)},
+   ui.Box{width=40,height=40,border_color='outlineVariant',border_width=1}}}
+end
+for k=1,DOTS do
+ local s=k-5.5
+ strip[ITEMS+IDLE+k]=ui.Box{width=6,height=6,radius=3,fill='primary',
+  translate_x=prop(true,s,tx),translate_y=prop(true,s,ty),opacity=prop(true,s,op)}
+end
+local ring={width=120,height=120,scale=prop(true,0,sc),opacity=prop(true,0,op)}
+for r=1,5 do
+ ring[r]=ui.Arc{position='absolute',left=0,top=0,width=120,height=120,start_angle=r*72-90,sweep_angle=60,stroke_width=3,color='primary'}
+end
+return ui.Column{id='root',width=2400,height=900,fill='surface',
+ ui.Polyline{width=1600,height=160,points=points()},ui.Polyline{width=1600,height=160,points=points()},
+ ui.Column(deco),ui.Row(strip),ui.Box(ring)}"#;
+    let env = |name: &str, default: &str| std::env::var(name).unwrap_or_else(|_| default.into());
+    let (shape, mode) = (env("SHAPE", "tap"), env("TRACKS", "1"));
+    // Tracked items, static items, dots, travel in slots, keys per track (lowest, spread).
+    let [items, idle, dots, span, klo, kw] = match shape.as_str() {
+        "jump" => [35, 0, 34, 24, 2, 43],
+        _ => [12, 9, 11, 1, 6, 6],
+    };
+    let view = format!(
+        "local ITEMS,IDLE,DOTS,SPAN,KLO,KW,MODE={items},{idle},{dots},{span},{klo},{kw},'{mode}'\n{VIEW}"
+    );
+    let behavior = "return {stores={target=0},actions={noop=function(s) end},computed={}}";
+    let (_fixture, mut session) = interaction_fixture(&view, behavior);
+    let (hits, mut times) = (patch_hits(), vec![]);
+    for i in 0..45_u32 {
+        if i == 5 {
+            println!("MOVE_PROBE warm");
+        }
+        let target = Value::Number(1. + f64::from(i) * 0.01);
+        let start = std::time::Instant::now();
+        let scene = session
+            .update(BTreeMap::from([("target".into(), target)]))
+            .unwrap()
+            .unwrap();
+        times.push(start.elapsed().as_secs_f64() * 1e3);
+        assert_eq!(patch_hits(), hits, "a move build must miss the patch");
+        session.commit(scene);
+    }
+    let mut times = times.split_off(5);
+    times.sort_by(f64::total_cmp);
+    println!(
+        "MOVE_PROBE shape={shape} tracks={mode} nodes={} layers={} iters=40 median_ms={:.3} p90_ms={:.3}",
+        session.view_nodes().len(),
+        session.current.layers.len(),
+        times[20],
+        times[36]
+    );
+}
