@@ -1286,14 +1286,27 @@ pub(super) fn fade(primitive: &mut Primitive, alpha: f32) {
     }
 }
 /// `primitive` under `map` (B0364): rects, radii and text sizes scale; stroke and border widths,
-/// a shadow's blur margin and an image's bake_size do not.
+/// a shadow's blur margin and an image's bake_size, with the radius baked in it, do not.
 fn affine(primitive: &mut Primitive, map: Map) {
     let k = map.0;
     match primitive {
         _ if map == IDENTITY => {}
-        Primitive::Rounded { rect, radius, .. } | Primitive::Image { rect, radius, .. } => {
+        Primitive::Rounded { rect, radius, .. } => {
             *rect = map_rect(*rect, map);
             *radius *= k;
+        }
+        // The draw scales a bake_size raster (B0328); a scaled radius would change its raster key
+        // and bake it again on every frame of a scale track (B0372).
+        Primitive::Image {
+            rect,
+            radius,
+            bake_size,
+            ..
+        } => {
+            *rect = map_rect(*rect, map);
+            if bake_size.is_none() {
+                *radius *= k;
+            }
         }
         Primitive::Text { rect, size, .. } => {
             *rect = map_rect(*rect, map);

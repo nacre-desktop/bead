@@ -1319,6 +1319,93 @@ return ui.Column{id='root',width=400,height=300,fill='surface',
     crate::layout::PINNED_CLOCK.set(None);
 }
 
+/// B0372: under a scale track a `bake_size` image keeps its baked radius, so every patched frame
+/// reuses its raster; an image without `bake_size` rasters per rect and its radius scales.
+#[test]
+fn a_scale_track_reuses_a_baked_images_raster_on_every_patched_frame() {
+    let view = format!(
+        "{TRACK}{}",
+        r#"local ui=require('bead.ui')
+return ui.Row{id='root',width=300,height=120,fill='surface',
+ ui.Box{id='pearl',width=60,height=60,scale=track({0,1},{0.8,1.2}),
+  ui.Image{id='baked',position='absolute',left=0,top=0,width=60,height=60,path='ui/dot.svg',bake_size={w=90,h=90}},
+  ui.Image{id='exact',position='absolute',left=0,top=0,width=60,height=60,path='ui/dot.svg'}}}"#
+    );
+    let fixture = Fixture::new();
+    fs::create_dir_all(fixture.0.join("ui")).unwrap();
+    fs::write(
+        fixture.0.join("ui/dot.svg"),
+        r##"<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" fill="#f80"/></svg>"##,
+    )
+    .unwrap();
+    fs::write(
+        fixture.0.join("ui/behavior.luau"),
+        "return {stores={},actions={},computed={}}",
+    )
+    .unwrap();
+    fs::write(fixture.0.join("ui/main.luau"), view).unwrap();
+    pin(0.);
+    let mut session = fixture.session();
+    session.entry = "ui/main.luau".into();
+    let first = session.reload().unwrap();
+    session.commit(first);
+    let generation = session.generation.as_ref().unwrap();
+    let mut cache = bead_render::tree::TreeCache::default()
+        .with_image_policy(bead_render::tree::ImagePolicy::UploadOnly);
+    let mut baked_payload = None;
+    for t in [0.25, 0.5, 0.8, 1.] {
+        pin(t);
+        let hits = patch_hits();
+        let (scene, _) = generation
+            .materialize(&session.stores, &session.palette, session.viewport)
+            .unwrap();
+        assert_eq!(patch_hits(), hits + 1, "t={t}: the frame is a patch");
+        let k = 0.8 + 0.4 * t as f32;
+        for primitive in &scene.primitives {
+            if let Primitive::Image {
+                rect,
+                radius,
+                bake_size,
+                ..
+            } = primitive
+            {
+                assert!((rect.w - 60. * k).abs() < 1e-3, "t={t}: {rect:?}");
+                let want = if bake_size.is_some() { 9. } else { 9. * k };
+                assert!(
+                    (radius - want).abs() < 1e-4,
+                    "t={t}: radius {radius} != {want}"
+                );
+            }
+        }
+        cache.prepare(&scene, 1.).unwrap();
+        let payload = cache
+            .frame
+            .as_ref()
+            .unwrap()
+            .items
+            .iter()
+            .find(|item| {
+                matches!(
+                    item.primitive,
+                    Primitive::Image {
+                        bake_size: Some(_),
+                        ..
+                    }
+                )
+            })
+            .and_then(|item| item.image.clone())
+            .expect("the baked image has a payload");
+        match &baked_payload {
+            None => baked_payload = Some(payload),
+            Some(previous) => assert!(
+                std::sync::Arc::ptr_eq(previous, &payload),
+                "t={t}: the baked raster is reused, not baked again"
+            ),
+        }
+    }
+    crate::layout::PINNED_CLOCK.set(None);
+}
+
 /// B0365: the markers `ui.track` builds are what the sampler reads, through layout and the patch.
 #[test]
 fn ui_track_markers_move_and_scale_a_box_through_layout_and_the_patch() {
