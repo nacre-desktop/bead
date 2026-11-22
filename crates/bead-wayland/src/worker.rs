@@ -628,6 +628,24 @@ fn prepare_resource_job(
         job => Err(job),
     }
 }
+/// The next job. B0377: between frames, while none waits, hydrate the frame's zero-opacity images
+/// one by one, so they are ready before they show and never hold the frame that hides them.
+fn next_job(
+    receiver: &mpsc::Receiver<Job>,
+    cache: &bead_render::tree::TreeCache,
+) -> Result<Job, mpsc::RecvError> {
+    while let Some(image) = cache.next_prefetch() {
+        match receiver.try_recv() {
+            Err(mpsc::TryRecvError::Empty) => {
+                if let Err(error) = image.prepare() {
+                    image.finish_request(Some(error.to_string()));
+                }
+            }
+            job => return job.map_err(|_| mpsc::RecvError),
+        }
+    }
+    receiver.recv()
+}
 fn release_cached_prepared(
     cache: &mut bead_render::tree::TreeCache,
     expected: &[Weak<bead_render::tree::Frame>],
@@ -835,7 +853,7 @@ impl SceneSource for Source {
                             Err(mpsc::RecvTimeoutError::Disconnected) => break,
                         }
                     } else {
-                        match receiver.recv() {
+                        match next_job(&receiver, &cache) {
                             Ok(job) => job,
                             Err(_) => break,
                         }
@@ -2455,6 +2473,40 @@ mod tests {
             receiver.try_recv().is_err(),
             "duplicate payload produces one hydration job"
         );
+    }
+    #[test]
+    fn an_idle_worker_hydrates_the_zero_opacity_images_its_frame_skipped() {
+        // B0377: a far pick's new pearls start at opacity 0; they bake behind the frame.
+        let mut fixture = scene();
+        fixture.primitives[0] = bead_render::Primitive::Image {
+            opacity: 0.,
+            rect: bead_render::Rect::new(0., 0., 16., 16.),
+            path: "proof.svg".into(),
+            blur: 0.,
+            fit: bead_render::ImageFit::Fill,
+            clip_polygon: None,
+            bake_size: None,
+            radius: 0.,
+            tint: None,
+        };
+        fixture.asset_data.insert("proof.svg".into(), Arc::from(&br##"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><rect width="16" height="16" fill="#123456"/></svg>"##[..]));
+        let mut cache = bead_render::tree::TreeCache::default()
+            .with_image_policy(bead_render::tree::ImagePolicy::UploadOnly);
+        cache.prepare(&fixture, 1.).unwrap();
+        let payload = cache.next_prefetch().expect("skipped by the frame");
+        let (sender, receiver) = mpsc::channel();
+        sender.send(Job::Idle(false)).unwrap();
+        assert!(matches!(next_job(&receiver, &cache), Ok(Job::Idle(false))));
+        assert!(payload.pending(), "a waiting job goes first");
+        let worker =
+            std::thread::spawn(move || matches!(next_job(&receiver, &cache), Ok(Job::Stop)));
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while payload.pending() {
+            assert!(std::time::Instant::now() < deadline, "hydrated unasked");
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        sender.send(Job::Stop).unwrap();
+        assert!(worker.join().unwrap(), "then it waits for the next job");
     }
     #[test]
     fn motion_actions_keep_latest_same_name_and_preserve_action_barriers() {

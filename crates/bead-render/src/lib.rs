@@ -2742,6 +2742,10 @@ fn decode_untinted(path: &Path, bytes: &[u8], w: u32, h: u32, fit: ImageFit) -> 
     };
     for pixel in raw.as_mut().as_chunks_mut::<4>().0 {
         let alpha = u16::from(pixel[3]);
+        // B0377: the identity at alpha 255, every pixel of a JPEG.
+        if alpha == 255 {
+            continue;
+        }
         for channel in pixel.iter_mut().take(3) {
             *channel = ((u16::from(*channel) * alpha + 127) / 255) as u8;
         }

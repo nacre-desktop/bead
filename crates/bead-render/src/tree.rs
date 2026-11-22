@@ -118,8 +118,10 @@ fn prepared_rasters_match_visibility(scene: &Scene, frame: &Frame) -> bool {
             .all(|(index, primitive)| {
                 if matches!(primitive, Primitive::Image { .. } | Primitive::Text { .. }) {
                     let should_have_raster = !raster_hidden_by_own_clip(scene, index, primitive);
-                    (frame.items[index].raster.is_some() || frame.items[index].image.is_some())
-                        == should_have_raster
+                    let has =
+                        frame.items[index].raster.is_some() || frame.items[index].image.is_some();
+                    // B0377: a zero-opacity image may come without one (its payload prefetches).
+                    has == should_have_raster || (!has && primitive.opacity() <= 0.)
                 } else {
                     true
                 }
@@ -164,6 +166,8 @@ pub struct ImagePayload {
     scratch_budget: bead_core::cache::Budget,
     _recipe_charge: bead_core::cache::Charge,
     requested: std::sync::atomic::AtomicBool,
+    /// Prepared once: `pending` turns true again after the upload takes the pixels (B0377).
+    hydrated: std::sync::atomic::AtomicBool,
     failure: std::sync::Mutex<Option<String>>,
     pub(crate) compact: std::sync::Mutex<Option<Arc<ImageLayout>>>,
 }
@@ -274,6 +278,8 @@ impl ImagePayload {
             pixels,
             _charge: pixel_charge,
         });
+        self.hydrated
+            .store(true, std::sync::atomic::Ordering::Release);
         Ok(())
     }
     pub fn mark_requested(&self) -> bool {
@@ -513,6 +519,8 @@ pub struct TreeCache {
     pub builds: usize,
     image_policy: ImagePolicy,
     image_payloads: BTreeMap<u64, Weak<ImagePayload>>,
+    /// B0377: the images the last frames draw at zero opacity, which never gate them.
+    prefetch: Vec<Arc<ImagePayload>>,
     asset_leases: BTreeMap<(usize, usize), Weak<AssetLease>>,
     upload_budget: Option<bead_core::cache::Budget>,
     resource_budget: Option<bead_core::cache::Budget>,
@@ -1091,6 +1099,16 @@ impl TreeCache {
     pub fn set_image_policy(&mut self, policy: ImagePolicy) {
         self.image_policy = policy;
     }
+    /// B0377: the next zero-opacity image of the frame to hydrate on the resource worker.
+    pub fn next_prefetch(&self) -> Option<Arc<ImagePayload>> {
+        self.prefetch
+            .iter()
+            .find(|payload| {
+                !payload.hydrated.load(std::sync::atomic::Ordering::Acquire)
+                    && payload.failure().is_none()
+            })
+            .cloned()
+    }
     pub fn with_image_policy(mut self, policy: ImagePolicy) -> Self {
         self.image_policy = policy;
         self
@@ -1106,6 +1124,8 @@ impl TreeCache {
         let discarded = stale_frame || self.entries.keys().any(|(_, bits)| !current(*bits));
         self.entries.retain(|(_, bits), _| current(*bits));
         self.nodes.retain(|(_, bits), _| current(*bits));
+        self.prefetch
+            .retain(|payload| current(payload.scale.to_bits()));
         if stale_frame {
             self.frame = None;
             self.edges.clear();
@@ -1145,6 +1165,7 @@ impl TreeCache {
     /// Release frames and pixel-bearing cache entries while keeping budgets and image policy.
     pub fn release_pixel_storage(&mut self) {
         self.frame = None;
+        self.prefetch.clear();
         self.entries.clear();
         self.nodes.clear();
         self.raster = CpuRenderer::default();
@@ -2153,6 +2174,7 @@ impl TreeCache {
         let mut tail_hash = None;
         // B0318: rasters kept for this frame only, because admission refused them.
         let mut transient = (0usize, Vec::new());
+        let mut prefetch = Vec::new();
         for (index, primitive) in scene.primitives.iter().enumerate() {
             if index == tail_start {
                 tail_hash = Some(frame_hash.clone());
@@ -2275,6 +2297,7 @@ impl TreeCache {
                             encoded,
                             scale,
                             requested: Default::default(),
+                            hydrated: Default::default(),
                             failure: Default::default(),
                             compact: Default::default(),
                             upload: Default::default(),
@@ -2286,9 +2309,6 @@ impl TreeCache {
                                 .clone(),
                             _recipe_charge: recipe_charge,
                         });
-                        if self.image_policy == ImagePolicy::UploadOnly {
-                            payload.prepare()?;
-                        }
                         self.image_payloads.insert(key, Arc::downgrade(&payload));
                         Some(payload)
                     }
@@ -2297,6 +2317,28 @@ impl TreeCache {
                 }
             } else {
                 None
+            };
+            // B0377: an image drawn at zero opacity and not hydrated yet (a pearl a far pick brings
+            // in) neither bakes in nor gates its frame: it waits in `prefetch`, which the resource
+            // worker hydrates behind the frame, so it is ready before it shows. A hydrated one
+            // keeps its item, and so its texture.
+            let (image, prefetched) = match image {
+                Some(payload)
+                    if primitive.opacity() <= 0.
+                        && !payload.hydrated.load(std::sync::atomic::Ordering::Acquire) =>
+                {
+                    prefetch.push(payload);
+                    (None, true)
+                }
+                Some(payload) => {
+                    if self.image_policy == ImagePolicy::UploadOnly
+                        && !payload.hydrated.load(std::sync::atomic::Ordering::Acquire)
+                    {
+                        payload.prepare()?;
+                    }
+                    (Some(payload), false)
+                }
+                None => (None, false),
             };
             // B0331: a box with radial layers is a raster item like text and shadows.
             let gradient = matches!(
@@ -2311,6 +2353,7 @@ impl TreeCache {
                 || kind == "polyline"
                 || kind == "graph"
                 || raster_hidden
+                || prefetched
                 || image.is_some()
             {
                 None
@@ -2602,6 +2645,8 @@ impl TreeCache {
             self.entries.remove(slot);
         }
         let frame = self.finish_frame(scene, scale, items, layers, assets, frame_hash.finish())?;
+        self.prefetch.retain(|payload| payload.scale != scale);
+        self.prefetch.extend(prefetch);
         self.fill_tail = Some(FillTail {
             frame: (Arc::as_ptr(&frame) as usize, frame.key),
             start: tail_start,
@@ -8225,6 +8270,49 @@ mod tests {
         )
         .unwrap();
         bytes
+    }
+    #[test]
+    fn a_zero_opacity_image_waits_in_prefetch_and_never_holds_its_frame() {
+        // B0377: a far pick's ~24 new pearls start at opacity 0, and baking them held frame 0.
+        let mut worker = TreeCache::default().with_image_policy(ImagePolicy::UploadOnly);
+        worker.prepare(&image_scene_at(0.), 1.).unwrap();
+        let hidden = &worker.frame.as_ref().unwrap().items[0];
+        assert!(
+            hidden.image.is_none() && hidden.raster.is_none(),
+            "not baked, not gating"
+        );
+        let payload = worker.next_prefetch().expect("left to the worker");
+        assert!(payload.pending());
+        // The presenter takes the worker's frame as prepared.
+        let mut scene = image_scene_at(0.);
+        scene
+            .prepared
+            .insert(1f32.to_bits(), worker.frame.clone().unwrap());
+        let mut ui = TreeCache::default().with_image_policy(ImagePolicy::DeferredUpload);
+        ui.prepare(&scene, 1.).unwrap();
+        assert!(Arc::ptr_eq(
+            ui.frame.as_ref().unwrap(),
+            worker.frame.as_ref().unwrap()
+        ));
+        // Hydrated behind the frame, it shows as the same payload with nothing left to bake.
+        payload.prepare().unwrap();
+        assert!(worker.next_prefetch().is_none());
+        worker.prepare(&image_scene_at(1.), 1.).unwrap();
+        let shown = worker.frame.as_ref().unwrap().items[0]
+            .image
+            .clone()
+            .unwrap();
+        assert!(Arc::ptr_eq(&shown, &payload) && !shown.pending());
+        // The upload takes its pixels. Faded out and back in, it keeps its item (so the GL keeps
+        // its texture active) and nothing bakes it again.
+        drop(payload.take_upload().unwrap());
+        for opacity in [0., 1.] {
+            worker.prepare(&image_scene_at(opacity), 1.).unwrap();
+            let kept = worker.frame.as_ref().unwrap().items[0].image.clone();
+            let kept = kept.is_some_and(|p| Arc::ptr_eq(&p, &payload) && p.pending());
+            assert!(kept, "opacity {opacity}");
+        }
+        assert!(worker.next_prefetch().is_none());
     }
     #[test]
     fn bake_size_reuses_one_payload_while_only_the_rect_resizes() {
