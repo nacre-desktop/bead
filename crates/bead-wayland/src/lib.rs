@@ -1101,6 +1101,10 @@ impl Surface {
     fn commit(&self) {
         self.wl_surface().commit();
     }
+    /// A buffer is attached: drawn at least once and not unmapped since.
+    fn shows_buffer(&self) -> bool {
+        self.frames > 0 && !self.panel_unmapped
+    }
     /// Unmaps the layer role; it accepts buffers again only after a fresh configure.
     fn unmap_layer(&mut self) {
         if self.layer_promoted {

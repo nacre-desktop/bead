@@ -369,6 +369,15 @@ impl Callbacks {
             Some(self.request())
         }
     }
+    /// A buffer-less commit is never presented, so its callback is never done: on a surface
+    /// without a buffer it would hold this credit, which the first GPU draw waits on (B0373).
+    pub fn request_if_presentable(&mut self, has_buffer: bool) -> Option<u64> {
+        if has_buffer {
+            self.request_if_idle()
+        } else {
+            None
+        }
+    }
     pub fn invalidate(&mut self) {
         self.epoch = self.epoch.wrapping_add(1);
         self.pending = false;
@@ -408,6 +417,20 @@ mod callback_tests {
         assert_ne!(first, next);
         assert!(!callbacks.accept(first));
         assert!(callbacks.accept(next));
+    }
+    #[test]
+    fn a_source_request_never_takes_the_credit_of_a_surface_without_a_buffer() {
+        let mut c = Callbacks::default();
+        // B0373: the first content waits for GL, then a source deadline asks for a frame.
+        assert_eq!(c.request_if_presentable(false), None);
+        assert!(!c.pending, "the first draw has no callback to wait on");
+        let first = c.request();
+        assert_eq!(c.request_if_presentable(true), None, "one live request");
+        assert!(c.accept(first));
+        assert!(
+            c.request_if_presentable(true).is_some(),
+            "a drawn surface shares it"
+        );
     }
     #[test]
     fn reopening_discards_parked_callback_and_never_grants_a_duplicate_frame() {

@@ -692,7 +692,7 @@ impl App {
                 .find(|s| s.companion && *epoch == self.panel_epoch)
                 .and_then(|s| {
                     s.callbacks
-                        .request_if_idle()
+                        .request_if_presentable(s.shows_buffer())
                         .map(|credit| (s.wl_surface().clone(), credit, *epoch))
                 }),
             Target::Primary(output) => {
@@ -712,7 +712,7 @@ impl App {
                     })
                     .and_then(|s| {
                         s.callbacks
-                            .request_if_idle()
+                            .request_if_presentable(s.shows_buffer())
                             .map(|credit| (s.wl_surface().clone(), credit, 0))
                     })
             }
