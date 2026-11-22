@@ -53,6 +53,10 @@ opt-level = 3
 [profile.release.package.cosmic-text]
 opt-level = 3
 
+# B0369: the Luau VM runs every markup build; -O3 cuts markup_eval ~10% for ~420 KB of binary.
+[profile.release.package.mlua-sys]
+opt-level = 3
+
 # Wallpaper decoding is an interactive hot path, like raster/text work.
 [profile.release.package.zune-jpeg]
 opt-level = 3
@@ -78,6 +82,10 @@ adler2.opt-level = 3
 tiny-skia.opt-level = 3
 zune-jpeg.opt-level = 3
 zune-core.opt-level = 3
+# B0369: the 50 ms markup budget is thread CPU, so debug tests run the VM and its mlua glue at product speed.
+mlua-sys.opt-level = 3
+mlua.opt-level = 3
+luau0-src.debug-assertions = false
 
 # Upstream 0.8.9 leaves DBusMenu signal tasks alive after an item exits.
 [patch.crates-io]
