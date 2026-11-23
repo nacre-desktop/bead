@@ -1860,6 +1860,7 @@ impl App {
     }
 
     pub(super) fn install_wallpaper(&mut self, frame: WallpaperFrame) {
+        let _busy = bead_core::profile::Busy::new("frame_install");
         let current = self
             .options
             .wallpaper

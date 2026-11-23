@@ -864,6 +864,7 @@ impl App {
 
     /// One palette step through the same recipients as a fenced change, without the fence.
     fn apply_palette_step(&mut self, palette: PaletteMap, last: bool) {
+        let _busy = bead_core::profile::Busy::new("palette_step");
         let _span = bead_core::profile::Span::new("wallpaper_palette_step");
         let at_rest = self.companion.as_ref().is_some_and(|c| c.0.palette_at_rest);
         let notify = panel_takes_step(last, self.panel_target, at_rest);
@@ -1514,6 +1515,7 @@ impl App {
 
     /// Draw one blend, ask for the next frame callback and present.
     fn fade_draw(&mut self, index: usize, blend: f32, first: bool) -> Result<(), Box<dyn Error>> {
+        let _busy = bead_core::profile::Busy::new("wallpaper_fade");
         let surface = &mut self.wallpaper_surfaces[index];
         let run = surface.fade.as_mut().ok_or("no fade")?;
         let transport = self.gl.as_ref().ok_or("GL transport missing")?;

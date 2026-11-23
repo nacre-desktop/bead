@@ -109,11 +109,13 @@ pub fn position(stage: &'static str, x: f32, y: f32) {
     }
 }
 
-/// B0205: main-thread attribution under [`frame_trace`]. A guard charges its own
+/// B0205, always on since B0382: main-thread attribution. A guard charges its own
 /// (exclusive) wall and thread-CPU time to `stage`; [`busy_iteration`] prints the
 /// loop iterations that spent at least `BEAD_FRAME_TRACE_BUSY_MS` (default 4) of
-/// either. Nothing is read or allocated when tracing is off.
-pub struct Busy(bool);
+/// either under [`frame_trace`], else at least 16 ms, at most one line per 250 ms.
+/// A guard costs two monotonic reads, two thread-CPU reads and a small Vec entry
+/// (plus the label: `named` closures run every time, so keep them cheap).
+pub struct Busy;
 struct BusyFrame {
     stage: std::borrow::Cow<'static, str>,
     wall: u64,
@@ -126,6 +128,7 @@ struct BusyState {
     stack: Vec<BusyFrame>,
     totals: Vec<(std::borrow::Cow<'static, str>, u64, u64, u32)>,
     last_cpu: u64,
+    last_print: u64,
 }
 thread_local! {
     static BUSY: std::cell::RefCell<BusyState> = Default::default();
@@ -134,11 +137,8 @@ impl Busy {
     pub fn new(stage: &'static str) -> Self {
         Self::named(|| stage.into())
     }
-    /// A stage whose label is only built when tracing is on.
+    /// A stage with a built label.
     pub fn named(stage: impl FnOnce() -> std::borrow::Cow<'static, str>) -> Self {
-        if !frame_trace() {
-            return Self(false);
-        }
         let frame = BusyFrame {
             stage: stage(),
             wall: monotonic_ns(),
@@ -147,14 +147,11 @@ impl Busy {
             child_cpu: 0,
         };
         BUSY.with(|b| b.borrow_mut().stack.push(frame));
-        Self(true)
+        Self
     }
 }
 impl Drop for Busy {
     fn drop(&mut self) {
-        if !self.0 {
-            return;
-        }
         let (wall, cpu) = (monotonic_ns(), thread_cpu_ns());
         BUSY.with(|b| {
             let mut b = b.borrow_mut();
@@ -180,25 +177,53 @@ impl Drop for Busy {
         });
     }
 }
+/// Always-on threshold (B0382) and the minimum spacing of its lines.
+const BUSY_LIVE_NS: u64 = 16_000_000;
+const BUSY_SPACING_NS: u64 = 250_000_000;
+/// Whether an iteration of `spent` CPU and `wall` attributed ns prints. Under tracing every
+/// iteration over `threshold` does; otherwise at most one per `BUSY_SPACING_NS` after `last`.
+/// shortcut: one global spacing, so a burst hides its later stalls; upgrade to a per-stage limit.
+fn busy_prints(
+    trace: bool,
+    threshold: u64,
+    spent: u64,
+    wall: u64,
+    now: u64,
+    last: &mut u64,
+) -> bool {
+    if spent < threshold && wall < threshold {
+        return false;
+    }
+    if !trace {
+        if *last != 0 && now.saturating_sub(*last) < BUSY_SPACING_NS {
+            return false;
+        }
+        *last = now;
+    }
+    true
+}
 /// Call once per event-loop iteration (after dispatch) on the thread that uses [`Busy`].
 pub fn busy_iteration() {
-    if !frame_trace() {
-        return;
-    }
+    let trace = frame_trace();
     static THRESHOLD_NS: OnceLock<u64> = OnceLock::new();
-    let threshold = *THRESHOLD_NS.get_or_init(|| {
-        std::env::var("BEAD_FRAME_TRACE_BUSY_MS")
-            .ok()
-            .and_then(|v| v.parse::<f64>().ok())
-            .map_or(4_000_000, |ms| (ms * 1e6) as u64)
-    });
+    let threshold = if trace {
+        *THRESHOLD_NS.get_or_init(|| {
+            std::env::var("BEAD_FRAME_TRACE_BUSY_MS")
+                .ok()
+                .and_then(|v| v.parse::<f64>().ok())
+                .map_or(4_000_000, |ms| (ms * 1e6) as u64)
+        })
+    } else {
+        BUSY_LIVE_NS
+    };
     let cpu = thread_cpu_ns();
     BUSY.with(|b| {
         let mut b = b.borrow_mut();
         let previous = std::mem::replace(&mut b.last_cpu, cpu);
         let spent = cpu.saturating_sub(previous);
         let wall: u64 = b.totals.iter().map(|t| t.1).sum();
-        if previous != 0 && (spent >= threshold || wall >= threshold) {
+        let now = monotonic_ns();
+        if previous != 0 && busy_prints(trace, threshold, spent, wall, now, &mut b.last_print) {
             let attributed: u64 = b.totals.iter().map(|t| t.2).sum();
             let mut totals = std::mem::take(&mut b.totals);
             totals.sort_by_key(|t| std::cmp::Reverse(t.1.max(t.2)));
@@ -211,7 +236,7 @@ pub fn busy_iteration() {
                 .join(",");
             println!(
                 "MAIN_BUSY monotonic_ns={} cpu_ms={:.2} attributed_wall_ms={:.2} other_cpu_ms={:.2} stages={stages}",
-                monotonic_ns(),
+                now,
                 spent as f64 / 1e6,
                 wall as f64 / 1e6,
                 spent.saturating_sub(attributed) as f64 / 1e6
@@ -306,6 +331,44 @@ pub fn variant_name(value: &dyn std::fmt::Debug) -> String {
 }
 #[cfg(test)]
 mod tests {
+    use super::{BUSY_LIVE_NS, busy_prints};
+    #[test]
+    fn live_busy_lines_need_16_ms_and_are_spaced_250_ms() {
+        let (mut last, ms) = (0, 1_000_000);
+        assert!(busy_prints(
+            false,
+            BUSY_LIVE_NS,
+            20 * ms,
+            0,
+            1000 * ms,
+            &mut last
+        ));
+        assert!(!busy_prints(
+            false,
+            BUSY_LIVE_NS,
+            20 * ms,
+            0,
+            1100 * ms,
+            &mut last
+        ));
+        assert!(!busy_prints(
+            false,
+            BUSY_LIVE_NS,
+            15 * ms,
+            15 * ms,
+            1400 * ms,
+            &mut last
+        ));
+        assert!(busy_prints(
+            false,
+            BUSY_LIVE_NS,
+            0,
+            16 * ms,
+            1250 * ms,
+            &mut last
+        ));
+        assert!(busy_prints(true, 4 * ms, 5 * ms, 0, 1251 * ms, &mut last));
+    }
     #[test]
     fn variant_name_stops_at_the_first_field() {
         #[derive(Debug)]
