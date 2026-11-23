@@ -154,6 +154,8 @@ pub fn build_clock() -> u64 {
 /// A motion this short (the clamp of a zero duration) is final from the moment it is targeted:
 /// holding it only keeps a panel on its CPU renderer and draws its first frame transparent (B0380).
 const INSTANT: f64 = 0.001;
+/// A render's largest phases (name, seconds), largest first.
+type Phases = [(&'static str, f64); 4];
 #[derive(Clone, Copy)]
 struct Motion {
     from: f32,
@@ -172,7 +174,7 @@ struct Motion {
     worst: (u32, [f64; 3]),
     /// The three costliest frame renders (commit index, seconds, largest phases), costliest first
     /// (B0305, B0380).
-    top: [(u32, f64, [(&'static str, f64); 4]); 3],
+    top: [(u32, f64, Phases); 3],
     /// The costliest render's largest phases (name, seconds), largest first (B0310).
     top_split: [(&'static str, f64); 4],
 }
