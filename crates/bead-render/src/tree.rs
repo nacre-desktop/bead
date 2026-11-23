@@ -3839,13 +3839,14 @@ impl SlideContent {
             })
             .collect()
     }
-    /// The close slide of a reveal panel resting open: the whole scene is the content of a slid panel,
-    /// the content above the body (as an open's) for a plain reveal that closes in place (B0312).
+    /// The close slide of a reveal panel resting open (or held at the close's first frame, B0383): the
+    /// whole scene is the content of a slid panel, the content above the body (as an open's) for a
+    /// plain reveal that closes in place (B0312).
     fn closing_from_rest(scene: &Scene, frame: &Frame) -> Option<Self> {
         let motion = scene
             .motion
             .as_ref()
-            .filter(|m| m.reveal && m.open && m.progress >= 1.)?;
+            .filter(|m| m.reveal && m.progress >= 1.)?;
         let scene_start = if motion.slide_distance.is_some() {
             0
         } else {
@@ -4695,11 +4696,15 @@ impl Renderer for TreeCpuRenderer {
             }
             self.slide_layer = None;
             self.slide_damage = None;
-            if SlideContent::closing_from_rest(scene, &frame).is_some() {
-                self.close_due = Some((std::time::Instant::now(), target.scale, target.format));
-            } else {
-                // The first close frame (progress 1, not yet a slide) keeps the layer for the next.
-                self.close_due = None;
+            self.close_due = None;
+            if let Some(slide) = SlideContent::closing_from_rest(scene, &frame) {
+                if scene.motion.as_ref().is_some_and(|m| m.open) {
+                    self.close_due = Some((std::time::Instant::now(), target.scale, target.format));
+                } else {
+                    // B0383: the close's first frame (progress 1, not yet a slide) flattens the layer
+                    // in the background for frame 1, which a panel that never rests has not built.
+                    self.start_background_layer(slide, scene, &frame, target.scale, target.format);
+                }
             }
             let mut target = target;
             if self.settled.is_some()
@@ -6687,6 +6692,32 @@ mod tests {
             first == expected,
             "frame 1 differs from a layer built on it"
         );
+    }
+    #[test]
+    fn a_panel_that_never_rests_starts_its_close_layer_at_the_first_close_frame() {
+        let mut renderer = TreeCpuRenderer::default();
+        for _ in 0..3 {
+            draw_plain(&mut renderer, &plain_reveal(true, 1.));
+        }
+        assert_eq!(
+            renderer.background_layer_builds, 0,
+            "never quiet, never prebuilt"
+        );
+        draw_plain(&mut renderer, &plain_reveal(false, 1.));
+        assert_eq!(
+            renderer.background_layer_builds, 1,
+            "the held first frame starts it"
+        );
+        while !renderer
+            .background_layer
+            .as_ref()
+            .is_some_and(|layer| layer.job.is_finished())
+        {
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        draw_plain(&mut renderer, &plain_reveal(false, 0.75));
+        assert_eq!(renderer.background_layer_adoptions, 1);
+        assert_eq!(renderer.slide_layer_builds, 0, "frame 1 never flattens");
     }
     #[test]
     fn a_plain_reveals_close_from_rest_reuses_the_idle_built_layer() {
