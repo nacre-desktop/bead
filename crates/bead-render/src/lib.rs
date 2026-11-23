@@ -2500,8 +2500,11 @@ fn shadow_raster(rect: Rect, radius: f32, blur: f32, alpha: f32, scale: f32) -> 
 const SVG_CACHE_CAP: usize = 8 * 1024 * 1024;
 type SvgCache = std::collections::VecDeque<(u64, usize, std::sync::Arc<Pixmap>)>;
 static SVG_CACHE: std::sync::OnceLock<std::sync::Mutex<SvgCache>> = std::sync::OnceLock::new();
+// Per thread: svg_pixmap renders on its caller, and parallel tests must not count each other.
 #[cfg(test)]
-static SVG_RENDER_COUNT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+thread_local! {
+    static SVG_RENDER_COUNT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
 
 fn svg_pixmap(data: &[u8], w: u32, h: u32) -> Result<Pixmap> {
     use std::hash::{Hash, Hasher};
@@ -2532,7 +2535,7 @@ fn svg_pixmap(data: &[u8], w: u32, h: u32) -> Result<Pixmap> {
         &mut pix.as_mut(),
     );
     #[cfg(test)]
-    SVG_RENDER_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    SVG_RENDER_COUNT.set(SVG_RENDER_COUNT.get() + 1);
     let bytes = pix.data().len();
     if bytes <= SVG_CACHE_CAP {
         let mut entries = cache.lock().unwrap();
@@ -2572,11 +2575,11 @@ mod borrowed_svg_tests {
     #[test]
     fn svg_raster_cache_skips_second_resvg_render() {
         let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" width="9" height="7"><circle cx="4" cy="3" r="2" fill="#456"/></svg>"##;
-        let before = SVG_RENDER_COUNT.load(std::sync::atomic::Ordering::Relaxed);
+        let before = SVG_RENDER_COUNT.get();
         let first = svg_pixmap(svg, 19, 13).unwrap();
-        let after_first = SVG_RENDER_COUNT.load(std::sync::atomic::Ordering::Relaxed);
+        let after_first = SVG_RENDER_COUNT.get();
         let second = svg_pixmap(svg, 19, 13).unwrap();
-        let after_second = SVG_RENDER_COUNT.load(std::sync::atomic::Ordering::Relaxed);
+        let after_second = SVG_RENDER_COUNT.get();
         assert_eq!(after_first, before + 1);
         assert_eq!(after_second, after_first);
         assert_eq!(first.data(), second.data());
