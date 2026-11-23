@@ -151,6 +151,9 @@ pub fn build_clock() -> u64 {
         .with(|clock| clock.get())
         .unwrap_or_else(clock_ns)
 }
+/// A motion this short (the clamp of a zero duration) is final from the moment it is targeted:
+/// holding it only keeps a panel on its CPU renderer and draws its first frame transparent (B0380).
+const INSTANT: f64 = 0.001;
 #[derive(Clone, Copy)]
 struct Motion {
     from: f32,
@@ -167,8 +170,9 @@ struct Motion {
     max_gap: f64,
     /// The worst gap's commit index and its split (wait, queue, render), seconds (B0295).
     worst: (u32, [f64; 3]),
-    /// The three costliest frame renders (commit index, seconds), costliest first (B0305).
-    top: [(u32, f64); 3],
+    /// The three costliest frame renders (commit index, seconds, largest phases), costliest first
+    /// (B0305, B0380).
+    top: [(u32, f64, [(&'static str, f64); 4]); 3],
     /// The costliest render's largest phases (name, seconds), largest first (B0310).
     top_split: [(&'static str, f64); 4],
 }
@@ -190,6 +194,8 @@ pub struct Slide {
     pub render_top: [(u32, f64); 3],
     /// The largest phases (name, ms) of the costliest render, largest first; unused slots are empty.
     pub top_split: [(&'static str, f64); 4],
+    /// The same four phases for each `render_top` entry, in its order (B0380).
+    pub top_splits: [[(&'static str, f64); 4]; 3],
 }
 impl std::fmt::Display for Slide {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -224,6 +230,15 @@ impl std::fmt::Display for Slide {
         {
             write!(f, "{}{stage}:{ms:.1}", if n > 0 { "," } else { "" })?;
         }
+        f.write_str(" top_splits=")?;
+        let frames = self.render_top.iter().zip(&self.top_splits);
+        for (n, ((at, _), phases)) in frames.filter(|(_, p)| !p[0].0.is_empty()).enumerate() {
+            write!(f, "{}{at}", if n > 0 { ";" } else { "" })?;
+            let phases = phases.iter().filter(|(stage, _)| !stage.is_empty());
+            for (i, (stage, ms)) in phases.enumerate() {
+                write!(f, "{}{stage}:{ms:.1}", if i > 0 { "/" } else { ":" })?;
+            }
+        }
         Ok(())
     }
 }
@@ -255,7 +270,7 @@ impl Animations {
                     last_frame: now,
                     max_gap: 0.,
                     worst: (0, [0.; 3]),
-                    top: [(0, 0.); 3],
+                    top: [(0, 0., [("", 0.); 4]); 3],
                     top_split: [("", 0.); 4],
                 },
             );
@@ -281,10 +296,10 @@ impl Animations {
         draw_start: f64,
         splits: &Splits,
     ) -> Option<Slide> {
-        let finished = self
-            .states
-            .get(id)
-            .is_some_and(|motion| !motion.held && drawn >= motion.started + motion.duration);
+        let finished = self.states.get(id).is_some_and(|motion| {
+            motion.duration <= INSTANT
+                || (!motion.held && drawn >= motion.started + motion.duration)
+        });
         for motion in self.states.values_mut().filter(|motion| motion.held) {
             motion.held = false;
             motion.started = now;
@@ -305,13 +320,14 @@ impl Animations {
             }
         }
         let render = now - draw_start.clamp(motion.last_frame, now);
-        if render > motion.top[0].1 {
+        if render > motion.top[2].1 {
             let mut phases = *splits;
             phases.sort_by(|a, b| b.1.total_cmp(&a.1));
-            motion.top_split = std::array::from_fn(|i| phases[i]);
-        }
-        if render > motion.top[2].1 {
-            motion.top[2] = (motion.frames, render);
+            let phases = std::array::from_fn(|i| phases[i]);
+            if render > motion.top[0].1 {
+                motion.top_split = phases;
+            }
+            motion.top[2] = (motion.frames, render, phases);
             motion.top.sort_by(|a, b| b.1.total_cmp(&a.1));
         }
         motion.frames += 1;
@@ -329,8 +345,11 @@ impl Animations {
             gap_wait_ms: motion.worst.1[0] * 1000.,
             gap_queue_ms: motion.worst.1[1] * 1000.,
             gap_render_ms: motion.worst.1[2] * 1000.,
-            render_top: motion.top.map(|(at, s)| (at, s * 1000.)),
+            render_top: motion.top.map(|(at, s, _)| (at, s * 1000.)),
             top_split: motion.top_split.map(|(stage, s)| (stage, s * 1000.)),
+            top_splits: motion
+                .top
+                .map(|(_, _, p)| p.map(|(stage, s)| (stage, s * 1000.))),
         };
         motion.frames = u32::MAX;
         Some(slide)
@@ -351,7 +370,7 @@ impl Animations {
         } else {
             self.value(id, now).map_or(target, |v| v.0)
         };
-        let duration = duration.max(0.001);
+        let duration = duration.max(INSTANT);
         if let Some(m) = self.states.get_mut(id).filter(|m| m.to == target) {
             // A pose not yet shown takes the scene's timing over a host fallback seeded before it
             // (B0307); a running motion keeps its own.
@@ -375,14 +394,16 @@ impl Animations {
                 last_frame: now,
                 max_gap: 0.,
                 worst: (0, [0.; 3]),
-                top: [(0, 0.); 3],
+                top: [(0, 0., [("", 0.); 4]); 3],
                 top_split: [("", 0.); 4],
             },
         );
     }
     pub fn value(&self, id: &str, now: f64) -> Option<(f32, bool)> {
         let motion = self.states.get(id)?;
-        let t = if motion.held {
+        let t = if motion.duration <= INSTANT {
+            1.
+        } else if motion.held {
             0.
         } else {
             ((now - motion.started) / motion.duration).clamp(0., 1.) as f32
@@ -391,9 +412,9 @@ impl Animations {
         Some((motion.from + (motion.to - motion.from) * progress, t < 1.))
     }
     pub fn active(&self, now: f64) -> bool {
-        self.states
-            .values()
-            .any(|m| (m.held || now < m.started + m.duration) && m.from != m.to)
+        self.states.values().any(|m| {
+            m.duration > INSTANT && (m.held || now < m.started + m.duration) && m.from != m.to
+        })
     }
     /// Drop every motion whose id `keep` rejects.
     pub fn retain(&mut self, mut keep: impl FnMut(&str) -> bool) {
@@ -465,6 +486,26 @@ mod tests {
         assert_eq!(a.committed("panel", 2., 2.), None);
     }
     #[test]
+    fn a_zero_duration_motion_is_final_and_idle_from_the_moment_it_is_targeted() {
+        let mut a = Animations::default();
+        a.open_to("p", true, 1., 0., Curve::EaseOut);
+        assert_eq!(a.value("p", 1.), Some((1., false)));
+        assert!(!a.active(1.));
+        let slide = a
+            .committed_timed("p", 1., 1.1, None, 1.05, &NO_SPLITS)
+            .unwrap();
+        assert!(slide.opening && slide.frames == 1);
+        assert!((slide.first_frame_ms - 100.).abs() < 1e-6);
+        // A host fallback seeded held with a real duration, then the scene's zero duration.
+        a.open_to("q", true, 2., 0.4, Curve::EaseOut);
+        assert_eq!(a.value("q", 2.), Some((0., true)));
+        assert!(a.active(2.));
+        a.open_to("q", true, 2., 0., Curve::EaseOut);
+        assert_eq!(a.value("q", 2.), Some((1., false)));
+        assert!(!a.active(2.));
+        assert!(a.committed("q", 2., 2.1).is_some());
+    }
+    #[test]
     fn a_reversal_holds_its_current_pose_until_shown_and_plain_targets_never_hold() {
         let mut a = Animations::default();
         a.open_to("panel", true, 0., 0.4, Curve::EaseOut);
@@ -504,7 +545,9 @@ mod tests {
         a.open_to("p", true, 0., 1., Curve::EaseOut);
         a.committed_timed("p", 0., 0., None, 0., &NO_SPLITS);
         // Gap 0.1: wait 0.04, queue 0.02, render 0.04.
-        a.committed_timed("p", 0.1, 0.1, Some(0.04), 0.06, &NO_SPLITS);
+        let mut frame1 = NO_SPLITS;
+        frame1[0] = ("swap", 0.01);
+        a.committed_timed("p", 0.1, 0.1, Some(0.04), 0.06, &frame1);
         // Smaller gap 0.05, no callback: queue 0.01, render 0.04.
         a.committed_timed("p", 0.15, 0.15, None, 0.11, &NO_SPLITS);
         let mut splits = NO_SPLITS;
@@ -524,10 +567,15 @@ mod tests {
         assert!(text.contains(" render_top=3:50.0,"), "{text}");
         // The phases of that costliest render, largest first.
         assert!(
-            text.ends_with(" top_split=gl_draw:30.0,prepare:10.0,swap:2.0"),
+            text.contains(" top_split=gl_draw:30.0,prepare:10.0,swap:2.0 top_splits="),
             "{text}"
         );
-        assert_eq!(text.matches(':').count(), 6, "{text}");
+        // The same phases for each costliest render that has any, by commit index (B0380).
+        assert!(
+            text.ends_with(" top_splits=3:gl_draw:30.0/prepare:10.0/swap:2.0;1:swap:10.0"),
+            "{text}"
+        );
+        assert_eq!(text.matches(':').count(), 12, "{text}");
     }
     #[test]
     fn cubic_in_out_has_symmetric_endpoints_midpoint_and_quarters() {

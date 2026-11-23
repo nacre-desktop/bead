@@ -222,7 +222,7 @@ pub fn busy_iteration() {
     });
 }
 /// Most phases one frame can mark; later marks are dropped.
-pub const MAX_SPLITS: usize = 12;
+pub const MAX_SPLITS: usize = 16;
 /// A frame's phases as (stage, seconds); unused slots are `("", 0.)`.
 pub type Splits = [(&'static str, f64); MAX_SPLITS];
 pub const NO_SPLITS: Splits = [("", 0.); MAX_SPLITS];

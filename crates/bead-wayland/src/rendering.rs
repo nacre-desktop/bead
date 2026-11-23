@@ -3307,6 +3307,7 @@ impl App {
                     s.activate_ms
                         .push(activate_started.elapsed().as_secs_f64() * 1000.);
                 }
+                bead_core::profile::split("activate");
                 if regions.is_empty() && !retained_gl_prepare {
                     wl_surface.frame(
                         qh,
@@ -3393,7 +3394,7 @@ impl App {
                     Damage::full(w as u32, h as u32),
                 )?;
                 drop(compose_profile);
-                bead_core::profile::split("gl_draw");
+                bead_core::profile::split("gl_flush");
                 if self.started.elapsed().as_secs_f64() > 2. {
                     s.render_ms.push(start.elapsed().as_secs_f64() * 1000.);
                 }
@@ -3994,6 +3995,7 @@ impl App {
             let callback = self.surfaces[index]
                 .last_callback
                 .map(|c| c.saturating_duration_since(self.started).as_secs_f64());
+            bead_core::profile::split("post");
             let slide = self.animations.committed_timed(
                 &id,
                 drawn,

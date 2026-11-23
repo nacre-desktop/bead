@@ -1558,18 +1558,21 @@ impl GlRenderer {
                 Ok(femtovg::Canvas::new(renderer)?)
             },
         )?;
+        bead_core::profile::split("gl_canvas");
         let budget = self.texture_budget();
         let frame = self.cache.frame.as_ref().ok_or("unprepared layer tree")?;
         let canvas = self.canvas.as_mut().ok_or("GL canvas missing")?;
         self.serial += 1;
-        upload_textures(
+        let uploaded = upload_textures(
             &mut self.images,
             canvas,
             &budget,
             &mut self.texture_peak,
             self.serial,
             frame,
-        )
+        );
+        bead_core::profile::split("gl_upload");
+        uploaded
     }
     fn paint(
         canvas: &mut femtovg::Canvas<femtovg::renderer::OpenGl>,
@@ -1965,6 +1968,7 @@ impl Renderer for GlRenderer {
                 );
             }
         }
+        bead_core::profile::split("gl_paint");
         let flush_profile = bead_core::profile::Span::new("gl_flush");
         canvas.flush();
         drop(flush_profile);
