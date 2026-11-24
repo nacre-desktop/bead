@@ -784,7 +784,7 @@ pub struct WallpaperFader {
     to: Option<Img>,
     size: (u32, u32),
     last: (f32, WallpaperBlend),
-    delete: GlDelete,
+    gl: UploadGl,
     gpu: GpuTimer,
     /// Wall milliseconds of `new`: the renderer and canvas, then the two uploads (B0316).
     pub setup_ms: (f64, f64),
@@ -826,7 +826,7 @@ impl WallpaperFader {
             to: None,
             size,
             last: (0., WallpaperBlend::Fade),
-            delete: gl_proc(display, c"glDeleteTextures")?,
+            gl: UploadGl::load(display)?,
             setup_ms: (began.elapsed().as_secs_f64() * 1e3, 0.),
         })
     }
@@ -848,44 +848,38 @@ impl WallpaperFader {
                 count(1);
                 Ok(Img { id, native: None })
             }
-            Pixels::Texture(texture) => {
-                let info = femtovg::ImageInfo::new(
-                    femtovg::ImageFlags::empty(),
-                    w as usize,
-                    h as usize,
-                    femtovg::PixelFormat::Rgba8,
-                );
-                let handle = std::num::NonZeroU32::new(texture).ok_or("texture 0")?;
-                // SAFETY: femtovg's native texture is glow's `NativeTexture(NonZeroU32)`; glow is
-                // not a direct dependency here, and transmute checks that the sizes agree.
-                let native = unsafe {
-                    std::mem::transmute::<
-                        std::num::NonZeroU32,
-                        <femtovg::renderer::OpenGl as femtovg::Renderer>::NativeTexture,
-                    >(handle)
-                };
-                match self.canvas.create_image_from_native_texture(native, info) {
-                    Ok(id) => Ok(Img {
-                        id,
-                        native: Some(texture),
-                    }),
-                    Err(error) => {
-                        self.delete_texture(texture);
-                        Err(error.into())
-                    }
-                }
-            }
+            Pixels::Texture(texture) => self.wrap(texture, femtovg::ImageFlags::empty()),
         }
     }
-    fn delete_texture(&self, texture: u32) {
-        // SAFETY: the context is current (callers activate it) and in the texture's share group.
-        unsafe { (self.delete)(1, &texture) };
-        count(-1);
+    /// Give a raw GL texture to femtovg; the fader owns it (and deletes it) from then on.
+    fn wrap(&mut self, texture: u32, flags: femtovg::ImageFlags) -> Result<Img> {
+        let (w, h) = self.size;
+        let info =
+            femtovg::ImageInfo::new(flags, w as usize, h as usize, femtovg::PixelFormat::Rgba8);
+        let handle = std::num::NonZeroU32::new(texture).ok_or("texture 0")?;
+        // SAFETY: femtovg's native texture is glow's `NativeTexture(NonZeroU32)`; glow is
+        // not a direct dependency here, and transmute checks that the sizes agree.
+        let native = unsafe {
+            std::mem::transmute::<
+                std::num::NonZeroU32,
+                <femtovg::renderer::OpenGl as femtovg::Renderer>::NativeTexture,
+            >(handle)
+        };
+        match self.canvas.create_image_from_native_texture(native, info) {
+            Ok(id) => Ok(Img {
+                id,
+                native: Some(texture),
+            }),
+            Err(error) => {
+                self.gl.delete(texture);
+                Err(error.into())
+            }
+        }
     }
     fn free(&mut self, image: Img) {
         self.canvas.delete_image(image.id);
         match image.native {
-            Some(texture) => self.delete_texture(texture),
+            Some(texture) => self.gl.delete(texture),
             None => count(-1),
         }
     }
@@ -947,23 +941,36 @@ impl WallpaperFader {
     pub fn retarget(&mut self, to: Pixels) -> Result<()> {
         let to = self.make(to)?;
         if self.to.is_some() {
-            let (w, h) = self.size;
-            let baked = self.canvas.create_image_empty(
-                w as usize,
-                h as usize,
-                femtovg::PixelFormat::Rgba8,
-                femtovg::ImageFlags::PREMULTIPLIED | femtovg::ImageFlags::FLIP_Y,
-            );
+            // An uninitialised texture: femtovg's create_image_empty would zero-fill and upload
+            // ~20 MB on this thread (B0387).
+            let baked = self
+                .gl
+                .texture(self.size, std::ptr::null(), false)
+                .map_err(Into::into)
+                .and_then(|texture| {
+                    self.wrap(
+                        texture,
+                        femtovg::ImageFlags::PREMULTIPLIED | femtovg::ImageFlags::FLIP_Y,
+                    )
+                });
             let baked = match baked {
                 Ok(baked) => baked,
                 Err(error) => {
                     self.free(to);
-                    return Err(error.into());
+                    return Err(error);
                 }
             };
-            count(1);
+            let target = baked.id;
             self.canvas
-                .set_render_target(femtovg::RenderTarget::Image(baked));
+                .set_render_target(femtovg::RenderTarget::Image(target));
+            // The texture starts undefined: define every pixel before the bake paints.
+            self.canvas.clear_rect(
+                0,
+                0,
+                self.size.0,
+                self.size.1,
+                femtovg::Color::rgba(0, 0, 0, 0),
+            );
             let (blend, mode) = self.last;
             self.paint(blend, mode);
             self.canvas.flush();
@@ -971,10 +978,7 @@ impl WallpaperFader {
             for old in [self.from.take(), self.to.take()].into_iter().flatten() {
                 self.free(old);
             }
-            self.from = Some(Img {
-                id: baked,
-                native: None,
-            });
+            self.from = Some(baked);
         }
         self.to = Some(to);
         Ok(())
@@ -1047,6 +1051,19 @@ impl UploadGl {
     }
     /// Upload and wait until it is done (glFinish), so the main thread can sample the texture.
     fn upload(&self, (w, h): (u32, u32), rgba: &[u8]) -> std::result::Result<u32, String> {
+        if rgba.len() != w as usize * h as usize * 4 {
+            return Err("wallpaper texture size mismatch".into());
+        }
+        self.texture((w, h), rgba.as_ptr().cast(), true)
+    }
+    /// A w*h RGBA texture; `data` is w*h pixels, or null for an uninitialised one. `wait`
+    /// glFinishes so another context can sample it.
+    fn texture(
+        &self,
+        (w, h): (u32, u32),
+        data: *const std::ffi::c_void,
+        wait: bool,
+    ) -> std::result::Result<u32, String> {
         const TEXTURE_2D: u32 = 0x0DE1;
         // LINEAR filters and CLAMP_TO_EDGE: femtovg's defaults for ImageFlags::empty().
         const PARAMETERS: [(u32, i32); 4] = [
@@ -1055,11 +1072,8 @@ impl UploadGl {
             (0x2802, 0x812F),
             (0x2803, 0x812F),
         ];
-        if rgba.len() != w as usize * h as usize * 4 {
-            return Err("wallpaper texture size mismatch".into());
-        }
         let mut texture = 0;
-        // SAFETY: this thread's context is current; `rgba` holds w*h RGBA pixels.
+        // SAFETY: this thread's context is current; `data` is null or holds w*h RGBA pixels.
         let error = unsafe {
             (self.gen_textures)(1, &mut texture);
             (self.bind)(TEXTURE_2D, texture);
@@ -1067,18 +1081,12 @@ impl UploadGl {
                 (self.parameter)(TEXTURE_2D, name, value);
             }
             (self.image)(
-                TEXTURE_2D,
-                0,
-                0x8058,
-                w as i32,
-                h as i32,
-                0,
-                0x1908,
-                0x1401,
-                rgba.as_ptr().cast(),
+                TEXTURE_2D, 0, 0x8058, w as i32, h as i32, 0, 0x1908, 0x1401, data,
             );
             (self.bind)(TEXTURE_2D, 0);
-            (self.finish)();
+            if wait {
+                (self.finish)();
+            }
             (self.error)()
         };
         count(1);
