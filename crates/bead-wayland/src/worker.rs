@@ -633,6 +633,10 @@ fn prepare_resource_job(
             Ok(result)
         }
         Job::PrepareCpu(request) => {
+            // B0396: Dense already paints on CPU; the snapshot's cache would drop the warm rasters.
+            if policy == bead_render::tree::ImagePolicy::Dense {
+                return Ok(request.prepare().map(drop));
+            }
             let result = request.prepare();
             let frame = cache.frame.take();
             // B0332: an empty cache keeps the worker's own image policy. B0336: an adopted CPU
@@ -1914,7 +1918,133 @@ mod tests {
         // The next scene's bake is paintable as is: no second PrepareCpu.
         let mut next = image(12.);
         bake(&mut cache, &mut next, &[1.]).unwrap();
+        let item = &next.prepared[&1_f32.to_bits()].items[0];
+        assert!(
+            item.raster.is_some() && item.image.is_none(),
+            "B0336: baked Dense"
+        );
         presenter.prepare_on_ui(&next, 1.).unwrap();
+        assert!(cpu_pixels(&mut presenter, &next) == cold_pixels(&next));
+    }
+    fn cpu_pixels(renderer: &mut bead_render::tree::TreeCpuRenderer, scene: &Scene) -> Vec<u8> {
+        use bead_render::Renderer;
+        let (width, height) = (scene.bounds.w.ceil() as u32, scene.bounds.h.ceil() as u32);
+        let mut bytes = vec![0; width as usize * height as usize * 4];
+        let target = bead_render::ShmTarget {
+            bytes: &mut bytes,
+            width,
+            height,
+            scale: 1.,
+            format: bead_render::PixelFormat::Rgba,
+        };
+        let damage = bead_render::Damage::full(width, height);
+        renderer.render(scene, target, damage).unwrap();
+        bytes
+    }
+    /// The same scene prepared from scratch on a fresh CPU renderer.
+    fn cold_pixels(scene: &Scene) -> Vec<u8> {
+        use bead_render::Renderer;
+        let mut cold = scene.clone();
+        cold.prepared.clear();
+        let mut renderer = bead_render::tree::TreeCpuRenderer::default();
+        renderer.prepare(&cold, 1.).unwrap();
+        cpu_pixels(&mut renderer, &cold)
+    }
+    #[test]
+    fn a_snapshot_cpu_companion_resumes_the_dense_bake_and_the_worker_cache_stays_warm() {
+        use bead_render::{
+            Primitive, Renderer,
+            tree::{CpuResourcesPending, ImagePolicy, TreeCpuRenderer},
+        };
+        const TEXTS: usize = 12;
+        let mut view = scene();
+        view.width = 96.;
+        view.bounds = Rect::new(0., 0., 96., 16. + 12. * TEXTS as f32);
+        view.primitives[0] = Primitive::image(Rect::new(0., 0., 16., 16.), "proof.svg");
+        view.asset_data.insert("proof.svg".into(), Arc::from(&br##"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><rect width="16" height="16" fill="#123456"/></svg>"##[..]));
+        view.font_files = vec![
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../bead-test/fonts/IBMPlexSans.ttf"),
+        ];
+        for row in 0..TEXTS {
+            let rect = Rect::new(0., 16. + 12. * row as f32, 96., 12.);
+            let text = format!("row {row}");
+            view.primitives
+                .push(Primitive::text(rect, text, "IBM Plex Sans", 10., [230; 4]));
+        }
+        // A resting floating panel: open, not a reveal.
+        view.motion = Some(bead_render::Motion {
+            id: "pearl".into(),
+            open: true,
+            duration: 0.2,
+            return_duration: None,
+            return_curve: None,
+            auto_open: false,
+            spring: false,
+            curve: None,
+            edge: bead_core::Edge::Top,
+            slide_distance: None,
+            scale_from: None,
+            fade: false,
+            reveal: false,
+            progress: 1.,
+            parts: Vec::new(),
+            art: None,
+            body: None,
+        });
+        let policy = ImagePolicy::Dense;
+        let mut cache = bead_render::tree::TreeCache::default().with_image_policy(policy);
+        bake(&mut cache, &mut view, &[1.]).unwrap();
+        let edit = |text: &str| {
+            let mut edited = view.clone();
+            if let Primitive::Text { text: row, .. } = &mut edited.primitives[1] {
+                *row = text.into();
+            }
+            edited
+        };
+        // Into snapshot mode, as after a frame presented at a scale the worker had not baked.
+        let mut cold = view.clone();
+        cold.prepared.clear();
+        let mut presenter = TreeCpuRenderer::default();
+        let request = presenter
+            .prepare_on_ui(&cold, 1.)
+            .unwrap_err()
+            .downcast_ref::<CpuResourcesPending>()
+            .unwrap()
+            .request
+            .clone();
+        assert!(matches!(
+            prepare_resource_job(Job::PrepareCpu(request), &mut cache, policy),
+            Ok(Ok(()))
+        ));
+        presenter.prepare_on_ui(&cold, 1.).unwrap();
+        assert!(presenter.cache.frame.is_none(), "a frozen snapshot");
+
+        let mut first = edit("first edit");
+        bake(&mut cache, &mut first, &[1.]).unwrap();
+        let resumed = presenter.prepare_on_ui(&first, 1.);
+        let error = resumed.as_ref().err();
+        if let Some(pending) = error.and_then(|e| e.downcast_ref::<CpuResourcesPending>()) {
+            // What the host does with a pending preparation.
+            let job = Job::PrepareCpu(pending.request.clone());
+            assert!(matches!(
+                prepare_resource_job(job, &mut cache, policy),
+                Ok(Ok(()))
+            ));
+            presenter.prepare_on_ui(&first, 1.).unwrap();
+        }
+        let builds = cache.builds;
+        let mut second = edit("second edit");
+        bake(&mut cache, &mut second, &[1.]).unwrap();
+        assert_eq!(cache.builds, builds + 1, "only the edited text rebuilds");
+        assert!(
+            resumed.is_ok(),
+            "resumes the dense bake: no worker snapshot"
+        );
+        for shown in [&first, &second] {
+            presenter.prepare_on_ui(shown, 1.).unwrap();
+            assert!(cpu_pixels(&mut presenter, shown) == cold_pixels(shown));
+        }
     }
     #[test]
     fn only_a_gl_policy_worker_is_told_to_restore_its_image_policy() {

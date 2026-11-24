@@ -4591,6 +4591,8 @@ impl Renderer for TreeCpuRenderer {
             }
             return Ok(());
         }
+        // B0396: changed content with a matching dense worker frame leaves snapshot mode.
+        self.resume_prepared(scene, scale)?;
         let dense = self.snapshot_fingerprint.is_none()
             && scene.prepared.get(&scale.to_bits()).is_some_and(|frame| {
                 prepared_rasters_match_visibility(scene, frame)
