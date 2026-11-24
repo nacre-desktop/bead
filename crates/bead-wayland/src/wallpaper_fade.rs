@@ -1024,6 +1024,7 @@ impl App {
                 thread.uploader.adopt(texture);
                 adopted.set(true);
             }
+            let _busy = bead_core::profile::Busy::new("fade_retarget");
             run.fader.retarget(match launch.texture {
                 Some(texture) => bead_render::gl::Pixels::Texture(texture),
                 None => bead_render::gl::Pixels::Rgba(&frame.rgba),
@@ -1192,6 +1193,7 @@ impl App {
         if let Some(prime) = self.warm.take_prime(done.token) {
             return self.prime_done(prime, done);
         }
+        let _busy = bead_core::profile::Busy::new("fade_launch");
         let waiting = self.wallpaper_surfaces.iter().position(|s| {
             s.fade.as_ref().is_some_and(|run| {
                 upload_current(run.upload.as_ref().map(|pending| pending.token), done.token)
@@ -1409,6 +1411,7 @@ impl App {
         if self.warm.prime.is_some() {
             return;
         }
+        let _busy = bead_core::profile::Busy::new("warm_prime");
         let began = std::time::Instant::now();
         let Some(index) = self.wallpaper_surfaces.iter().position(|s| {
             prime_wanted(
@@ -1462,6 +1465,7 @@ impl App {
     /// The upload thread made the shown image's texture: the resting run takes it, nothing is
     /// drawn or presented and the provider hears nothing. A texture nobody wants is deleted.
     fn prime_done(&mut self, prime: Prime, done: bead_render::gl::Uploaded) {
+        let _busy = bead_core::profile::Busy::new("warm_prime");
         let began = std::time::Instant::now();
         let upload_wait_ms = prime.queued.elapsed().as_secs_f64() * 1e3;
         let texture = match done.texture {
@@ -1927,6 +1931,7 @@ impl App {
 
     /// The grace and the fades are over: release the runs, the upload thread and the transport.
     pub(super) fn warm_off(&mut self) {
+        let _busy = bead_core::profile::Busy::new("warm_release");
         self.warm.on = false;
         self.warm.failed = false;
         self.warm.releasing = true;
