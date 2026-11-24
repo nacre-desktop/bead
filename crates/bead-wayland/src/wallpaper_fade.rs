@@ -363,10 +363,17 @@ pub(crate) fn transition_marker(
 }
 
 /// One journal line per change of warm mode (and when a release that waited for a fade is done),
-/// so a resident run that never goes is visible. `bytes` estimates the textures held.
-pub(crate) fn warm_marker(on: bool, outputs: usize, textures: usize, bytes: u64) -> String {
+/// so a resident run that never goes is visible. `bytes` estimates the textures held; `ms` is the
+/// main-thread time of the release that printed it (B0398; 0 for `on`).
+pub(crate) fn warm_marker(
+    on: bool,
+    outputs: usize,
+    textures: usize,
+    bytes: u64,
+    ms: f64,
+) -> String {
     format!(
-        "WALLPAPER_WARM state={} outputs={outputs} textures={textures} bytes={bytes}",
+        "WALLPAPER_WARM state={} outputs={outputs} textures={textures} bytes={bytes} ms={ms:.1}",
         if on { "on" } else { "off" }
     )
 }
@@ -382,6 +389,23 @@ pub(crate) fn plan_fade(
 /// The shared transport goes once nothing fades, nothing else draws with GL and the host is CPU.
 pub(crate) fn transport_releasable(fading: bool, other_gl: bool, cpu_host: bool) -> bool {
     !fading && !other_gl && cpu_host
+}
+/// B0398: a finished preparation is installed while no transport is and the panel or a wallpaper
+/// prime still wants one; otherwise it is shut down.
+pub(crate) fn preparation_wanted(installed: bool, panel: bool, prime: bool) -> bool {
+    !installed && (panel || prime)
+}
+/// B0398: the shared transport's EGL shutdown on its thread. eglGetPlatformDisplay hands out one
+/// EGLDisplay per wl_display, so every setup drops (joins) this first; however the handle
+/// travels, nothing initializes the display while it terminates.
+#[derive(Default)]
+pub(crate) struct PendingRelease(Option<std::thread::JoinHandle<()>>);
+impl Drop for PendingRelease {
+    fn drop(&mut self) {
+        if let Some(thread) = self.0.take() {
+            let _ = thread.join();
+        }
+    }
 }
 
 /// B0317: what a fade that drew its last frame does with its GL run.
@@ -446,10 +470,19 @@ pub(crate) fn prime_wanted(
 pub(crate) fn final_attach_needed(target: &[u8]) -> bool {
     !target.is_empty()
 }
-/// B0325: one line per primed output; `ms` is the main-thread time, `upload_wait_ms` the wait for
-/// the upload thread.
-pub(crate) fn prime_marker(output: &str, ms: f64, upload_wait_ms: f64) -> String {
-    format!("WALLPAPER_WARM_PRIME output={output} ms={ms:.1} upload_wait_ms={upload_wait_ms:.1}")
+/// B0325: one line per primed output; `ms` is the main-thread time (B0398: of all its turns),
+/// `upload_wait_ms` the wait for the upload thread, `prepare_wait_ms` the wait for the transport's
+/// preparation (0: one was there).
+pub(crate) fn prime_marker(
+    output: &str,
+    ms: f64,
+    upload_wait_ms: f64,
+    prepare_wait_ms: f64,
+) -> String {
+    format!(
+        "WALLPAPER_WARM_PRIME output={output} ms={ms:.1} upload_wait_ms={upload_wait_ms:.1} \
+         prepare_wait_ms={prepare_wait_ms:.1}"
+    )
 }
 /// B0325: the shown image of an output without a run is on the upload thread; its resting run is
 /// built from the answer.
@@ -459,6 +492,7 @@ pub(crate) struct Prime {
     queued: std::time::Instant,
     /// Main-thread ms spent so far.
     ms: f64,
+    prepare_wait_ms: f64,
 }
 /// Warm mode's state: the host's switch, and the upload thread while it is wanted.
 #[derive(Default)]
@@ -476,6 +510,8 @@ pub(crate) struct Warm {
     next_token: u64,
     /// B0325: the one prime in flight (outputs are primed one at a time).
     prime: Option<Prime>,
+    /// B0398: a prime waits for the transport's preparation: since when, and its main-thread ms.
+    preparing: Option<(std::time::Instant, f64)>,
     #[cfg(feature = "native-gl")]
     upload: Option<UploadThread>,
 }
@@ -900,18 +936,13 @@ impl App {
         }
     }
 
-    /// Reads the shown image from the attached SHM buffer (still mapped until the idle release).
-    fn shown_wallpaper_rgba(&mut self, index: usize) -> Option<Vec<u8>> {
+    /// Copies the shown image (BGRA) from the attached SHM buffer (still mapped until the idle
+    /// release).
+    fn shown_wallpaper_bgra(&mut self, index: usize) -> Option<Vec<u8>> {
         let surface = &mut self.wallpaper_surfaces[index];
         let slot = surface.buffers.get(surface.attached?)?.slot();
         let len = surface.width as usize * surface.height as usize * 4;
-        let bytes = surface.pool.raw_data_mut(&slot).get(..len)?;
-        let mut rgba = bytes.to_vec();
-        rgba.as_chunks_mut::<4>()
-            .0
-            .iter_mut()
-            .for_each(|p| p.swap(0, 2));
-        Some(rgba)
+        Some(surface.pool.raw_data_mut(&slot).get(..len)?.to_vec())
     }
 
     /// Start (or retarget) the crossfade to `frame`. The frame comes back when this is a cut.
@@ -955,7 +986,14 @@ impl App {
             return self.launch_on_run(index, frame, spec, launch);
         }
         let Some(old) = self
-            .shown_wallpaper_rgba(index)
+            .shown_wallpaper_bgra(index)
+            .map(|mut rgba| {
+                rgba.as_chunks_mut::<4>()
+                    .0
+                    .iter_mut()
+                    .for_each(|p| p.swap(0, 2));
+                rgba
+            })
             .or_else(|| frame.previous_rgba.take())
             .filter(|old| old.len() == frame.rgba.len())
         else {
@@ -1163,9 +1201,10 @@ impl App {
         self.warm.next_token += 1;
         let token = self.warm.next_token;
         let size = (frame.width, frame.height);
-        if let Err(rgba) = thread
-            .uploader
-            .upload(token, size, std::mem::take(&mut frame.rgba))
+        if let Err(rgba) =
+            thread
+                .uploader
+                .upload(token, size, std::mem::take(&mut frame.rgba), false)
         {
             frame.rgba = rgba;
             self.warm_upload_failed(&frame.output, "upload thread gone");
@@ -1256,7 +1295,7 @@ impl App {
         {
             return;
         }
-        let Some(transport) = &self.gl else {
+        let Some(transport) = self.gl.as_mut() else {
             return;
         };
         let (sender, receiver) = calloop::channel::channel::<bead_render::gl::Uploaded>();
@@ -1296,27 +1335,29 @@ impl App {
         }
     }
 
-    fn stop_upload_thread(&mut self) {
+    /// The thread stops when the uploader the caller gets is dropped (that joins it).
+    fn stop_upload_thread(&mut self) -> Option<bead_render::gl::Uploader> {
         // The thread deletes the texture of a prime in flight; its answer is never read.
         self.warm.prime = None;
-        if let Some(thread) = self.warm.upload.take() {
-            self.loop_handle.remove(thread.source);
-            drop(thread.uploader);
-        }
+        let thread = self.warm.upload.take()?;
+        self.loop_handle.remove(thread.source);
+        Some(thread.uploader)
     }
 
-    /// The shared transport, made on first use.
+    /// The shared transport, made on first use (B0398: or the preparation in flight).
     fn ensure_transport(&mut self) -> Result<(), Box<dyn Error>> {
         use raw_window_handle::{RawDisplayHandle, WaylandDisplayHandle};
-        use std::ptr::NonNull;
-        if self.gl.is_none() {
-            let display = RawDisplayHandle::Wayland(WaylandDisplayHandle::new(
-                NonNull::new(self.conn.backend().display_ptr().cast())
-                    .ok_or("native display missing")?,
-            ));
-            // SAFETY: the retained connection outlives the EGL context and surfaces.
-            self.gl = Some(unsafe { bead_render::gl::Transport::new(display) }?);
-        }
+        let display = RawDisplayHandle::Wayland(WaylandDisplayHandle::new(
+            std::ptr::NonNull::new(self.conn.backend().display_ptr().cast())
+                .ok_or("native display missing")?,
+        ));
+        // The retained connection outlives the EGL context and surfaces.
+        rendering::shared_transport(
+            &mut self.gl,
+            &mut self.gl_preparation,
+            &mut self.gl_release,
+            display,
+        )?;
         Ok(())
     }
 
@@ -1347,10 +1388,10 @@ impl App {
         let surface_ms = ms_since(began);
         let fader = match seed {
             Seed::Fade { from, to } => {
-                bead_render::gl::WallpaperFader::new(&transport.display, size, from, to)?
+                bead_render::gl::WallpaperFader::new(transport, size, from, to)?
             }
             Seed::Rest(texture) => bead_render::gl::WallpaperFader::at_rest(
-                &transport.display,
+                transport,
                 size,
                 bead_render::gl::Pixels::Texture(texture),
             )?,
@@ -1406,14 +1447,9 @@ impl App {
         self.loop_handle.insert_idle(|app| app.prime_next());
     }
 
-    /// Hand the shown image of one output to the upload thread; `prime_done` builds its run.
-    fn prime_next(&mut self) {
-        if self.warm.prime.is_some() {
-            return;
-        }
-        let _busy = bead_core::profile::Busy::new("warm_prime");
-        let began = std::time::Instant::now();
-        let Some(index) = self.wallpaper_surfaces.iter().position(|s| {
+    /// The next output to prime, if warm mode wants one.
+    pub(super) fn prime_target(&self) -> Option<usize> {
+        self.wallpaper_surfaces.iter().position(|s| {
             prime_wanted(
                 self.warm.on,
                 self.wallpaper_gl_failed,
@@ -1421,7 +1457,29 @@ impl App {
                 s.fade.is_some(),
                 s.attached.is_some() && s.transition.is_none(),
             )
-        }) else {
+        })
+    }
+
+    /// B0398: a preparation's poll ended (`adopt_ms`: its main-thread ms); a prime that waited
+    /// for it goes on.
+    pub(super) fn wallpaper_gl_prepared(&mut self, adopt_ms: f64) {
+        if let Some((_, ms)) = self.warm.preparing.as_mut() {
+            *ms += adopt_ms;
+        }
+        if self.prime_target().is_some() {
+            self.schedule_prime();
+        }
+    }
+
+    /// Hand the shown image of one output to the upload thread; `prime_done` builds its run.
+    /// B0398: without a transport the EGL setup is prepared off the main thread first.
+    fn prime_next(&mut self) {
+        if self.warm.prime.is_some() {
+            return;
+        }
+        let _busy = bead_core::profile::Busy::new("warm_prime");
+        let began = std::time::Instant::now();
+        let Some(index) = self.prime_target() else {
             return;
         };
         let name = self.wallpaper_surfaces[index].name.clone();
@@ -1429,16 +1487,24 @@ impl App {
             self.wallpaper_surfaces[index].width,
             self.wallpaper_surfaces[index].height,
         );
-        // Not retried on failure: a prime is chained only from a successful one.
-        let Some(rgba) = self.shown_wallpaper_rgba(index) else {
-            return;
-        };
-        if let Err(error) = self.ensure_transport() {
-            self.wallpaper_gl_failed = true;
-            eprintln!("WALLPAPER_FADE_FALLBACK output={name} reason={error}");
-            self.release_wallpaper_gl();
+        if self.gl.is_none() {
+            // Started, or already in flight: its poll primes again.
+            if let Err(error) = self.start_gl_preparation() {
+                self.wallpaper_gl_failed = true;
+                eprintln!("WALLPAPER_FADE_FALLBACK output={name} reason={error}");
+                self.release_wallpaper_gl();
+                return;
+            }
+            let ms = ms_since(began);
+            let (_, spent) = self.warm.preparing.get_or_insert((began, 0.));
+            *spent += ms;
             return;
         }
+        let (prepare_wait_ms, carried_ms) = self
+            .warm
+            .preparing
+            .take()
+            .map_or((0., 0.), |(since, ms)| (ms_since(since), ms));
         // The upload thread shares the transport's context, which a prime must make first.
         if let Some(Err(error)) = self.gl.as_mut().map(|gl| gl.ensure_context()) {
             self.warm_upload_failed(&name, error);
@@ -1446,10 +1512,15 @@ impl App {
         }
         self.start_upload_thread(&name);
         let token = self.warm.next_token + 1;
+        // Not retried on failure: a prime is chained only from a successful one. Only the copy
+        // reads the SHM buffer here; GL takes the BGRA bytes on the upload thread.
+        let Some(bgra) = self.shown_wallpaper_bgra(index) else {
+            return;
+        };
         let Some(thread) = &self.warm.upload else {
             return;
         };
-        if thread.uploader.upload(token, size, rgba).is_err() {
+        if thread.uploader.upload(token, size, bgra, true).is_err() {
             self.warm_upload_failed(&name, "upload thread gone");
             return;
         }
@@ -1458,7 +1529,8 @@ impl App {
             name,
             token,
             queued: std::time::Instant::now(),
-            ms: ms_since(began),
+            ms: carried_ms + ms_since(began),
+            prepare_wait_ms,
         });
     }
 
@@ -1500,7 +1572,10 @@ impl App {
                 (run.resting, run.done) = (true, true);
                 self.wallpaper_surfaces[index].fade = Some(run);
                 let ms = prime.ms + ms_since(began);
-                println!("{}", prime_marker(&prime.name, ms, upload_wait_ms));
+                println!(
+                    "{}",
+                    prime_marker(&prime.name, ms, upload_wait_ms, prime.prepare_wait_ms)
+                );
                 self.schedule_prime();
             }
             Err(error) => {
@@ -1924,7 +1999,7 @@ impl App {
             self.warm.on = true;
             self.warm.failed = false;
             self.warm.releasing = false;
-            self.report_warm(true);
+            self.report_warm(true, 0.);
             self.schedule_prime();
         }
     }
@@ -1932,13 +2007,15 @@ impl App {
     /// The grace and the fades are over: release the runs, the upload thread and the transport.
     pub(super) fn warm_off(&mut self) {
         let _busy = bead_core::profile::Busy::new("warm_release");
+        let began = std::time::Instant::now();
         self.warm.on = false;
         self.warm.failed = false;
         self.warm.releasing = true;
+        self.warm.preparing = None;
         self.release_wallpaper_gl();
         // A fade that still runs keeps its run; the line with nothing left follows its end.
         if self.warm.releasing {
-            self.report_warm(false);
+            self.report_warm(false, ms_since(began));
         }
     }
 
@@ -1964,7 +2041,7 @@ impl App {
         }
     }
 
-    fn report_warm(&self, on: bool) {
+    fn report_warm(&self, on: bool, ms: f64) {
         let runs = self
             .wallpaper_surfaces
             .iter()
@@ -1976,24 +2053,26 @@ impl App {
             bytes +=
                 run.fader.textures() as u64 * u64::from(run.size.0) * u64::from(run.size.1) * 4;
         }
-        println!("{}", warm_marker(on, outputs, textures, bytes));
+        println!("{}", warm_marker(on, outputs, textures, bytes, ms));
     }
 
     /// Give the shared EGL transport back once no fade or other GL surface needs it. Runs at rest
     /// go first when warm mode is over; a running fade releases itself when it ends.
     pub(super) fn release_wallpaper_gl(&mut self) {
-        self.release_gl_objects();
+        let began = std::time::Instant::now();
+        let handed_off = self.release_gl_objects();
         if self.warm.releasing && !self.wallpaper_surfaces.iter().any(|s| s.fade.is_some()) {
             self.warm.releasing = false;
-            println!("{}", warm_marker(false, 0, 0, 0));
-            let live = bead_render::gl::live_textures();
-            if live != 0 {
-                eprintln!("WALLPAPER_WARM_LEAK live_textures={live}");
+            println!("{}", warm_marker(false, 0, 0, 0, ms_since(began)));
+            // A transport handed off is checked on its thread, after the upload thread's join.
+            if !handed_off {
+                warm_leak_check();
             }
         }
     }
 
-    fn release_gl_objects(&mut self) {
+    /// True when the transport went to the release thread (`release_transport`).
+    fn release_gl_objects(&mut self) -> bool {
         for index in 0..self.wallpaper_surfaces.len() {
             let idle = self.wallpaper_surfaces[index]
                 .fade
@@ -2010,23 +2089,72 @@ impl App {
                 self.release_run_objects(index);
             }
         }
-        self.stop_upload_thread_if_idle();
         let fading = self.wallpaper_surfaces.iter().any(|s| s.fade.is_some());
         if !transport_releasable(
             fading,
             self.has_gl_surfaces(),
             self.options.renderer == RendererKind::Cpu,
         ) {
-            return;
+            self.stop_upload_thread_if_idle();
+            return false;
         }
         // The upload thread's context shares the transport's: it ends before the display does.
-        self.stop_upload_thread();
-        if let Some(transport) = self.gl.take() {
-            // SAFETY: no fade, bar or companion owns an EGL surface or renderer any more.
-            if let Err(error) = unsafe { transport.shutdown_exclusive() } {
+        let uploader = self.stop_upload_thread();
+        match self.gl.take() {
+            Some(transport) => self.release_transport(transport, uploader),
+            None => false,
+        }
+    }
+
+    /// B0398: the context is unbound here; the upload thread's join, the context's destruction
+    /// and eglTerminate run on a short-lived thread that every later setup of the display joins
+    /// first (`gl_release`). False when they stayed here (logged).
+    fn release_transport(
+        &mut self,
+        transport: bead_render::gl::Transport,
+        uploader: Option<bead_render::gl::Uploader>,
+    ) -> bool {
+        let prepared = match transport.into_prepared() {
+            Ok(prepared) => prepared,
+            Err(error) => {
                 eprintln!("WALLPAPER_FADE_RELEASE_ERROR {error}");
+                return false;
+            }
+        };
+        let connection = self.conn.clone();
+        let spawned = std::thread::Builder::new()
+            .name("bead-gl-release".into())
+            .spawn(move || {
+                // Its context shares the transport's: it goes first, with every unadopted texture.
+                drop(uploader);
+                warm_leak_check();
+                // SAFETY: no fade, bar or companion owns an EGL surface or renderer any more, the
+                // upload thread is joined, and no setup of this display starts before this thread
+                // is joined (`PendingRelease`); the connection outlives the terminate.
+                if let Err(error) = unsafe { prepared.shutdown_exclusive() } {
+                    eprintln!("WALLPAPER_FADE_RELEASE_ERROR {error}");
+                }
+                drop(connection);
+            });
+        match spawned {
+            Ok(thread) => {
+                self.gl_release = PendingRelease(Some(thread));
+                true
+            }
+            Err(error) => {
+                eprintln!("WALLPAPER_FADE_RELEASE_ERROR {error}");
+                false
             }
         }
+    }
+}
+
+/// No wallpaper texture is left once the runs and the upload thread are gone (B0317).
+#[cfg(feature = "native-gl")]
+fn warm_leak_check() {
+    let live = bead_render::gl::live_textures();
+    if live != 0 {
+        eprintln!("WALLPAPER_WARM_LEAK live_textures={live}");
     }
 }
 
@@ -2151,12 +2279,12 @@ mod tests {
     #[test]
     fn warm_mode_reports_its_state_in_one_line() {
         assert_eq!(
-            warm_marker(true, 2, 2, 40_608_000),
-            "WALLPAPER_WARM state=on outputs=2 textures=2 bytes=40608000"
+            warm_marker(true, 2, 2, 40_608_000, 0.),
+            "WALLPAPER_WARM state=on outputs=2 textures=2 bytes=40608000 ms=0.0"
         );
         assert_eq!(
-            warm_marker(false, 0, 0, 0),
-            "WALLPAPER_WARM state=off outputs=0 textures=0 bytes=0"
+            warm_marker(false, 0, 0, 0, 1.26),
+            "WALLPAPER_WARM state=off outputs=0 textures=0 bytes=0 ms=1.3"
         );
     }
     fn primed(name: &str, token: u64) -> Warm {
@@ -2166,6 +2294,7 @@ mod tests {
                 token,
                 queued: std::time::Instant::now(),
                 ms: 0.,
+                prepare_wait_ms: 0.,
             }),
             ..Warm::default()
         }
@@ -2218,9 +2347,35 @@ mod tests {
     #[test]
     fn a_primed_output_reports_its_cost_in_one_line() {
         assert_eq!(
-            prime_marker("eDP-1", 12.34, 5.67),
-            "WALLPAPER_WARM_PRIME output=eDP-1 ms=12.3 upload_wait_ms=5.7"
+            prime_marker("eDP-1", 12.34, 5.67, 81.26),
+            "WALLPAPER_WARM_PRIME output=eDP-1 ms=12.3 upload_wait_ms=5.7 prepare_wait_ms=81.3"
         );
+    }
+    #[test]
+    fn a_finished_preparation_is_kept_for_the_panel_or_a_wallpaper_prime_alone() {
+        // (transport installed, panel wants it, a prime wants it)
+        assert!(preparation_wanted(false, false, true), "warm mode alone");
+        assert!(preparation_wanted(false, true, false));
+        assert!(!preparation_wanted(false, false, false), "shut down");
+        assert!(
+            !preparation_wanted(true, true, true),
+            "another transport owns the display"
+        );
+    }
+    #[test]
+    fn a_new_setup_starts_only_after_the_pending_shutdown_ended() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        let terminated = std::sync::Arc::new(AtomicBool::new(false));
+        let flag = terminated.clone();
+        let release = PendingRelease(Some(std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(30));
+            flag.store(true, Ordering::SeqCst);
+        })));
+        // What a preparation thread and `shared_transport` do before EGL setup (also when a
+        // failed spawn drops the handle with its closure).
+        drop(release);
+        assert!(terminated.load(Ordering::SeqCst));
+        drop(PendingRelease::default());
     }
     #[test]
     fn the_upload_thread_serves_warm_mode_only_and_the_newest_frame_wins() {

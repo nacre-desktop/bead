@@ -935,6 +935,33 @@ impl Drop for GlPreparation {
         }
     }
 }
+/// The shared transport for a synchronous owner (a fade start, a bar or panel draw), made on
+/// first use. B0398: it waits for the preparation in flight instead of initializing the display
+/// a second time, and initializes only after the pending shutdown.
+#[cfg(feature = "native-gl")]
+pub(super) fn shared_transport<'a>(
+    gl: &'a mut Option<bead_render::gl::Transport>,
+    preparation: &mut Option<GlPreparation>,
+    release: &mut crate::wallpaper_fade::PendingRelease,
+    display: raw_window_handle::RawDisplayHandle,
+) -> Result<&'a mut bead_render::gl::Transport, Box<dyn Error>> {
+    if gl.is_none() {
+        *gl = Some(match preparation.take() {
+            Some(preparation) => preparation
+                .result
+                .recv()
+                .unwrap_or_else(|_| Err("GL preparation worker disconnected".into()))?
+                .into_transport(),
+            None => {
+                drop(std::mem::take(release));
+                // SAFETY: the caller's retained connection outlives the EGL context and surfaces;
+                // nothing else sets this display up or tears it down now.
+                unsafe { bead_render::gl::Transport::new(display) }?
+            }
+        });
+    }
+    gl.as_mut().ok_or_else(|| "GL transport missing".into())
+}
 struct PanelSnapshotWorker(Option<std::thread::JoinHandle<()>>);
 impl PanelSnapshotWorker {
     fn join(&mut self) -> Option<std::thread::Result<()>> {
@@ -1051,9 +1078,7 @@ impl App {
     }
     #[cfg(feature = "native-gl")]
     pub(super) fn prepare_panel_gl(&mut self) -> Result<(), Box<dyn Error>> {
-        if self.gl.is_some()
-            || self.gl_preparation.is_some()
-            || self.panel_gl_prewarm_error.is_some()
+        if self.panel_gl_prewarm_error.is_some()
             || self.options.renderer != RendererKind::Cpu
             || !self.panel_target
             || !self
@@ -1066,19 +1091,35 @@ impl App {
         {
             return Ok(());
         }
+        self.start_gl_preparation()
+    }
+    /// B0342: EGL display, config, context and the prewarmed canvas on the "bead-gl-prepare"
+    /// thread, adopted in O(1) by a 2 ms poll. B0398: the one preparation of the panel and the
+    /// wallpaper primes; it initializes after the pending shutdown, and a synchronous owner waits
+    /// for it (`shared_transport`) instead of initializing the display again.
+    #[cfg(feature = "native-gl")]
+    pub(super) fn start_gl_preparation(&mut self) -> Result<(), Box<dyn Error>> {
+        if self.gl.is_some() || self.gl_preparation.is_some() {
+            return Ok(());
+        }
+        let upload = self.prime_target().is_some();
+        let release = std::mem::take(&mut self.gl_release);
         let (sender, result) = std::sync::mpsc::channel();
         let connection = self.conn.clone();
         let worker = std::thread::Builder::new()
             .name("bead-gl-prepare".into())
             .spawn(move || {
                 use raw_window_handle::{RawDisplayHandle, WaylandDisplayHandle};
-                let prepared = (|| {
+                drop(release);
+                let prepared = (|| -> Result<_, String> {
                     let _span = bead_core::profile::Span::new("panel_transport_prewarm");
                     let pointer = std::ptr::NonNull::new(connection.backend().display_ptr().cast())
                         .ok_or("native display missing")?;
                     let display = RawDisplayHandle::Wayland(WaylandDisplayHandle::new(pointer));
-                    // SAFETY: App serializes setup, and the preparation guard holds the connection.
-                    unsafe { bead_render::gl::PreparedTransport::new(display) }
+                    // SAFETY: the pending shutdown is joined, this is the one preparation and no
+                    // transport exists (synchronous owners wait for it); the guard holds the
+                    // connection.
+                    unsafe { bead_render::gl::PreparedTransport::new(display, upload) }
                         .map_err(|e| e.to_string())
                 })();
                 if let Err(std::sync::mpsc::SendError(Ok(prepared))) = sender.send(prepared) {
@@ -1094,41 +1135,23 @@ impl App {
         if let Err(error) = self.loop_handle.insert_source(
             Timer::from_duration(Duration::from_millis(2)),
             |_, _, app| {
-                let Some(preparation) = &app.gl_preparation else {
-                    return TimeoutAction::Drop;
-                };
-                match preparation.result.try_recv() {
-                    Err(std::sync::mpsc::TryRecvError::Empty) => {
-                        return TimeoutAction::ToDuration(Duration::from_millis(2));
-                    }
-                    ready => {
-                        let prepared = ready
-                            .unwrap_or_else(|_| Err("GL preparation worker disconnected".into()));
-                        let _guard = app.gl_preparation.take();
-                        let active_gl_companion = app
-                            .companion
-                            .as_ref()
-                            .is_some_and(|(_, _, kind)| *kind == RendererKind::FemtovgGl);
-                        let wanted = app.gl.is_none()
-                            && app.panel_runtime.is_some()
-                            && (!app.panel_gpu_suspended || active_gl_companion)
-                            && app.options.companion.as_ref().map(|(_, kind)| *kind)
-                                == Some(RendererKind::FemtovgGl);
-                        match prepared {
-                            Ok(prepared) if wanted => app.gl = Some(prepared.into_transport()),
-                            // Another transport owns the display: only drop this context.
-                            Ok(prepared) if app.gl.is_some() => drop(prepared),
-                            Ok(prepared) => {
-                                // SAFETY: no GPU renderer or surface was created during preparation.
-                                if let Err(error) = unsafe { prepared.shutdown_exclusive() } {
-                                    app.fail(error);
-                                }
-                            }
-                            Err(error) if wanted => app.panel_gl_prewarm_error = Some(error),
-                            Err(_) => (),
+                let began = std::time::Instant::now();
+                // Gone: a synchronous owner adopted it (`shared_transport`); the waiters go on.
+                if let Some(preparation) = &app.gl_preparation {
+                    match preparation.result.try_recv() {
+                        Err(std::sync::mpsc::TryRecvError::Empty) => {
+                            return TimeoutAction::ToDuration(Duration::from_millis(2));
+                        }
+                        ready => {
+                            let prepared = ready.unwrap_or_else(|_| {
+                                Err("GL preparation worker disconnected".into())
+                            });
+                            app.adopt_gl_preparation(prepared);
                         }
                     }
                 }
+                let ms = began.elapsed().as_secs_f64() * 1e3;
+                app.wallpaper_gl_prepared(ms);
                 let qh = app.qh.clone();
                 let indices: Vec<_> = app
                     .surfaces
@@ -1147,6 +1170,51 @@ impl App {
             return Err(error.into());
         }
         Ok(())
+    }
+    /// Install a finished preparation if the panel or a wallpaper prime still wants it (B0398),
+    /// else shut it down.
+    #[cfg(feature = "native-gl")]
+    fn adopt_gl_preparation(
+        &mut self,
+        prepared: Result<bead_render::gl::PreparedTransport, String>,
+    ) {
+        let _guard = self.gl_preparation.take();
+        let active_gl_companion = self
+            .companion
+            .as_ref()
+            .is_some_and(|(_, _, kind)| *kind == RendererKind::FemtovgGl);
+        let panel = self.panel_runtime.is_some()
+            && (!self.panel_gpu_suspended || active_gl_companion)
+            && self.options.companion.as_ref().map(|(_, kind)| *kind)
+                == Some(RendererKind::FemtovgGl);
+        let prime = self.prime_target();
+        let installed = self.gl.is_some();
+        match prepared {
+            Ok(prepared)
+                if crate::wallpaper_fade::preparation_wanted(installed, panel, prime.is_some()) =>
+            {
+                self.gl = Some(prepared.into_transport());
+            }
+            // Another transport owns the display: only drop this context.
+            Ok(prepared) if installed => drop(prepared),
+            Ok(prepared) => {
+                // SAFETY: no GPU renderer or surface was created during preparation.
+                if let Err(error) = unsafe { prepared.shutdown_exclusive() } {
+                    self.fail(error);
+                }
+            }
+            Err(_) if installed => (),
+            Err(error) => {
+                if let Some(index) = prime {
+                    self.wallpaper_gl_failed = true;
+                    let name = &self.wallpaper_surfaces[index].name;
+                    eprintln!("WALLPAPER_FADE_FALLBACK output={name} reason={error}");
+                }
+                if panel {
+                    self.panel_gl_prewarm_error = Some(error);
+                }
+            }
+        }
     }
     /// Cache a CPU first frame, then retire closed-panel GPU and SHM allocations.
     pub(super) fn start_panel_snapshot(&mut self) -> Result<(), Box<dyn Error>> {
@@ -1884,10 +1952,13 @@ impl App {
         ));
         #[cfg(feature = "native-gl")]
         if renderer_kind == RendererKind::FemtovgGl {
-            if self.gl.is_none() {
-                // SAFETY: the retained connection outlives the EGL context/surfaces.
-                self.gl = Some(unsafe { bead_render::gl::Transport::new(display) }?);
-            }
+            // The retained connection outlives the EGL context/surfaces.
+            let transport = shared_transport(
+                &mut self.gl,
+                &mut self.gl_preparation,
+                &mut self.gl_release,
+                display,
+            )?;
             if surface.gl.is_none() {
                 bead_core::vprintln!(
                     "BUFFER companion={} logical={}x{} physical={}x{} scale={} transport=GL",
@@ -1899,12 +1970,7 @@ impl App {
                     surface.scale120 as f32 / 120.
                 );
                 // SAFETY: Surface::drop drops EGL before its wl_surface.
-                surface.gl = Some(unsafe {
-                    self.gl
-                        .as_mut()
-                        .unwrap()
-                        .create_surface(window, w as u32, h as u32)
-                }?);
+                surface.gl = Some(unsafe { transport.create_surface(window, w as u32, h as u32) }?);
             }
             return Ok(());
         }
@@ -3210,14 +3276,14 @@ impl App {
                     NonNull::new(wl_surface.id().as_ptr().cast())
                         .ok_or("native surface missing")?,
                 ));
-                if self.gl.is_none() {
-                    // SAFETY: the connection outlives Transport and surfaces.
-                    self.gl = Some(
-                        unsafe { bead_render::gl::Transport::new(display) }
-                            .map_err(|e| GpuUnavailable(e.to_string()))?,
-                    );
-                }
-                let transport = self.gl.as_mut().unwrap();
+                // The connection outlives Transport and surfaces.
+                let transport = shared_transport(
+                    &mut self.gl,
+                    &mut self.gl_preparation,
+                    &mut self.gl_release,
+                    display,
+                )
+                .map_err(|e| GpuUnavailable(e.to_string()))?;
                 if s.gl.is_none() {
                     // SAFETY: EGL surface is dropped before the retained wl_surface.
                     s.gl = Some(

@@ -96,6 +96,9 @@ pub(super) struct App {
     pub(super) panel_gl_prewarm_error: Option<String>,
     #[cfg(feature = "native-gl")]
     pub(super) gl_preparation: Option<rendering::GlPreparation>,
+    /// B0398: the transport's EGL shutdown, running on its thread.
+    #[cfg(feature = "native-gl")]
+    pub(super) gl_release: crate::wallpaper_fade::PendingRelease,
     pub(super) conn: Connection,
     pub(super) registry: RegistryState,
     pub(super) output: OutputState,
@@ -477,6 +480,8 @@ pub fn run_runtime(
         panel_gl_prewarm_error: None,
         #[cfg(feature = "native-gl")]
         gl_preparation: None,
+        #[cfg(feature = "native-gl")]
+        gl_release: Default::default(),
         conn: conn.clone(),
         registry: RegistryState::new(&globals),
         output: OutputState::new(&globals, &qh),

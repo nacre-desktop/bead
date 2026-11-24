@@ -4,7 +4,7 @@ use crate::{Damage, RenderTarget, Renderer, Result, Scene, ShmTarget};
 use glutin::{
     config::{Config, ConfigTemplateBuilder},
     context::{
-        ContextApi, ContextAttributesBuilder, NotCurrentContext, NotCurrentGlContext,
+        AsRawContext, ContextApi, ContextAttributesBuilder, NotCurrentContext, NotCurrentGlContext,
         PossiblyCurrentContext, Version,
     },
     display::{AsRawDisplay, Display, DisplayApiPreference},
@@ -26,6 +26,8 @@ pub struct Transport {
     pub display: Display,
     config: Config,
     context: Option<PossiblyCurrentContext>,
+    /// B0398: the upload thread's shared context, made by the preparation, until `uploader`.
+    upload: Option<NotCurrentContext>,
     swap_damage: unsafe extern "system" fn(
         *const std::ffi::c_void,
         *const std::ffi::c_void,
@@ -63,6 +65,7 @@ pub struct PreparedTransport {
     // Keep context/config before display so normal field drop order releases
     // EGL children before the display handle.
     context: Option<NotCurrentContext>,
+    upload: Option<NotCurrentContext>,
     config: Config,
     pub display: Display,
     swap_damage: DamageSwap,
@@ -89,14 +92,15 @@ impl Drop for Transport {
 }
 impl PreparedTransport {
     /// Prepare the EGL display, config, extension function, and non-current
-    /// OpenGL 3.3 context without requiring a window handle.
+    /// OpenGL 3.3 context without requiring a window handle. `upload` also makes
+    /// the context `Transport::uploader` shares (B0398), when surfaceless contexts exist.
     ///
     /// # Safety
     /// The native display/connection must remain alive until this value and all
     /// surfaces created from it are destroyed. Do not initialize another
     /// transport concurrently for the same native display; the caller must
     /// serialize setup and later convert this value into the sole `Transport`.
-    pub unsafe fn new(display: RawDisplayHandle) -> Result<Self> {
+    pub unsafe fn new(display: RawDisplayHandle, upload: bool) -> Result<Self> {
         let (display, config, swap_damage, supports_surfaceless) =
             unsafe { initialize_display(display) }?;
         let attrs = ContextAttributesBuilder::new()
@@ -131,8 +135,13 @@ impl PreparedTransport {
         } else {
             (context, None)
         };
+        // Best effort: without it `uploader` makes the shared context on its caller's thread.
+        let upload = (upload && supports_surfaceless)
+            .then(|| shared_context(&display, &config, &context).ok())
+            .flatten();
         Ok(Self {
             context: Some(context),
+            upload,
             config,
             display,
             swap_damage,
@@ -153,6 +162,7 @@ impl PreparedTransport {
             display: self.display,
             config: self.config,
             context: Some(context),
+            upload: self.upload.take(),
             swap_damage: self.swap_damage,
             surfaceless: self.surfaceless,
             generation: next_generation(),
@@ -168,14 +178,30 @@ impl PreparedTransport {
     pub unsafe fn shutdown_exclusive(self) -> Result<()> {
         let Self {
             context,
+            upload,
             config,
             display,
             ..
         } = self;
+        drop(upload);
         drop(context);
         drop(config);
         unsafe { terminate_exclusive(&display) }
     }
+}
+/// B0398: a context sharing `shared`'s objects, for the upload thread.
+fn shared_context(
+    display: &Display,
+    config: &Config,
+    shared: &impl AsRawContext,
+) -> Result<NotCurrentContext> {
+    let attrs = ContextAttributesBuilder::new()
+        .with_context_api(ContextApi::OpenGl(Some(Version::new(3, 3))))
+        .with_sharing(shared)
+        .build(None);
+    // SAFETY: config belongs to this display; the caller joins the thread that makes the context
+    // current before the display is terminated.
+    unsafe { display.create_context(config, &attrs) }.map_err(Into::into)
 }
 /// # Safety
 /// The caller must retain the native display for the returned EGL objects.
@@ -374,11 +400,30 @@ impl Transport {
     /// Every renderer, context and surface using this native display must already
     /// be destroyed. No other library may own EGL objects on this display.
     pub unsafe fn shutdown_exclusive(mut self) -> Result<()> {
+        drop(self.upload.take());
         if let Some(context) = self.context.take() {
             context.make_not_current_in_place()?;
             drop(context);
         }
         unsafe { terminate_exclusive(&self.display) }
+    }
+    /// B0398: the inverse of `PreparedTransport::into_transport`: the context is made not current
+    /// on this thread, so the value can move to another one for `shutdown_exclusive`.
+    pub fn into_prepared(mut self) -> Result<PreparedTransport> {
+        let context = self
+            .context
+            .take()
+            .map(|c| c.make_not_current())
+            .transpose()?;
+        Ok(PreparedTransport {
+            context,
+            upload: self.upload.take(),
+            config: self.config.clone(),
+            display: self.display.clone(),
+            swap_damage: self.swap_damage,
+            surfaceless: self.surfaceless,
+            warm: self.warm.take(),
+        })
     }
     /// # Safety
     /// Display must remain alive until the context and all surfaces are destroyed.
@@ -388,28 +433,30 @@ impl Transport {
             display,
             config,
             context: None,
+            upload: None,
             swap_damage,
             surfaceless,
             generation: next_generation(),
             warm: None.into(),
         })
     }
-    /// B0317: start the upload thread on a context shared with this transport's. It lives until
-    /// `Uploader::shutdown`, which must run before the transport is shut down.
-    pub fn uploader(&self, done: impl Fn(Uploaded) + Send + 'static) -> Result<Uploader> {
+    /// B0317: start the upload thread on a context shared with this transport's (the prepared one
+    /// when there is one, B0398). It lives until `Uploader::shutdown`, which must run before the
+    /// transport is shut down.
+    pub fn uploader(&mut self, done: impl Fn(Uploaded) + Send + 'static) -> Result<Uploader> {
         // shortcut: no pbuffer fallback for drivers without surfaceless contexts, the caller
         // keeps uploading on the main thread; add one if such a driver shows up.
         if !self.surfaceless {
             return Err("EGL_KHR_surfaceless_context missing".into());
         }
-        let shared = self.context.as_ref().ok_or("missing EGL context")?;
-        let attrs = ContextAttributesBuilder::new()
-            .with_context_api(ContextApi::OpenGl(Some(Version::new(3, 3))))
-            .with_sharing(shared)
-            .build(None);
-        // SAFETY: config belongs to this display; the context is moved to the upload thread,
-        // which is joined before the display is terminated.
-        let context = unsafe { self.display.create_context(&self.config, &attrs) }?;
+        let context = match self.upload.take() {
+            Some(context) => context,
+            None => shared_context(
+                &self.display,
+                &self.config,
+                self.context.as_ref().ok_or("missing EGL context")?,
+            )?,
+        };
         Uploader::spawn(self.display.clone(), context, Box::new(done))
     }
     /// B0325: make the shared context before any window surface exists, so the upload thread can
@@ -593,6 +640,8 @@ fn count(delta: isize) {
     LIVE_TEXTURES.fetch_add(delta, std::sync::atomic::Ordering::Relaxed);
 }
 type GlDelete = unsafe extern "system" fn(i32, *const u32);
+const GL_RGBA: u32 = 0x1908;
+const GL_BGRA: u32 = 0x80E1;
 fn gl_proc<T: Copy>(display: &Display, name: &std::ffi::CStr) -> Result<T> {
     let address = display.get_proc_address(name);
     if address.is_null() {
@@ -792,9 +841,9 @@ pub struct WallpaperFader {
 impl WallpaperFader {
     /// The EGL context must be current (`Transport::activate`). Both uploads happen here, so the
     /// first moving frame costs like the others.
-    pub fn new(display: &Display, size: (u32, u32), from: &[u8], to: &[u8]) -> Result<Self> {
+    pub fn new(transport: &Transport, size: (u32, u32), from: &[u8], to: &[u8]) -> Result<Self> {
         let began = std::time::Instant::now();
-        let mut fader = Self::bare(display, size)?;
+        let mut fader = Self::bare(transport, size)?;
         let canvas_ms = fader.setup_ms.0;
         // An error drops the fader, whose Drop frees whichever image exists by then.
         fader.from = Some(fader.make(Pixels::Rgba(from))?);
@@ -803,20 +852,27 @@ impl WallpaperFader {
         Ok(fader)
     }
     /// B0325: a fader at rest, as `settle` leaves one: only the shown image (`from`), no fade yet.
-    pub fn at_rest(display: &Display, size: (u32, u32), shown: Pixels) -> Result<Self> {
-        let mut fader = Self::bare(display, size)?;
+    pub fn at_rest(transport: &Transport, size: (u32, u32), shown: Pixels) -> Result<Self> {
+        let mut fader = Self::bare(transport, size)?;
         fader.from = Some(fader.make(shown)?);
         Ok(fader)
     }
-    fn bare(display: &Display, size: (u32, u32)) -> Result<Self> {
+    fn bare(transport: &Transport, size: (u32, u32)) -> Result<Self> {
         let began = std::time::Instant::now();
-        // SAFETY: the caller made the transport's context current on this thread.
-        let renderer = unsafe {
-            femtovg::renderer::OpenGl::new_from_function_cstr(|name| {
-                display.get_proc_address(name).cast()
-            })
-        }?;
-        let canvas = femtovg::Canvas::new(renderer)?;
+        let display = &transport.display;
+        let canvas = match transport.warm.take() {
+            // B0398: the prewarm's canvas, as a renderer's first one (B0376): nothing compiles here.
+            Some(WarmCanvas(canvas)) => std::mem::ManuallyDrop::into_inner(canvas),
+            None => {
+                // SAFETY: the caller made the transport's context current on this thread.
+                let renderer = unsafe {
+                    femtovg::renderer::OpenGl::new_from_function_cstr(|name| {
+                        display.get_proc_address(name).cast()
+                    })
+                }?;
+                femtovg::Canvas::new(renderer)?
+            }
+        };
         let mut gpu = GpuTimer::default();
         gpu.load(display);
         Ok(Self {
@@ -945,7 +1001,7 @@ impl WallpaperFader {
             // ~20 MB on this thread (B0387).
             let baked = self
                 .gl
-                .texture(self.size, std::ptr::null(), false)
+                .texture(self.size, std::ptr::null(), false, GL_RGBA)
                 .map_err(Into::into)
                 .and_then(|texture| {
                     self.wrap(
@@ -1014,6 +1070,7 @@ enum Job {
         token: u64,
         size: (u32, u32),
         rgba: Vec<u8>,
+        bgra: bool,
     },
     /// The main thread took the texture over and deletes it.
     Adopt(u32),
@@ -1050,19 +1107,27 @@ impl UploadGl {
         })
     }
     /// Upload and wait until it is done (glFinish), so the main thread can sample the texture.
-    fn upload(&self, (w, h): (u32, u32), rgba: &[u8]) -> std::result::Result<u32, String> {
+    fn upload(
+        &self,
+        (w, h): (u32, u32),
+        rgba: &[u8],
+        bgra: bool,
+    ) -> std::result::Result<u32, String> {
         if rgba.len() != w as usize * h as usize * 4 {
             return Err("wallpaper texture size mismatch".into());
         }
-        self.texture((w, h), rgba.as_ptr().cast(), true)
+        let format = if bgra { GL_BGRA } else { GL_RGBA };
+        self.texture((w, h), rgba.as_ptr().cast(), true, format)
     }
-    /// A w*h RGBA texture; `data` is w*h pixels, or null for an uninitialised one. `wait`
-    /// glFinishes so another context can sample it.
+    /// A w*h RGBA texture; `data` is w*h pixels in `format` (GL_RGBA or GL_BGRA, which GL
+    /// reorders itself), or null for an uninitialised one. `wait` glFinishes so another context
+    /// can sample it.
     fn texture(
         &self,
         (w, h): (u32, u32),
         data: *const std::ffi::c_void,
         wait: bool,
+        format: u32,
     ) -> std::result::Result<u32, String> {
         const TEXTURE_2D: u32 = 0x0DE1;
         // LINEAR filters and CLAMP_TO_EDGE: femtovg's defaults for ImageFlags::empty().
@@ -1081,7 +1146,7 @@ impl UploadGl {
                 (self.parameter)(TEXTURE_2D, name, value);
             }
             (self.image)(
-                TEXTURE_2D, 0, 0x8058, w as i32, h as i32, 0, 0x1908, 0x1401, data,
+                TEXTURE_2D, 0, 0x8058, w as i32, h as i32, 0, format, 0x1401, data,
             );
             (self.bind)(TEXTURE_2D, 0);
             if wait {
@@ -1126,16 +1191,25 @@ impl Uploader {
                 let mut outstanding = std::collections::BTreeSet::new();
                 for job in queue {
                     match (job, &setup) {
-                        (Job::Upload { token, size, rgba }, setup) => {
+                        (
+                            Job::Upload {
+                                token,
+                                size,
+                                rgba,
+                                bgra,
+                            },
+                            setup,
+                        ) => {
                             let began = std::time::Instant::now();
-                            let texture =
-                                match setup {
-                                    Ok((_, gl)) => std::panic::catch_unwind(
-                                        std::panic::AssertUnwindSafe(|| gl.upload(size, &rgba)),
-                                    )
-                                    .unwrap_or_else(|_| Err("upload panicked".into())),
-                                    Err(error) => Err(error.to_string()),
-                                };
+                            let texture = match setup {
+                                Ok((_, gl)) => {
+                                    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                                        gl.upload(size, &rgba, bgra)
+                                    }))
+                                    .unwrap_or_else(|_| Err("upload panicked".into()))
+                                }
+                                Err(error) => Err(error.to_string()),
+                            };
                             if let Ok(texture) = texture {
                                 outstanding.insert(texture);
                             }
@@ -1173,14 +1247,21 @@ impl Uploader {
             thread: Some(thread),
         })
     }
-    /// Queue an upload. The pixels come back when the thread is gone.
+    /// Queue an upload of RGBA pixels, or BGRA ones (an SHM buffer's, B0398): GL reorders them
+    /// on the upload thread. The pixels come back when the thread is gone.
     pub fn upload(
         &self,
         token: u64,
         size: (u32, u32),
         rgba: Vec<u8>,
+        bgra: bool,
     ) -> std::result::Result<(), Vec<u8>> {
-        let job = Job::Upload { token, size, rgba };
+        let job = Job::Upload {
+            token,
+            size,
+            rgba,
+            bgra,
+        };
         match self.jobs.as_ref().map(|jobs| jobs.send(job)) {
             Some(Err(std::sync::mpsc::SendError(Job::Upload { rgba, .. }))) => Err(rgba),
             _ => Ok(()),
