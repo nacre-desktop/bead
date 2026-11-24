@@ -20,6 +20,8 @@ pub type Factory = Box<dyn FnOnce() -> Result<Box<dyn SceneSource>, String> + Se
 struct Mirror {
     retained_bytes: Option<usize>,
     dormant_ready: bool,
+    /// Resource jobs the worker had finished when this was read (B0392).
+    resource_jobs: u64,
     wakeup_at: Option<std::time::Instant>,
     drag_visuals: Vec<crate::DragVisual>,
     focused_dismiss: bool,
@@ -49,6 +51,7 @@ impl Mirror {
         source: &dyn SceneSource,
         cache: &bead_render::tree::TreeCache,
         stack_bytes: usize,
+        resource_jobs: u64,
         animation_frame: bool,
         last: &mut Arc<Self>,
     ) -> Arc<Self> {
@@ -62,6 +65,7 @@ impl Mirror {
         let revision = if same { last.revision } else { revision };
         *last = Arc::new(Self {
             dormant_ready: source.dormant_ready(),
+            resource_jobs,
             retained_bytes: source.warm_retained_bytes().and_then(|bytes| {
                 bytes
                     .checked_add(stack_bytes)?
@@ -479,7 +483,8 @@ pub struct Source {
     pending: Arc<std::sync::atomic::AtomicUsize>,
     poisoned: bool,
     reported: Option<String>,
-    asynchronous_resources: bool,
+    /// Resource jobs sent: parking waits for a mirror read after the worker finished them all.
+    resource_jobs: u64,
     current: Scene,
     candidate: Option<Scene>,
     viewport: Option<(u32, u32)>,
@@ -504,7 +509,7 @@ impl Source {
             pending: Default::default(),
             poisoned: false,
             reported: None,
-            asynchronous_resources: false,
+            resource_jobs: 0,
             current: fallback,
             candidate: None,
             viewport: None,
@@ -714,7 +719,7 @@ impl SceneSource for Source {
     }
     fn dormant_ready(&self) -> bool {
         !self.poisoned
-            && !self.asynchronous_resources
+            && self.mirror.resource_jobs == self.resource_jobs
             && self.mirror.dormant_ready
             && self.pending.load(std::sync::atomic::Ordering::Acquire) == 0
             && self.candidate.is_none()
@@ -743,10 +748,9 @@ impl SceneSource for Source {
     ) -> Result<(), Box<dyn Error>> {
         self.preparation_retry |= self.candidate.is_some();
         if request.mark_requested() {
-            // Resource jobs can grow the baker after its mirrored byte snapshot.
-            // Until those jobs have byte-completion fences, use the cold path.
-            self.asynchronous_resources = true;
+            // Resource jobs can grow the baker after its mirrored byte snapshot (B0392).
             self.send(Job::PrepareCpu(request))?;
+            self.resource_jobs += 1;
         }
         Ok(())
     }
@@ -786,13 +790,13 @@ impl SceneSource for Source {
         if images.is_empty() {
             return Ok(());
         }
-        self.asynchronous_resources = true;
         if let Err(error) = self.send(Job::PrepareImages(images.clone())) {
             for image in images {
                 image.finish_request(None);
             }
             return Err(error);
         }
+        self.resource_jobs += 1;
         Ok(())
     }
 
@@ -866,6 +870,7 @@ impl SceneSource for Source {
                 let mut busy = [BusyWindow::new(30, 25.), BusyWindow::new(600, 1.)];
                 let mut absorbed = Absorbed::default();
                 let mut cpu_preps = 0u32;
+                let mut resource_jobs = 0u64;
                 let mut running: Option<(std::time::Instant, u64, String, bool, Vec<String>)> = None;
                 'actor: loop {
                     if let Some((at, cpu, kind, animation, keys)) = running.take() {
@@ -923,6 +928,7 @@ impl SceneSource for Source {
                     cpu_preps += u32::from(matches!(job, Job::PrepareCpu(_)));
                     let job = match prepare_resource_job(job, &mut cache, image_policy) {
                         Ok(result) => {
+                            resource_jobs += 1;
                             wakeup(UiEvent::ResourcesPrepared(result));
                             continue;
                         }
@@ -1038,6 +1044,7 @@ impl SceneSource for Source {
                                             source.as_ref(),
                                             &cache,
                                             stack_bytes,
+                                            resource_jobs,
                                             animation_frame,
                                             &mut mirrored,
                                         )),
@@ -1094,6 +1101,7 @@ impl SceneSource for Source {
                                         source.as_ref(),
                                         &cache,
                                         stack_bytes,
+                                        resource_jobs,
                                         animation_frame,
                                         &mut mirrored,
                                     )),
@@ -1200,7 +1208,10 @@ impl SceneSource for Source {
                                     job => {
                                         cpu_preps += u32::from(matches!(job, Job::PrepareCpu(_)));
                                         match prepare_resource_job(job, &mut cache, image_policy) {
-                                            Ok(result) => wakeup(UiEvent::ResourcesPrepared(result)),
+                                            Ok(result) => {
+                                                resource_jobs += 1;
+                                                wakeup(UiEvent::ResourcesPrepared(result))
+                                            }
                                             Err(job) => queue.push_back(job),
                                         }
                                     }
@@ -1212,6 +1223,7 @@ impl SceneSource for Source {
                                     Ok(Job::Stop) | Err(_) => break 'actor,
                                     Ok(job @ (Job::PrepareImages(_) | Job::PrepareCpu(_))) => {
                                         cpu_preps += u32::from(matches!(job, Job::PrepareCpu(_)));
+                                        resource_jobs += 1;
                                         wakeup(UiEvent::ResourcesPrepared(
                                             prepare_resource_job(job, &mut cache, image_policy)
                                                 .unwrap_or_else(|_| unreachable!()),
@@ -1256,6 +1268,7 @@ impl SceneSource for Source {
                                                         source.as_ref(),
                                                         &cache,
                                                         stack_bytes,
+                                                        resource_jobs,
                                                         animation_frame,
                                                         &mut mirrored,
                                                     )),
@@ -1277,6 +1290,7 @@ impl SceneSource for Source {
                                                             source.as_ref(),
                                                             &cache,
                                                             stack_bytes,
+                                                            resource_jobs,
                                                             animation_frame,
                                                             &mut mirrored,
                                                         )),
@@ -3063,6 +3077,7 @@ mod tests {
     struct Warm {
         stages: Arc<AtomicUsize>,
         fail: Arc<std::sync::atomic::AtomicBool>,
+        scene: Scene,
     }
     impl SceneSource for Warm {
         fn warm_retained_bytes(&self) -> Option<usize> {
@@ -3072,7 +3087,7 @@ mod tests {
             if self.fail.load(Ordering::SeqCst) {
                 return Err("stale source".into());
             }
-            Ok(Some(scene()))
+            Ok(Some(self.scene.clone()))
         }
         fn watch(
             &mut self,
@@ -3082,7 +3097,7 @@ mod tests {
         }
         fn stage(&mut self, _: UiEvent) -> Result<Option<Scene>, Box<dyn Error>> {
             self.stages.fetch_add(1, Ordering::SeqCst);
-            Ok(Some(scene()))
+            Ok(Some(self.scene.clone()))
         }
         fn validate(&self) -> Result<(), Box<dyn Error>> {
             Ok(())
@@ -3102,10 +3117,22 @@ mod tests {
         stages: Arc<AtomicUsize>,
         fail: Arc<std::sync::atomic::AtomicBool>,
     ) -> (Box<dyn SceneSource>, mpsc::Receiver<UiEvent>) {
+        warm_worker_showing(scene(), factories, stages, fail)
+    }
+    fn warm_worker_showing(
+        shown: Scene,
+        factories: Arc<AtomicUsize>,
+        stages: Arc<AtomicUsize>,
+        fail: Arc<std::sync::atomic::AtomicBool>,
+    ) -> (Box<dyn SceneSource>, mpsc::Receiver<UiEvent>) {
         let mut source: Box<dyn SceneSource> = Box::new(Source::new(
             Box::new(move || {
                 factories.fetch_add(1, Ordering::SeqCst);
-                Ok(Box::new(Warm { stages, fail }))
+                Ok(Box::new(Warm {
+                    stages,
+                    fail,
+                    scene: shown,
+                }))
             }),
             scene(),
         ));
@@ -3327,6 +3354,210 @@ mod tests {
                 "inactive B still occupies the single budget slot"
             );
         }
+    }
+    #[test]
+    fn a_worker_parks_once_its_resource_jobs_finish_and_a_later_mirror_reads_them() {
+        let mut fixture = scene();
+        fixture.primitives[0] = bead_render::Primitive::Image {
+            opacity: 1.,
+            rect: bead_render::Rect::new(0., 0., 16., 16.),
+            path: "proof.svg".into(),
+            blur: 0.,
+            fit: bead_render::ImageFit::Fill,
+            clip_polygon: None,
+            bake_size: None,
+            radius: 0.,
+            tint: None,
+        };
+        fixture.asset_data.insert("proof.svg".into(), Arc::from(&br##"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><rect width="16" height="16" fill="#123456"/></svg>"##[..]));
+        // The CPU presenter's request and a GL frame's image payload, as hosts send them.
+        let mut renderer = bead_render::renderer(bead_render::RendererKind::Cpu).unwrap();
+        let error = renderer.prepare_on_ui(&fixture, 1.).unwrap_err();
+        let request = error
+            .downcast_ref::<bead_render::tree::CpuResourcesPending>()
+            .unwrap()
+            .request
+            .clone();
+        let mut cache = bead_render::tree::TreeCache::default()
+            .with_image_policy(bead_render::tree::ImagePolicy::DeferredUpload);
+        cache.prepare(&fixture, 1.).unwrap();
+        let payload = cache.frame.as_ref().unwrap().items[0]
+            .image
+            .clone()
+            .unwrap();
+        let (mut source, events) =
+            warm_worker(Default::default(), Default::default(), Default::default());
+        source.prepare_images(vec![payload]).unwrap();
+        assert!(!source.dormant_ready(), "an image job in flight");
+        source.prepare_cpu(request).unwrap();
+        assert!(!source.dormant_ready(), "a CPU job in flight");
+        for _ in 0..2 {
+            let prepared = events.recv_timeout(Duration::from_secs(2)).unwrap();
+            assert!(matches!(prepared, UiEvent::ResourcesPrepared(Ok(()))));
+            assert!(source.stage(prepared).unwrap().is_none());
+        }
+        assert!(
+            !source.dormant_ready(),
+            "finished, but the last mirror predates their bytes"
+        );
+        source.stage(UiEvent::Relayout).unwrap();
+        settle(source.as_mut(), &events);
+        let mut cache = crate::warm::Cache::default();
+        cache.park(false, "hydrated".into(), 9, source, usize::MAX);
+        assert!(cache.take(false, "hydrated").is_some());
+    }
+    #[test]
+    fn a_settled_close_parks_only_within_a_warm_budget() {
+        let (mut source, events) =
+            warm_worker(Default::default(), Default::default(), Default::default());
+        source.stage(UiEvent::PanelVisibility(false)).unwrap();
+        assert!(
+            crate::warm::charge(source.as_ref(), 1, usize::MAX).is_none(),
+            "not while its close is in flight"
+        );
+        settle(source.as_mut(), &events);
+        // Budget 0: no park, so the 120 s keep-alive releases it as before (panel parks_early).
+        assert!(crate::warm::charge(source.as_ref(), 1, 0).is_none());
+        let budget = crate::warm::charge(source.as_ref(), 1, usize::MAX).unwrap();
+        let mut cache = crate::warm::Cache::default();
+        cache.park(false, "A".into(), 1, source, budget);
+        assert_eq!(cache.stats(), (1, budget));
+    }
+    #[test]
+    fn a_view_switched_away_mid_close_parks_after_its_close_ack_and_resumes_without_a_build() {
+        let factories = Arc::new(AtomicUsize::new(0));
+        let mut shown = scene();
+        // A raster item: what a resume must not build again.
+        shown.primitives.push(bead_render::Primitive::Shadow {
+            rect: bead_render::Rect::new(2., 2., 12., 12.),
+            radius: 4.,
+            blur: 2.,
+            spread: 0.,
+            dy: 0.,
+            alpha: 1.,
+        });
+        let (mut source, events) = warm_worker_showing(
+            shown,
+            factories.clone(),
+            Default::default(),
+            Default::default(),
+        );
+        let raster = |event: &UiEvent| {
+            let UiEvent::Worker(packet) = event else {
+                panic!("worker packet expected")
+            };
+            packet.scene.as_ref().unwrap().prepared[&1_f32.to_bits()]
+                .items
+                .iter()
+                .find_map(|item| item.raster.clone())
+                .unwrap()
+        };
+        // Close A and select B at once: the close transaction is still unacknowledged.
+        source.stage(UiEvent::PanelVisibility(false)).unwrap();
+        assert!(!source.dormant_ready());
+        let mut cache = crate::warm::Cache::default();
+        cache.park_closing(false, "A".into(), 1, source, usize::MAX);
+        let ready = events.recv_timeout(Duration::from_secs(2)).unwrap();
+        let closed = raster(&ready);
+        assert!(cache.handle_event(false, 1, &ready));
+        assert_eq!(
+            cache.stats().0,
+            0,
+            "not parked before its close is accepted"
+        );
+        let accepted = events.recv_timeout(Duration::from_secs(2)).unwrap();
+        assert!(matches!(&accepted, UiEvent::Worker(packet) if packet.is_accepted()));
+        assert!(cache.handle_event(false, 1, &accepted));
+        assert_eq!(cache.stats().0, 1, "parked once its close is acknowledged");
+        let mut source = cache.take(false, "A").expect("parked A").source;
+        assert!(source.resume().unwrap().is_none());
+        let resumed = events.recv_timeout(Duration::from_secs(2)).unwrap();
+        assert!(
+            Arc::ptr_eq(&raster(&resumed), &closed),
+            "the resume builds nothing for unchanged content"
+        );
+        assert!(source.stage(resumed).unwrap().is_some());
+        assert!(!source.commit());
+        let accepted = events.recv_timeout(Duration::from_secs(2)).unwrap();
+        assert!(matches!(&accepted, UiEvent::Worker(packet) if packet.resumed()));
+        source.stage(accepted).unwrap();
+        assert!(source.commit());
+        assert_eq!(factories.load(Ordering::SeqCst), 1, "no factory call");
+    }
+    #[test]
+    fn a_closing_source_retires_on_a_payload_its_timeout_or_its_own_request() {
+        for retire in 0..3 {
+            let (mut source, events) =
+                warm_worker(Default::default(), Default::default(), Default::default());
+            source.stage(UiEvent::PanelVisibility(false)).unwrap();
+            let mut cache = crate::warm::Cache::default();
+            cache.park_closing(false, "A".into(), 2, source, usize::MAX);
+            assert!(cache.handle_event(false, 2, &UiEvent::Model(Default::default())));
+            match retire {
+                0 => assert!(cache.handle_event(
+                    false,
+                    2,
+                    &UiEvent::Model(BTreeMap::from([(
+                        "changed".into(),
+                        bead_core::Value::Bool(true)
+                    )]))
+                )),
+                1 => cache.drop_closing(false, 2),
+                _ => assert!(cache.take(false, "A").is_none(), "the request goes cold"),
+            }
+            // Its Ready may be queued already; then the worker ends without an Ack.
+            let ended = loop {
+                match events.recv_timeout(Duration::from_secs(2)) {
+                    Ok(UiEvent::Worker(packet)) if matches!(packet.phase, Phase::Ready) => {}
+                    other => break other.err(),
+                }
+            };
+            assert_eq!(ended, Some(mpsc::RecvTimeoutError::Disconnected));
+            assert_eq!(cache.stats().0, 0);
+        }
+    }
+    #[test]
+    fn six_mid_close_switches_keep_two_factories_and_one_parked_view_without_growth() {
+        let factories = Arc::new(AtomicUsize::new(0));
+        let (mut active, a_events) =
+            warm_worker(factories.clone(), Default::default(), Default::default());
+        let (other, b_events) =
+            warm_worker(factories.clone(), Default::default(), Default::default());
+        let budget = active
+            .warm_retained_bytes()
+            .unwrap()
+            .max(other.warm_retained_bytes().unwrap())
+            + 1024;
+        let mut cache = crate::warm::Cache::default();
+        cache.park(false, "B".into(), 2, other, budget);
+        let (mut name, mut epoch, mut parked) = ("A", 1, Vec::new());
+        for requested in ["B", "A"].into_iter().cycle().take(12) {
+            active.stage(UiEvent::PanelVisibility(false)).unwrap();
+            // As select_panel: the target leaves the cache first, then the closing view retires.
+            let next = cache
+                .take(false, requested)
+                .expect("the other view stayed parked");
+            cache.park_closing(false, name.into(), epoch, active, budget);
+            let closing = if name == "A" { &a_events } else { &b_events };
+            for _ in 0..2 {
+                let packet = closing.recv_timeout(Duration::from_secs(2)).unwrap();
+                assert!(cache.handle_event(false, epoch, &packet));
+            }
+            parked.push(cache.stats());
+            (active, name, epoch) = (next.source, requested, next.epoch);
+            assert!(active.resume().unwrap().is_none());
+            settle(
+                active.as_mut(),
+                if name == "A" { &a_events } else { &b_events },
+            );
+        }
+        assert_eq!(factories.load(Ordering::SeqCst), 2);
+        assert!(
+            parked
+                .iter()
+                .all(|&(count, bytes)| count == 1 && bytes <= budget)
+        );
+        assert_eq!(parked[2..4], parked[10..12], "no growth across the cycles");
     }
     #[test]
     fn requested_stack_changes_admission_charge_without_overriding_rust_policy() {

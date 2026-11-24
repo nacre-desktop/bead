@@ -328,6 +328,7 @@ impl CompositorHandler for App {
                     "PANEL_SURFACE_UNMAPPED output={output} close_epoch={}",
                     self.panel_close_epoch
                 );
+                self.panel_close_settled();
                 return;
             }
             if self

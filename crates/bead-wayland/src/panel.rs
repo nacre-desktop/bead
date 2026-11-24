@@ -3,11 +3,19 @@
 use super::*;
 /// A closed panel stays built for this long, so reopening it shows prepared content on its first frame.
 const PANEL_KEEP_ALIVE: Duration = Duration::from_secs(120);
+/// B0392: with a warm budget, a closed panel parks this long after its close settles, so a quick
+/// reopen still takes the live path.
+const PANEL_PARK_GRACE: Duration = Duration::from_secs(2);
 fn panel_surface_missing_for_open(
     open: bool,
     mut mapped_companions: impl Iterator<Item = bool>,
 ) -> bool {
     open && !mapped_companions.any(|mapped| mapped)
+}
+/// B0392: only with a warm budget may a closed docked panel's worker leave before its keep-alive
+/// (to park); retained panels, pearls and app mode keep today's lifetimes.
+fn parks_early(budget: usize, closed: bool, pearl: bool, app_mode: bool, retained: bool) -> bool {
+    budget > 0 && closed && !pearl && !app_mode && !retained
 }
 fn should_stop_app_after_panel_release(
     app_mode: bool,
@@ -385,6 +393,25 @@ impl App {
         // source, so a one-entry budget can alternate two warm views.
         let warm = self.warm_sources.take(false, &name);
         if self.panel_runtime.is_some() {
+            // B0392: a view switched away mid-close parks once its close is acknowledged.
+            if self.panel_parks_early()
+                && let Some(retiring) = self.panel_name.clone()
+                && let Some(source) = self.panel_runtime.take_if(|s| !s.dormant_ready())
+            {
+                let epoch = self.panel_epoch;
+                let budget = self.options.warm_source_budget;
+                self.warm_sources
+                    .park_closing(false, retiring, epoch, source, budget);
+                if let Err(error) = self.loop_handle.insert_source(
+                    Timer::from_duration(PANEL_PARK_GRACE),
+                    move |_, _, app| {
+                        app.warm_sources.drop_closing(false, epoch);
+                        TimeoutAction::Drop
+                    },
+                ) {
+                    self.fail(error);
+                }
+            }
             self.release_panel();
         }
         self.options.panel_spec = Some(spec);
@@ -1429,6 +1456,62 @@ impl App {
             self.fail(e);
         }
     }
+    fn panel_parks_early(&self) -> bool {
+        parks_early(
+            self.options.warm_source_budget,
+            !self.panel_target,
+            self.pearl.is_some(),
+            self.options.app.is_some(),
+            self.options
+                .panel_spec
+                .as_ref()
+                .is_some_and(|spec| spec.retain_when_closed),
+        ) && self.panel_name.is_some()
+    }
+    /// B0392: a settled close (its surface unmapped) parks the panel PANEL_PARK_GRACE later,
+    /// once its worker is dormant and fits the budget; until then the keep-alive still applies.
+    pub(super) fn panel_close_settled(&mut self) {
+        if !self.panel_parks_early()
+            || !self
+                .panel_runtime
+                .as_ref()
+                .is_some_and(|source| source.warm_retained_bytes().is_some())
+        {
+            return;
+        }
+        let (epoch, token) = (self.panel_epoch, self.panel_close_epoch);
+        if let Err(error) = self.loop_handle.insert_source(
+            Timer::from_duration(PANEL_PARK_GRACE),
+            move |_, _, app| {
+                if app.panel_epoch != epoch
+                    || app.panel_close_epoch != token
+                    || !app.panel_parks_early()
+                {
+                    return TimeoutAction::Drop;
+                }
+                let budget = app.options.warm_source_budget;
+                if !app
+                    .panel_name
+                    .as_ref()
+                    .zip(app.panel_runtime.as_ref())
+                    .is_some_and(|(name, source)| {
+                        warm::charge(source.as_ref(), name.len(), budget).is_some()
+                    })
+                {
+                    // A busy worker retries until it parks or its keep-alive releases it.
+                    return TimeoutAction::ToDuration(PANEL_PARK_GRACE);
+                }
+                app.release_panel();
+                let qh = app.qh.clone();
+                for i in 0..app.surfaces.len() {
+                    app.draw(i, &qh);
+                }
+                TimeoutAction::Drop
+            },
+        ) {
+            self.fail(error);
+        }
+    }
     pub(super) fn release_panel(&mut self) {
         self.release_panel_inner(true);
     }
@@ -1574,9 +1657,12 @@ impl App {
             source.set_idle(true);
         }
         // Functional closed-idle reclamation, explicitly requested for Gate C; not a diagnostic.
+        // B0392: with a warm budget the idle trim below does it; a switch reuses the freed heap.
         #[cfg(all(target_os = "linux", target_env = "gnu"))]
-        unsafe {
-            libc::malloc_trim(0);
+        if self.options.warm_source_budget == 0 {
+            unsafe {
+                libc::malloc_trim(0);
+            }
         }
         // Accepted worker packets already queued on the UI channel may still
         // own retired rasters. Let that queue drain before the final trim.
@@ -1822,6 +1908,18 @@ mod placement_tests {
         assert!(!should_stop_app_after_panel_release(
             false, false, false, false
         ));
+    }
+
+    #[test]
+    fn only_a_warm_budget_lets_a_closed_docked_panel_park_before_its_keep_alive() {
+        assert!(parks_early(1, true, false, false, false));
+        // Budget 0 keeps today's lifetimes: the 120 s keep-alive, and a cold switch.
+        assert!(!parks_early(0, true, false, false, false));
+        // Open replacements cold-retire; pearls, app mode and retained panels keep their own.
+        assert!(!parks_early(1, false, false, false, false));
+        assert!(!parks_early(1, true, true, false, false));
+        assert!(!parks_early(1, true, false, true, false));
+        assert!(!parks_early(1, true, false, false, true));
     }
 
     #[test]

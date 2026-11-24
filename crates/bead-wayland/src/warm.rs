@@ -10,10 +10,21 @@ pub(super) struct Entry {
     name: String,
     bytes: usize,
 }
+/// Dormant entries, oldest first, and (B0392) one source retired mid-close with its budget.
 #[derive(Default)]
-pub(super) struct Cache(VecDeque<Entry>);
+pub(super) struct Cache(VecDeque<Entry>, Option<(Entry, usize)>);
+/// The admission charge of a dormant source named with `name` bytes, if it fits `budget`.
+pub(super) fn charge(source: &dyn SceneSource, name: usize, budget: usize) -> Option<usize> {
+    if !source.dormant_ready() {
+        return None;
+    }
+    source
+        .warm_retained_bytes()
+        .and_then(|bytes| bytes.checked_add(name + std::mem::size_of::<Entry>() + 64))
+        .filter(|bytes| *bytes <= budget)
+}
 impl Cache {
-    fn stats(&self) -> (usize, usize) {
+    pub fn stats(&self) -> (usize, usize) {
         (self.0.len(), self.0.iter().map(|entry| entry.bytes).sum())
     }
     fn trace(&self) {
@@ -28,16 +39,7 @@ impl Cache {
         source: Box<dyn SceneSource>,
         budget: usize,
     ) {
-        if !source.dormant_ready() {
-            return;
-        }
-        let Some(bytes) = source
-            .warm_retained_bytes()
-            .and_then(|bytes| {
-                bytes.checked_add(name.capacity() + std::mem::size_of::<Entry>() + 64)
-            })
-            .filter(|bytes| *bytes <= budget)
-        else {
+        let Some(bytes) = charge(source.as_ref(), name.capacity(), budget) else {
             return;
         };
         self.0
@@ -54,7 +56,46 @@ impl Cache {
         });
         self.trace();
     }
+    /// B0392: a source retired before its close transaction was acknowledged waits here, replacing
+    /// an older one; `handle_event` acknowledges its own packets and parks it once it is dormant.
+    pub fn park_closing(
+        &mut self,
+        overlay: bool,
+        name: String,
+        epoch: u64,
+        source: Box<dyn SceneSource>,
+        budget: usize,
+    ) {
+        self.1 = (source.alive() && source.warm_retained_bytes().is_some()).then(|| {
+            let entry = Entry {
+                overlay,
+                name,
+                epoch,
+                source,
+                bytes: 0,
+            };
+            (entry, budget)
+        });
+    }
+    /// A closing source not acknowledged in time retires as a cold one does.
+    pub fn drop_closing(&mut self, overlay: bool, epoch: u64) {
+        if self
+            .1
+            .as_ref()
+            .is_some_and(|(entry, _)| entry.overlay == overlay && entry.epoch == epoch)
+        {
+            self.1 = None;
+        }
+    }
     pub fn take(&mut self, overlay: bool, name: &str) -> Option<Entry> {
+        // A requested view still closing goes cold: one source per view.
+        if self
+            .1
+            .as_ref()
+            .is_some_and(|(entry, _)| entry.overlay == overlay && entry.name == name)
+        {
+            self.1 = None;
+        }
         let index = self
             .0
             .iter()
@@ -67,7 +108,34 @@ impl Cache {
     /// Consume callbacks for dormant epochs. Empty model hints carry no state:
     /// mandatory resume polls their producers. Every payload/protocol event still
     /// retires the source, so stale state or a waiting acknowledgement cannot survive.
+    /// A closing source's own clean packets are acknowledged as a host without a surface would.
     pub fn handle_event(&mut self, overlay: bool, epoch: u64, event: &UiEvent) -> bool {
+        if let Some((mut entry, budget)) = self
+            .1
+            .take_if(|(entry, _)| entry.overlay == overlay && entry.epoch == epoch)
+        {
+            let kept = match event {
+                UiEvent::Model(values) => values.is_empty(),
+                UiEvent::Worker(packet) if !packet.has_error() => {
+                    match entry.source.stage(UiEvent::Worker(packet.clone())) {
+                        // Ready sends its Ack; Accepted commits the candidate.
+                        Ok(Some(_)) => {
+                            entry.source.commit();
+                            true
+                        }
+                        Ok(None) => true,
+                        Err(_) => false,
+                    }
+                }
+                _ => false,
+            };
+            if kept && entry.source.dormant_ready() {
+                self.park(overlay, entry.name, epoch, entry.source, budget);
+            } else if kept {
+                self.1 = Some((entry, budget));
+            }
+            return true;
+        }
         if !self
             .0
             .iter()

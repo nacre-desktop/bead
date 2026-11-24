@@ -173,11 +173,19 @@ its default is zero. A source must declare a conservative ownership bound throug
 `SceneSource::warm_retained_bytes` and implement `resume` to refresh its host inputs.
 Only closed, settled workers can park. Requested entries leave the cache before
 the retiring view enters, so alternating two views needs one dormant slot.
+With a budget (B0392), a closed docked panel that can park does so 2 s after its
+close settles (its surface unmaps), not at the 120 s keep-alive; a reopen within
+those 2 s stays live. A view switched away mid-close waits in one closing slot: the
+cache acknowledges that source's own clean packets without a surface and parks it
+once dormant; any other callback, a request for it, or 2 s without the ack drops it.
+Such releases skip the immediate allocator trim; the idle trim 100 ms later stays.
+Budget 0 keeps the keep-alive, the cold switch and both trims.
 Surfaces, renderer instances, focus and protocol objects follow normal teardown.
 Payload-free model refresh hints keep the source warm; mandatory resume polls
 current producers. Reload, payload, protocol and error callbacks evict the source.
 Hidden views do not run model updates or retain a queue of events.
-Asynchronous image/CPU hydration currently makes a worker ineligible for parking.
+A worker that ran image/CPU hydration parks only once every such job it was sent
+has finished and a later mirror re-read its retained bytes; never while one is in flight.
 
 Reopening uses the normal surface path with an acknowledgement barrier before
 showing cached content. Palette and visibility updates precede resume; failed

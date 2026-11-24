@@ -566,6 +566,7 @@ impl Dispatch<BeadLayerMotionV1, Arc<DispatchData>> for App {
                 state.surfaces[index].layer.unmap();
                 state.surfaces[index].panel_unmapped = true;
                 state.surfaces[index].layer_motion_open = None;
+                state.panel_close_settled();
             } else {
                 state.surfaces[index].layer_motion = state
                     .layer_motion_manager
