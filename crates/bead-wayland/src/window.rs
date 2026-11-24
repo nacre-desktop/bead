@@ -207,16 +207,12 @@ impl WindowHandler for App {
         let spec = self.options.window.as_ref();
         let fallback = win.preferred_size;
         let min = spec.map_or((1, 1), |s| s.min_size);
-        let width = configure
-            .new_size
-            .0
-            .map_or(fallback.0, |v| v.get())
-            .max(min.0);
-        let height = configure
-            .new_size
-            .1
-            .map_or(fallback.1, |v| v.get())
-            .max(min.1);
+        let (width, height) = configured_size(
+            configure.new_size,
+            configure.suggested_bounds,
+            fallback,
+            min,
+        );
         let changed = win.size != (width, height) || !win.configured;
         win.size = (width, height);
         win.configured = true;
@@ -968,6 +964,63 @@ impl App {
         if let Some(ev) = ev {
             self.window_ui(ev);
         }
+    }
+}
+
+/// A toplevel's size from a configure. An axis the compositor leaves to the client takes the
+/// preferred size, clamped to xdg-shell's configure_bounds (the work area), so a window never
+/// opens past the screen (B0385). A zero bound is unknown. min_size wins over both.
+fn configured_size(
+    new_size: (Option<std::num::NonZeroU32>, Option<std::num::NonZeroU32>),
+    bounds: Option<(u32, u32)>,
+    preferred: (u32, u32),
+    min: (u32, u32),
+) -> (u32, u32) {
+    let (bound_w, bound_h) = bounds.unwrap_or((0, 0));
+    let axis = |size: Option<std::num::NonZeroU32>, bound: u32, preferred: u32, min: u32| {
+        let free = if bound > 0 {
+            preferred.min(bound)
+        } else {
+            preferred
+        };
+        size.map_or(free, std::num::NonZeroU32::get).max(min)
+    };
+    (
+        axis(new_size.0, bound_w, preferred.0, min.0),
+        axis(new_size.1, bound_h, preferred.1, min.1),
+    )
+}
+
+#[cfg(test)]
+mod configured_size_tests {
+    use super::configured_size;
+
+    #[test]
+    fn a_client_sized_window_opens_inside_the_compositors_bounds() {
+        let n = std::num::NonZeroU32::new;
+        // niri on 1280x800 under a bar: a 1100x800 window must not run off the screen.
+        assert_eq!(
+            configured_size((None, None), Some((1240, 720)), (1100, 800), (1, 1)),
+            (1100, 720)
+        );
+        // No bounds (xdg-shell < 4) or a zero (unknown) bound: the preferred size.
+        assert_eq!(
+            configured_size((None, None), None, (1100, 800), (1, 1)),
+            (1100, 800)
+        );
+        assert_eq!(
+            configured_size((None, None), Some((0, 720)), (1100, 800), (1, 1)),
+            (1100, 720)
+        );
+        // A compositor-chosen size is taken as is; min_size wins over the bounds.
+        assert_eq!(
+            configured_size((n(900), n(600)), Some((800, 500)), (1100, 800), (1, 1)),
+            (900, 600)
+        );
+        assert_eq!(
+            configured_size((None, None), Some((1240, 500)), (1100, 800), (760, 560)),
+            (1100, 560)
+        );
     }
 }
 
