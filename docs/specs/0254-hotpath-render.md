@@ -76,3 +76,7 @@ Fade-frame samples follow a sleep to the frame deadline, so they run colder than
 ## Fade stalls (B0387)
 
 A mid-fade retarget bakes into an uninitialised GL texture (cleared on the GPU) instead of femtovg's zero-filled ~20 MB upload. A palette-driven decoration sync (`sync_decoration_variant`) rasters a missing tile set on one thread and installs it from the cache when it arrives; panel, pearl and render syncs stay synchronous. `MAIN_BUSY` names `fade_launch`, `fade_retarget`, `warm_prime` and `warm_release`.
+
+## Cold panel fallback (B0390)
+
+A panel spec's `fallback_factory` scene is no longer presented unbaked. A cold open hands it to one short-lived `bead-fallback-bake` thread, which runs the worker's bake on a fresh cache at the transaction scales. It uses Dense, or the worker's policy when the spec is GL and its transport is ready. The result is installed only by the same open (panel and close epochs), while the panel is targeted and before the worker's first scene, which wins; the draw then adopts it in O(1). Live before: the first Strand open in a process prepared every raster on the main thread (`draw_panel` prepare 1252 ms under a throttle). `PANEL_SLIDE` appends ` slide=none` for a zero-duration (slide-less) open. `activate` (first EGL surface and uploads) still runs on the main thread.
