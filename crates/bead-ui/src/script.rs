@@ -39,6 +39,31 @@ fn json_array(lua: &Lua, items: &[serde_json::Value]) -> mlua::Result<mlua::Valu
     }
     Ok(mlua::Value::Table(table))
 }
+/// Whether an action's decoded store equals the one it was given. Luau has one number type,
+/// so a list's 1.0 comes back as 1 (B0393); integers (wide ones stay exact) compare exactly.
+fn same_after_lua(before: Option<&Value>, after: &Value) -> bool {
+    fn json(a: &serde_json::Value, b: &serde_json::Value) -> bool {
+        use serde_json::Value as J;
+        match (a, b) {
+            (J::Number(x), J::Number(y)) => {
+                x == y || ((x.is_f64() || y.is_f64()) && x.as_f64() == y.as_f64())
+            }
+            (J::Array(x), J::Array(y)) => {
+                x.len() == y.len() && x.iter().zip(y).all(|(x, y)| json(x, y))
+            }
+            (J::Object(x), J::Object(y)) => {
+                x.len() == y.len() && x.iter().all(|(k, v)| y.get(k).is_some_and(|w| json(v, w)))
+            }
+            _ => a == b,
+        }
+    }
+    match (before, after) {
+        (Some(Value::List(x)), Value::List(y)) => {
+            x.len() == y.len() && x.iter().zip(y.iter()).all(|(x, y)| json(x, y))
+        }
+        _ => before == Some(after),
+    }
+}
 pub(crate) fn json_value(lua: &Lua, json: &serde_json::Value) -> mlua::Result<mlua::Value> {
     if !needs_exact_integer(json) {
         return lua.to_value(json);
@@ -482,12 +507,12 @@ impl Script {
             return Err(self.error("actions cannot create or remove durable stores"));
         }
         for (id, value) in &changes {
-            if id.starts_with("bead.") && stores.get(id) != Some(value) {
+            if id.starts_with("bead.") && !same_after_lua(stores.get(id), value) {
                 return Err(self.error(format!("{id} is Rust-owned and read-only to actions")));
             }
         }
-        // Unchanged values are already validated durable state.
-        changes.retain(|id, value| stores.get(id) != Some(value));
+        // Unchanged values are already validated durable state; they keep their own numbers.
+        changes.retain(|id, value| !same_after_lua(stores.get(id), value));
         let mut next = stores.clone();
         next.commit(changes).map_err(|e| self.error(e))?;
         Ok(next)
@@ -759,6 +784,48 @@ mod action_isolation_tests {
                 .get("value"),
             Some(&Value::Number(2.))
         );
+    }
+
+    #[test]
+    fn whole_floats_in_a_rust_owned_list_survive_an_action_that_does_not_touch_it() {
+        let script = Script::load(
+            br#"
+                return {
+                    stores = { value = 0 },
+                    actions = {
+                        touch = function(stores) stores.value = 1 end,
+                        poke = function(stores) stores["bead.host.cells"] = {} end,
+                    },
+                    computed = {},
+                }
+            "#,
+            Path::new("whole-floats.luau"),
+        )
+        .unwrap();
+        let mut schema = script.schema().unwrap();
+        schema.insert("bead.host.cells".into(), Value::list(Vec::new()));
+        let mut stores = Stores::default().reconcile(&schema).unwrap();
+        // Luau hands 0.0 and 1.0 back as 0 and 1 (B0393: the luma grid's black and white cells).
+        let cells = Value::list(vec![
+            serde_json::json!({"luma": 0.0, "scale": 1.0, "count": 2}),
+            serde_json::json!({"luma": 0.5, "wide": 9_007_199_254_740_993_u64}),
+        ]);
+        stores
+            .commit(BTreeMap::from([("bead.host.cells".into(), cells.clone())]))
+            .unwrap();
+        let next = script.action("touch", &stores, Value::Bool(true)).unwrap();
+        assert_eq!(next.get("value"), Some(&Value::Number(1.)));
+        // Untouched, the host list keeps its own numbers, floats included.
+        assert_eq!(next.get("bead.host.cells"), Some(&cells));
+        assert_eq!(
+            next.version("bead.host.cells"),
+            stores.version("bead.host.cells")
+        );
+        // A real write to it is still refused.
+        let refused = script
+            .action("poke", &stores, Value::Bool(true))
+            .unwrap_err();
+        assert!(refused.message.contains("bead.host.cells is Rust-owned"));
     }
 
     #[test]
