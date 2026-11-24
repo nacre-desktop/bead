@@ -522,6 +522,9 @@ pub struct TreeCache {
     /// B0377: the images the last frames draw at zero opacity, which never gate them.
     prefetch: Vec<Arc<ImagePayload>>,
     asset_leases: BTreeMap<(usize, usize), Weak<AssetLease>>,
+    /// B0384: each image asset's content hash by allocation. An `Arc<[u8]>` is immutable while a
+    /// `Weak` to it lives, so the same allocation has the same bytes; it never keeps bytes alive.
+    asset_hashes: BTreeMap<PathBuf, (Weak<[u8]>, u64)>,
     upload_budget: Option<bead_core::cache::Budget>,
     resource_budget: Option<bead_core::cache::Budget>,
     bake_scratch_budget: Option<bead_core::cache::Budget>,
@@ -958,6 +961,11 @@ pub(crate) fn hash_primitive(primitive: &Primitive, at_origin: bool, hash: &mut 
         }
     }
 }
+// Per thread, so parallel tests do not count each other's hashing.
+#[cfg(test)]
+thread_local! {
+    static ASSET_HASH_COUNT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
 fn signature(
     scene: &Scene,
     primitive: &Primitive,
@@ -978,6 +986,8 @@ fn signature(
         if !assets.contains_key(path) {
             let mut bytes = std::collections::hash_map::DefaultHasher::new();
             scene.asset_data.get(path).hash(&mut bytes);
+            #[cfg(test)]
+            ASSET_HASH_COUNT.set(ASSET_HASH_COUNT.get() + 1);
             assets.insert(path.clone(), bytes.finish());
         }
         assets[path].hash(&mut hash);
@@ -1867,7 +1877,7 @@ impl TreeCache {
                 owned[index] = true;
             }
         }
-        let mut asset_keys = BTreeMap::new();
+        let mut asset_keys = self.seeded_asset_hashes(scene);
         for (index, primitive) in scene.primitives[..start].iter().enumerate() {
             let item = &previous.items[index];
             // An unowned primitive's id is `primitive-{index}/{kind}/0`.
@@ -1941,9 +1951,34 @@ impl TreeCache {
         if let Some(tail) = self.fill_tail.as_mut() {
             tail.frame = (Arc::as_ptr(&frame) as usize, frame.key);
         }
+        self.remember_asset_hashes(scene, &asset_keys);
         #[cfg(test)]
         FILL_TAIL_HITS.set(FILL_TAIL_HITS.get() + 1);
         Ok(true)
+    }
+    /// The remembered hashes of the assets whose allocation is unchanged, so `signature` skips them.
+    fn seeded_asset_hashes(&self, scene: &Scene) -> BTreeMap<PathBuf, u64> {
+        scene
+            .asset_data
+            .iter()
+            .filter_map(|(path, bytes)| {
+                let (weak, hash) = self.asset_hashes.get(path)?;
+                (weak.strong_count() > 0 && std::ptr::eq(weak.as_ptr(), Arc::as_ptr(bytes)))
+                    .then(|| (path.clone(), *hash))
+            })
+            .collect()
+    }
+    /// Remember this prepare's asset hashes; this also drops dead and unused entries.
+    fn remember_asset_hashes(&mut self, scene: &Scene, hashes: &BTreeMap<PathBuf, u64>) {
+        self.asset_hashes = hashes
+            .iter()
+            .filter_map(|(path, hash)| {
+                Some((
+                    path.clone(),
+                    (Arc::downgrade(scene.asset_data.get(path)?), *hash),
+                ))
+            })
+            .collect();
     }
     /// The retained node for `layer` with content `key`, reused while the key holds.
     fn retained_node(
@@ -2156,7 +2191,7 @@ impl TreeCache {
         let mut ordinals = BTreeMap::<(&str, &'static str), usize>::new();
         let mut items = Vec::with_capacity(scene.primitives.len());
         let mut keys = Vec::with_capacity(scene.primitives.len());
-        let mut asset_keys = BTreeMap::new();
+        let mut asset_keys = self.seeded_asset_hashes(scene);
         let mut frame_hash = std::collections::hash_map::DefaultHasher::new();
         let mut raster_scene = None;
         let mut fresh_rasters: BTreeMap<u64, (Arc<Pixmap>, (u32, u32))> = BTreeMap::new();
@@ -2644,6 +2679,7 @@ impl TreeCache {
         for slot in &transient.1 {
             self.entries.remove(slot);
         }
+        self.remember_asset_hashes(scene, &asset_keys);
         let frame = self.finish_frame(scene, scale, items, layers, assets, frame_hash.finish())?;
         self.prefetch.retain(|payload| payload.scale != scale);
         self.prefetch.extend(prefetch);
@@ -7789,6 +7825,49 @@ mod tests {
                 "step {step}"
             );
         }
+    }
+
+    #[test]
+    fn an_unchanged_image_asset_is_hashed_once_across_prepares() {
+        let mut view = scene();
+        view.layers.clear();
+        view.font_files = vec![
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../bead-test/fonts/IBMPlexSans.ttf"),
+        ];
+        view.primitives.truncate(1);
+        view.primitives.push(Primitive::Text {
+            rect: Rect::new(0., 12., 64., 24.),
+            text: "one".into(),
+            family: "IBM Plex Sans".into(),
+            size: 14.,
+            color: [255, 255, 255, 255],
+            weight: 400,
+            align: None,
+            shadow: None,
+            features: Vec::new(),
+        });
+        let (hashed, mut cache) = (ASSET_HASH_COUNT.get(), TreeCache::default());
+        cache.prepare(&view, 1.).unwrap();
+        assert_eq!(ASSET_HASH_COUNT.get(), hashed + 1);
+        let builds = cache.builds;
+        if let Primitive::Text { text, .. } = &mut view.primitives[1] {
+            *text = "two".into();
+        }
+        cache.prepare(&view, 1.).unwrap();
+        assert_eq!(
+            ASSET_HASH_COUNT.get(),
+            hashed + 1,
+            "same Arc: not hashed again"
+        );
+        assert_eq!(cache.builds, builds + 1, "only the text rebuilt");
+        let mut other = Pixmap::new(8, 8).unwrap();
+        other.fill(tiny_skia::Color::from_rgba8(200, 10, 10, 255));
+        view.asset_data
+            .insert("proof.png".into(), Arc::from(other.encode_png().unwrap()));
+        cache.prepare(&view, 1.).unwrap();
+        assert_eq!(ASSET_HASH_COUNT.get(), hashed + 2, "a new Arc is hashed");
+        assert_eq!(cache.builds, builds + 2, "the image rebuilt");
     }
 
     #[test]
