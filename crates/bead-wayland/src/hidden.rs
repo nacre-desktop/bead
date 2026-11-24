@@ -115,7 +115,7 @@ impl App {
             self.decoration_variant,
         ) {
             self.decoration_variant = variant;
-            if let Err(error) = self.sync_all_decorations() {
+            if let Err(error) = self.sync_all_decorations_in(true) {
                 eprintln!("DECORATION_ERROR {error}");
             }
         }
