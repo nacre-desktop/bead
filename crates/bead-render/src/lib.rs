@@ -2547,13 +2547,15 @@ fn svg_pixmap(data: &[u8], w: u32, h: u32) -> Result<Pixmap> {
         while entries.iter().map(|(_, size, ..)| *size).sum::<usize>() + bytes > SVG_CACHE_CAP {
             entries.pop_back();
         }
-        // Charged so cache::report() shows it; a refused charge (process limit) skips caching.
+        // Charged so cache::report() shows it. Past the process limit it is still cached,
+        // untracked, as before B0388: the charge reports and never changes what is cached.
         static BUDGET: std::sync::OnceLock<bead_core::cache::Budget> = std::sync::OnceLock::new();
         let budget =
             BUDGET.get_or_init(|| bead_core::cache::Budget::new("svg-pixmaps", SVG_CACHE_CAP));
-        if let Ok(charge) = budget.reserve(bytes) {
-            entries.push_front((key, bytes, std::sync::Arc::new(pix.clone()), charge));
-        }
+        let charge = budget
+            .reserve(bytes)
+            .unwrap_or_else(|_| bead_core::cache::Charge::untracked(bytes));
+        entries.push_front((key, bytes, std::sync::Arc::new(pix.clone()), charge));
     }
     Ok(pix)
 }

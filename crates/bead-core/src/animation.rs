@@ -601,7 +601,9 @@ mod tests {
         );
         // The same phases for each costliest render that has any, by commit index (B0380).
         assert!(
-            text.ends_with(" top_splits=3:gl_draw:30.0/prepare:10.0/swap:2.0;1:swap:10.0"),
+            text.ends_with(
+                " top_splits=3:gl_draw:30.0/prepare:10.0/swap:2.0;1:swap:10.0 main_builds=0"
+            ),
             "{text}"
         );
         assert_eq!(text.matches(':').count(), 12, "{text}");
