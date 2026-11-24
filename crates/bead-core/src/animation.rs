@@ -241,6 +241,11 @@ impl std::fmt::Display for Slide {
                 write!(f, "{}{stage}:{ms:.1}", if i > 0 { "/" } else { ":" })?;
             }
         }
+        // B0390: a held motion's clock starts at its first commit, and only a zero-duration
+        // (slide-less) one also ends there, so it alone reports exactly 0.
+        if self.duration_ms == 0. {
+            f.write_str(" slide=none")?;
+        }
         Ok(())
     }
 }
@@ -498,6 +503,13 @@ mod tests {
             .unwrap();
         assert!(slide.opening && slide.frames == 1);
         assert!((slide.first_frame_ms - 100.).abs() < 1e-6);
+        // PANEL_SLIDE marks the slide-less open with an appended key (B0390).
+        let text = slide.to_string();
+        assert!(
+            text.starts_with("dir=open first_frame_ms=100.0 frames=1 duration_ms=0.0 ")
+                && text.ends_with(" top_splits= slide=none"),
+            "{text}"
+        );
         // A host fallback seeded held with a real duration, then the scene's zero duration.
         a.open_to("q", true, 2., 0.4, Curve::EaseOut);
         assert_eq!(a.value("q", 2.), Some((0., true)));
