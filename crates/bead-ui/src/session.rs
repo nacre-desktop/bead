@@ -48,6 +48,8 @@ pub struct Session {
     pub(super) scrollbar_config: crate::scrollbar::Config,
     pub(super) keyboard_scroll: Option<crate::scroll_feedback::KeyboardMotion>,
     pub(super) host_actions: std::collections::BTreeSet<String>,
+    /// The last Luau action of this view failed: `reject` keeps the scene (B0394).
+    pub(super) action_failed: std::cell::Cell<bool>,
     pub(super) host_store_defaults: BTreeMap<String, Value>,
     pub(super) accessibility_label: String,
     font_picker: Option<crate::transcript::Picker>,
@@ -220,6 +222,7 @@ impl Session {
             scrollbar_config: crate::theme::scrollbar_config(),
             keyboard_scroll: None,
             host_actions: Default::default(),
+            action_failed: Default::default(),
             host_store_defaults: BTreeMap::new(),
             accessibility_label: "Bead".into(),
             font_picker: None,
@@ -445,6 +448,7 @@ impl Session {
         Ok(bundle)
     }
     pub fn reload(&mut self) -> Result<Scene, Diagnostic> {
+        self.action_failed.set(false);
         let result = self.reload_current();
         let overrun = result
             .as_ref()
@@ -612,6 +616,7 @@ impl Session {
         Ok(scene)
     }
     pub fn commit(&mut self, scene: Scene) {
+        self.action_failed.set(false);
         if let Some(pending) = &self.pending {
             self.entry = pending.entry.clone();
         }
@@ -687,9 +692,27 @@ impl Session {
             generation.restore_animations(checkpoint.clone());
         }
         self.pending = None;
-        self.error = Some(message);
         self.editors = self.committed_editors.clone();
+        // A failed action is a refused input, not a broken view: the scene stays, without the
+        // reload banner (on a bar that banner is the whole bar). UI_ERROR still logs it (B0394).
+        if !self.action_failed.replace(false) {
+            self.error = Some(message);
+        }
         self.error_scene()
+    }
+    /// Run one of this view's Luau actions, remembering a failure for `reject` (B0394).
+    pub(super) fn act(
+        &self,
+        name: &str,
+        stores: &Stores,
+        arg: Value,
+    ) -> Result<Stores, Diagnostic> {
+        let Some(generation) = &self.generation else {
+            return Ok(stores.clone());
+        };
+        let result = generation.script.action(name, stores, arg);
+        self.action_failed.set(result.is_err());
+        result
     }
     pub fn error_scene(&self) -> Scene {
         let mut scene = self.current.clone();

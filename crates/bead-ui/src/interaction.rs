@@ -39,14 +39,10 @@ impl Session {
         name: &str,
         arg: Value,
     ) -> Result<BTreeMap<String, Value>, Diagnostic> {
-        let Some(generation) = &self.generation else {
+        if self.generation.is_none() {
             return Ok(BTreeMap::new());
-        };
-        Ok(generation
-            .script
-            .action(name, &self.stores, arg)?
-            .values()
-            .clone())
+        }
+        Ok(self.act(name, &self.stores, arg)?.values().clone())
     }
     fn deferred_valid(&self) -> Option<(String, String, Value)> {
         if self.stores.get("bead.pressed") != Some(&Value::Bool(true)) {
@@ -192,7 +188,7 @@ impl Session {
                     .commit(BTreeMap::from([("bead.focused".into(), Value::Text(id))]))
                     .map_err(|e| generation.script.error(e))?;
             }
-            stores = generation.script.action(&action, &stores, argument)?;
+            stores = self.act(&action, &stores, argument)?;
         }
         self.stage_state(stores)
     }
@@ -319,7 +315,7 @@ impl Session {
             } else {
                 action_arg
             };
-            stores = generation.script.action(&action, &stores, action_arg)?;
+            stores = self.act(&action, &stores, action_arg)?;
         }
         if press && self.stores.get("bead.pressed").is_some() {
             stores
@@ -433,9 +429,7 @@ impl Session {
                 .map_err(|e| node.diagnostic(e))?;
             stores
         } else if let Some(action) = &node.scroll {
-            generation
-                .script
-                .action(action, &self.stores, Value::Number(delta))?
+            self.act(action, &self.stores, Value::Number(delta))?
         } else {
             return Ok(None);
         };
@@ -982,8 +976,7 @@ impl Session {
         let Some(action) = &node.action else {
             return Ok(None);
         };
-        let generation = self.generation.as_ref().unwrap();
-        let stores = generation.script.action(
+        let stores = self.act(
             action,
             &self.stores,
             node.action_arg.clone().unwrap_or(Value::Bool(true)),
@@ -1408,12 +1401,7 @@ impl Session {
                     .commit(BTreeMap::from([("bead.focused".into(), Value::Text(id))]))
                     .map_err(|e| Diagnostic::new(&self.entry, 1, 1, e))?;
                 if let Some(action) = action {
-                    stores = self
-                        .generation
-                        .as_ref()
-                        .unwrap()
-                        .script
-                        .action(&action, &stores, arg)?;
+                    stores = self.act(&action, &stores, arg)?;
                 }
                 self.stage_state(stores)
             }

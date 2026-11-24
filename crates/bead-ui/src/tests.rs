@@ -412,6 +412,46 @@ fn failed_actions_and_schema_migrations_roll_back() {
     assert_eq!(session.stores.values(), &before);
 }
 #[test]
+fn a_failed_action_keeps_a_bar_height_view_while_a_failed_reload_keeps_its_banner() {
+    let fixture = Fixture::new();
+    // A bar-height root (under 100 px), whose second control runs the failing action.
+    let main = fs::read_to_string(fixture.0.join("main.json"))
+        .unwrap()
+        .replace(r#""h":100"#, r#""h":40"#);
+    fs::write(fixture.0.join("main.json"), main).unwrap();
+    let content = fs::read_to_string(fixture.0.join("content.json"))
+        .unwrap()
+        .replace(r#""action":"toggle""#, r#""action":"fail""#);
+    fs::write(fixture.0.join("content.json"), content).unwrap();
+    let mut session = fixture.session();
+    let ids = |session: &Session| {
+        session
+            .current_nodes
+            .iter()
+            .map(|node| node.id.clone())
+            .collect::<Vec<_>>()
+    };
+    let (nodes, primitives, stores) = (
+        ids(&session),
+        session.current.primitives.len(),
+        session.stores.values().clone(),
+    );
+    let error = session.click(5., 30.).err().unwrap();
+    assert!(error.message.contains("deliberate action failure"));
+    // B0394: the host rejects the stage; the view stays as it was, with no banner.
+    let kept = session.reject(error.to_string());
+    assert!(session.error.is_none());
+    assert_eq!(kept.primitives.len(), primitives);
+    assert_eq!(ids(&session), nodes);
+    assert_eq!(session.stores.values(), &stores);
+    // A broken reload of the same view still shows its banner.
+    fs::write(fixture.0.join("content.json"), "{\n broken").unwrap();
+    let error = session.reload().err().unwrap();
+    let overlay = session.reject(error.to_string());
+    assert!(session.error.is_some());
+    assert!(overlay.primitives.len() > session.current.primitives.len());
+}
+#[test]
 fn a_budget_overrun_is_retried_and_its_notice_clears() {
     let fixture = Fixture::new();
     let mut session = fixture.session();
