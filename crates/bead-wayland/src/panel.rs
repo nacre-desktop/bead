@@ -17,6 +17,11 @@ fn should_stop_app_after_panel_release(
 ) -> bool {
     app_mode && !pending && !another_panel_open && !lifetime_deferred
 }
+/// B0390: an off-main fallback bake (panel epoch, close epoch) is shown only by the open that
+/// started it, while that panel is targeted and before its worker's first scene, which wins.
+fn baked_fallback_current(started: (u64, u64), now: (u64, u64), target: bool, ready: bool) -> bool {
+    started == now && target && !ready
+}
 
 impl App {
     pub(super) fn notify_panel_owner(&self, event: UiEvent) {
@@ -868,6 +873,15 @@ impl App {
                         .viewport(width.max(1) as u32, height.max(1) as u32);
                 }
             }
+            // A prepared panel opened before its worker's first scene shows its fallback first.
+            if open
+                && fallback_ready
+                && !self.panel_ready
+                && !self.panel_fallback_ready
+                && !self.panel_resuming
+            {
+                self.bake_panel_fallback()?;
+            }
             self.panel_ui(UiEvent::PanelVisibility(true));
             // A dead source was torn down by that event (B0345).
             if resume && let Some(source) = self.panel_runtime.as_mut() {
@@ -903,7 +917,8 @@ impl App {
         self.panel_reload_pending = false;
         self.panel_ready = false;
         self.panel_resuming = reused;
-        self.panel_fallback_ready = fallback_ready && !reused;
+        // B0390: a fallback shows once it is baked off the main thread (bake_panel_fallback).
+        self.panel_fallback_ready = false;
         #[cfg(feature = "native-gl")]
         {
             self.panel_cpu_cached = false;
@@ -921,6 +936,9 @@ impl App {
             bead_render::renderer(renderer_kind).map_err(|e| e.to_string())?,
             renderer_kind,
         ));
+        if open && fallback_ready && !reused {
+            self.bake_panel_fallback()?;
+        }
         #[cfg(feature = "native-gl")]
         if open {
             self.prepare_panel_gl().map_err(|error| error.to_string())?;
@@ -1204,6 +1222,88 @@ impl App {
             let now = self.started.elapsed().as_secs_f64();
             self.panel_animations
                 .open_to(&id, self.panel_target, now, duration, curve);
+        }
+    }
+    /// B0390: one short-lived thread bakes the companion's fallback as the panel's worker would
+    /// (same scales and presenter policy), so its first draw adopts the rasters instead of
+    /// building them on the main thread. The worker's first scene, if sooner, replaces it.
+    fn bake_panel_fallback(&self) -> Result<(), String> {
+        let Some((scene, _, _)) = &self.companion else {
+            return Ok(());
+        };
+        let scene = scene.clone();
+        let scales = self.transaction_scales(true);
+        // B0336: a CPU presenter needs Dense rasters. A GL spec whose transport is ready promotes
+        // at once (and adopts any frame), so it takes the worker's configured policy.
+        #[cfg(feature = "native-gl")]
+        let gl = self.gl.is_some()
+            && self.options.companion.as_ref().map(|(_, kind)| *kind)
+                == Some(RendererKind::FemtovgGl);
+        #[cfg(not(feature = "native-gl"))]
+        let gl = false;
+        let policy = if gl {
+            bead_render::tree::ImagePolicy::UploadOnly
+        } else {
+            bead_render::tree::ImagePolicy::Dense
+        };
+        let (token, started) = ((self.panel_epoch, self.panel_close_epoch), Instant::now());
+        let (sender, receiver) = calloop::channel::channel();
+        self.loop_handle
+            .insert_source(receiver, move |event, _, app| {
+                if let calloop::channel::Event::Msg(baked) = event {
+                    app.panel_fallback_baked(token, started, baked);
+                }
+            })
+            .map_err(|error| error.to_string())?;
+        std::thread::Builder::new()
+            .name("bead-fallback-bake".into())
+            .spawn(move || {
+                let _span = bead_core::profile::Span::new("panel_fallback_bake");
+                let _ = sender.send(worker::bake_fallback(scene, &scales, policy));
+            })
+            .map_err(|error| error.to_string())?;
+        Ok(())
+    }
+    fn panel_fallback_baked(
+        &mut self,
+        token: (u64, u64),
+        started: Instant,
+        baked: Result<
+            std::collections::BTreeMap<u32, std::sync::Arc<bead_render::tree::Frame>>,
+            String,
+        >,
+    ) {
+        let current = baked_fallback_current(
+            token,
+            (self.panel_epoch, self.panel_close_epoch),
+            self.panel_target,
+            self.panel_ready,
+        );
+        bead_core::vprintln!(
+            "PANEL_FALLBACK_BAKED current={current} wall_ms={:.1} error={}",
+            started.elapsed().as_secs_f64() * 1e3,
+            baked.as_ref().err().map_or("-", String::as_str)
+        );
+        let (true, Ok(prepared), Some((scene, _, _))) = (current, baked, self.companion.as_mut())
+        else {
+            return;
+        };
+        scene.prepared = prepared;
+        self.panel_fallback_ready = true;
+        if let Err(error) = self.sync_all_decorations() {
+            self.fail(error);
+            return;
+        }
+        let qh = self.qh.clone();
+        let indices: Vec<_> = self
+            .surfaces
+            .iter()
+            .enumerate()
+            .filter(|(_, s)| s.companion)
+            .map(|(i, _)| i)
+            .collect();
+        for i in indices {
+            self.draw(i, &qh);
         }
     }
     pub(super) fn close_panel(&mut self) {
@@ -1722,6 +1822,18 @@ mod placement_tests {
         assert!(!should_stop_app_after_panel_release(
             false, false, false, false
         ));
+    }
+
+    #[test]
+    fn a_baked_fallback_is_installed_only_for_its_own_targeted_unready_open() {
+        assert!(baked_fallback_current((3, 7), (3, 7), true, false));
+        // Closed or reopened (close epoch) or replaced (panel epoch) since the bake started.
+        assert!(!baked_fallback_current((3, 7), (3, 8), true, false));
+        assert!(!baked_fallback_current((3, 7), (4, 7), true, false));
+        // No longer targeted.
+        assert!(!baked_fallback_current((3, 7), (3, 7), false, false));
+        // The worker's first scene arrived first.
+        assert!(!baked_fallback_current((3, 7), (3, 7), true, true));
     }
 
     #[test]

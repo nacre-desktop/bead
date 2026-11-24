@@ -604,6 +604,17 @@ fn bake(
     }
     Ok(())
 }
+/// B0390: a panel fallback's one-shot bake off the main thread: the worker's bake on a fresh
+/// cache, which ends here; only the prepared frames it returns live on.
+pub(crate) fn bake_fallback(
+    mut scene: Scene,
+    scales: &[f32],
+    policy: bead_render::tree::ImagePolicy,
+) -> Result<std::collections::BTreeMap<u32, Arc<bead_render::tree::Frame>>, String> {
+    let mut cache = bead_render::tree::TreeCache::default().with_image_policy(policy);
+    bake(&mut cache, &mut scene, scales)?;
+    Ok(scene.prepared)
+}
 fn prepare_resource_job(
     job: Job,
     cache: &mut bead_render::tree::TreeCache,
@@ -1743,6 +1754,65 @@ mod tests {
                 cache.builds > builds,
                 "close releases the warm pixels even without an intervening scene update"
             );
+        }
+    }
+    #[test]
+    fn a_fallback_baked_on_a_thread_is_adopted_by_its_presenter_without_a_build() {
+        use bead_render::{Renderer, tree::ImagePolicy};
+        let mut fallback = scene();
+        fallback.primitives[0] = bead_render::Primitive::Image {
+            opacity: 1.,
+            rect: bead_render::Rect::new(0., 0., 16., 16.),
+            path: "proof.svg".into(),
+            blur: 0.,
+            fit: bead_render::ImageFit::Fill,
+            clip_polygon: None,
+            bake_size: Some((16., 16.)),
+            radius: 0.,
+            tint: None,
+        };
+        fallback.asset_data.insert("proof.svg".into(), Arc::from(&br##"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><rect width="16" height="16" fill="#123456"/></svg>"##[..]));
+        fallback.primitives.push(bead_render::Primitive::Shadow {
+            rect: bead_render::Rect::new(2., 2., 12., 12.),
+            radius: 4.,
+            blur: 2.,
+            spread: 0.,
+            dy: 0.,
+            alpha: 1.,
+        });
+        let scale = 1.5_f32;
+        // B0390: Dense for a CPU presenter; a ready GL one bakes the worker's policy and adopts
+        // with its own DeferredUpload cache.
+        for (policy, presenter) in [
+            (ImagePolicy::Dense, ImagePolicy::Dense),
+            (ImagePolicy::UploadOnly, ImagePolicy::DeferredUpload),
+        ] {
+            let baked = {
+                let fallback = fallback.clone();
+                std::thread::spawn(move || bake_fallback(fallback, &[scale], policy))
+                    .join()
+                    .unwrap()
+                    .unwrap()
+            };
+            let frame = baked[&scale.to_bits()].clone();
+            assert!(frame.items[1].raster.is_some(), "the shadow comes baked");
+            assert_eq!(
+                frame.items[0].image.is_some(),
+                policy != ImagePolicy::Dense,
+                "Dense images come as rasters, GL ones as upload payloads"
+            );
+            let mut shown = fallback.clone();
+            shown.prepared = baked;
+            let mut cache = bead_render::tree::TreeCache::default().with_image_policy(presenter);
+            cache.prepare(&shown, scale).unwrap();
+            assert!(Arc::ptr_eq(cache.frame.as_ref().unwrap(), &frame));
+            assert_eq!(cache.builds, 0);
+            if policy == ImagePolicy::Dense {
+                // The CPU presenter's own first draw adopts it too.
+                let mut cpu = bead_render::tree::TreeCpuRenderer::default();
+                cpu.prepare_on_ui(&shown, scale).unwrap();
+                assert!(Arc::ptr_eq(&cpu.prepared_frame().unwrap(), &frame));
+            }
         }
     }
     #[test]

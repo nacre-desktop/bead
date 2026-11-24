@@ -896,30 +896,7 @@ impl App {
             return false;
         };
         let active_output = self.active_output.clone();
-        let mut scales: Vec<_> = self
-            .surfaces
-            .iter()
-            .filter(|s| {
-                s.configured
-                    && s.companion == self.processing_panel
-                    && output_scope_matches(active_output.as_deref(), &s.output_name)
-            })
-            .map(|s| s.scale120 as f32 / 120.)
-            .collect();
-        scales.sort_by(f32::total_cmp);
-        scales.dedup();
-        if scales.is_empty() && self.processing_panel {
-            scales.extend(
-                self.surfaces
-                    .iter()
-                    .filter(|s| !s.companion && self.panel_output.as_ref() == Some(&s.output))
-                    .map(|s| s.scale120 as f32 / 120.),
-            );
-        }
-        if scales.is_empty() {
-            scales.push(1.);
-        }
-        runtime.scales(scales);
+        runtime.scales(self.transaction_scales(self.processing_panel));
         let source_error = matches!(&event, UiEvent::Worker(packet) if packet.has_error());
         let reload = matches!(event, UiEvent::Reload)
             || matches!(&event,UiEvent::Worker(packet) if packet.is_reload());
@@ -1237,6 +1214,34 @@ impl App {
             }
         }
         true
+    }
+    /// The scales a transaction bakes for: the view's configured surfaces, or for a panel whose
+    /// surface is not configured yet, its output's (B0390: its off-main fallback bakes the same).
+    pub(super) fn transaction_scales(&self, panel: bool) -> Vec<f32> {
+        let mut scales: Vec<_> = self
+            .surfaces
+            .iter()
+            .filter(|s| {
+                s.configured
+                    && s.companion == panel
+                    && output_scope_matches(self.active_output.as_deref(), &s.output_name)
+            })
+            .map(|s| s.scale120 as f32 / 120.)
+            .collect();
+        scales.sort_by(f32::total_cmp);
+        scales.dedup();
+        if scales.is_empty() && panel {
+            scales.extend(
+                self.surfaces
+                    .iter()
+                    .filter(|s| !s.companion && self.panel_output.as_ref() == Some(&s.output))
+                    .map(|s| s.scale120 as f32 / 120.),
+            );
+        }
+        if scales.is_empty() {
+            scales.push(1.);
+        }
+        scales
     }
 
     pub(super) fn sync_ime(&mut self) {
