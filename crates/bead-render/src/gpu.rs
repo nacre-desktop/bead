@@ -548,6 +548,9 @@ impl GpuRenderer {
     }
 }
 impl Renderer for GpuRenderer {
+    fn raster_builds(&self) -> usize {
+        self.cache.builds
+    }
     fn resource_counts(&self) -> (usize, usize) {
         (self.cache.layer_count(), self.femto_images.len())
     }

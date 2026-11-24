@@ -2215,6 +2215,8 @@ impl App {
             Vec::new()
         };
         let mut pending_promotion_staged = false;
+        // B0388: rasters this frame's main-thread prepare built, for PANEL_SLIDE `main_builds`.
+        let mut main_builds = 0;
         let result = (|| -> Result<(), Box<dyn Error>> {
             #[cfg(feature = "native-gl")]
             if self.surfaces[index].companion
@@ -3118,7 +3120,9 @@ impl App {
             bead_core::profile::split("pose");
             {
                 let _prepare = bead_core::profile::Span::new("present_prepare");
+                let builds = renderer.raster_builds();
                 renderer.prepare_on_ui(scene, scale)?;
+                main_builds += renderer.raster_builds().saturating_sub(builds);
             }
             bead_core::profile::split("prepare");
             let mut regions = {
@@ -3996,6 +4000,7 @@ impl App {
                 .last_callback
                 .map(|c| c.saturating_duration_since(self.started).as_secs_f64());
             bead_core::profile::split("post");
+            self.animations.add_builds(&id, main_builds);
             let slide = self.animations.committed_timed(
                 &id,
                 drawn,

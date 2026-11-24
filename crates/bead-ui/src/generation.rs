@@ -955,13 +955,16 @@ impl Generation {
                 Ok(value)
             };
             let markup_profile = bead_core::profile::Span::new("markup");
+            let luau_phase = bead_core::profile::Phase::new("luau");
             let raw = self
                 .markup_frontend
                 .as_ref()
                 .ok_or_else(|| Diagnostic::new(entry, 1, 1, "missing markup frontend"))?
                 .build(entry, &resolve)?;
             drop(markup_profile);
+            drop(luau_phase);
             bead_core::profile::mark("luau_view_ready");
+            let layout_phase = bead_core::profile::Phase::new("layout");
             if let Some(cached) = &*self.materialized.borrow()
                 && let Some(result) = cached.patch(&raw, &resolve, palette, viewport)?
             {
@@ -973,6 +976,7 @@ impl Generation {
             let layout_profile = bead_core::profile::Span::new("layout");
             let mut result = layout::layout(&view, &resolve, palette, self.revision, viewport)?;
             drop(layout_profile);
+            drop(layout_phase);
             for node in &result.nodes {
                 for action in [&node.action, &node.drag_action, &node.drop_action]
                     .into_iter()

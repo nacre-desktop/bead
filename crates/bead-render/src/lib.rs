@@ -1179,6 +1179,10 @@ pub trait Renderer {
     fn resource_counts(&self) -> (usize, usize) {
         (0, 0)
     }
+    /// Rasters this renderer's own cache has built so far (B0388); 0 when it has none.
+    fn raster_builds(&self) -> usize {
+        0
+    }
     #[cfg(any(feature = "native-gl", feature = "wgpu"))]
     fn stage_resources(&mut self, _: ResourceTarget<'_>) -> Result<()> {
         Ok(())
@@ -2498,7 +2502,8 @@ fn shadow_raster(rect: Rect, radius: f32, blur: f32, alpha: f32, scale: f32) -> 
 }
 
 const SVG_CACHE_CAP: usize = 8 * 1024 * 1024;
-type SvgCache = std::collections::VecDeque<(u64, usize, std::sync::Arc<Pixmap>)>;
+type SvgCache =
+    std::collections::VecDeque<(u64, usize, std::sync::Arc<Pixmap>, bead_core::cache::Charge)>;
 static SVG_CACHE: std::sync::OnceLock<std::sync::Mutex<SvgCache>> = std::sync::OnceLock::new();
 // Per thread: svg_pixmap renders on its caller, and parallel tests must not count each other.
 #[cfg(test)]
@@ -2516,7 +2521,7 @@ fn svg_pixmap(data: &[u8], w: u32, h: u32) -> Result<Pixmap> {
     let cache = SVG_CACHE.get_or_init(|| std::sync::Mutex::new(Default::default()));
     let cached = {
         let mut entries = cache.lock().unwrap();
-        entries.iter().position(|(k, _, _)| *k == key).map(|found| {
+        entries.iter().position(|(k, ..)| *k == key).map(|found| {
             let entry = entries.remove(found).expect("SVG cache entry");
             let pixmap = (*entry.2).clone();
             entries.push_front(entry);
@@ -2539,10 +2544,16 @@ fn svg_pixmap(data: &[u8], w: u32, h: u32) -> Result<Pixmap> {
     let bytes = pix.data().len();
     if bytes <= SVG_CACHE_CAP {
         let mut entries = cache.lock().unwrap();
-        while entries.iter().map(|(_, size, _)| *size).sum::<usize>() + bytes > SVG_CACHE_CAP {
+        while entries.iter().map(|(_, size, ..)| *size).sum::<usize>() + bytes > SVG_CACHE_CAP {
             entries.pop_back();
         }
-        entries.push_front((key, bytes, std::sync::Arc::new(pix.clone())));
+        // Charged so cache::report() shows it; a refused charge (process limit) skips caching.
+        static BUDGET: std::sync::OnceLock<bead_core::cache::Budget> = std::sync::OnceLock::new();
+        let budget =
+            BUDGET.get_or_init(|| bead_core::cache::Budget::new("svg-pixmaps", SVG_CACHE_CAP));
+        if let Ok(charge) = budget.reserve(bytes) {
+            entries.push_front((key, bytes, std::sync::Arc::new(pix.clone()), charge));
+        }
     }
     Ok(pix)
 }
@@ -2583,6 +2594,14 @@ mod borrowed_svg_tests {
         assert_eq!(after_first, before + 1);
         assert_eq!(after_second, after_first);
         assert_eq!(first.data(), second.data());
+        // The process cache is charged to a Budget, so the report shows it (B0388).
+        let report = bead_core::cache::report();
+        let svg = report
+            .caches
+            .iter()
+            .find(|c| c.name == "svg-pixmaps")
+            .unwrap();
+        assert!(svg.used_bytes >= 19 * 13 * 4 && svg.used_bytes <= SVG_CACHE_CAP);
     }
     #[test]
     fn borrowed_svg_respects_pixel_format_and_target_boundaries() {

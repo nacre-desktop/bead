@@ -1837,6 +1837,9 @@ impl Renderer for GlRenderer {
     fn prepared_frame(&self) -> Option<std::sync::Arc<crate::tree::Frame>> {
         self.cache.frame.clone()
     }
+    fn raster_builds(&self) -> usize {
+        self.cache.builds
+    }
     fn resource_counts(&self) -> (usize, usize) {
         (
             self.cache.frame.as_ref().map_or(0, |f| f.layer_count),

@@ -4507,6 +4507,9 @@ impl Renderer for TreeCpuRenderer {
     fn prepared_frame(&self) -> Option<std::sync::Arc<crate::tree::Frame>> {
         self.cache.frame.clone()
     }
+    fn raster_builds(&self) -> usize {
+        self.cache.builds
+    }
     fn resource_counts(&self) -> (usize, usize) {
         (
             self.cache

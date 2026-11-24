@@ -177,6 +177,8 @@ struct Motion {
     top: [(u32, f64, Phases); 3],
     /// The costliest render's largest phases (name, seconds), largest first (B0310).
     top_split: [(&'static str, f64); 4],
+    /// Rasters the main-thread presenter built while this motion ran (B0388).
+    builds: usize,
 }
 /// One finished motion as the user saw it: request to first frame, then frames until the final pose.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -198,6 +200,8 @@ pub struct Slide {
     pub top_split: [(&'static str, f64); 4],
     /// The same four phases for each `render_top` entry, in its order (B0380).
     pub top_splits: [[(&'static str, f64); 4]; 3],
+    /// Rasters the main-thread presenter built over the slide (B0388).
+    pub main_builds: usize,
 }
 impl std::fmt::Display for Slide {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -246,7 +250,7 @@ impl std::fmt::Display for Slide {
         if self.duration_ms == 0. {
             f.write_str(" slide=none")?;
         }
-        Ok(())
+        write!(f, " main_builds={}", self.main_builds)
     }
 }
 #[derive(Default)]
@@ -279,6 +283,7 @@ impl Animations {
                     worst: (0, [0.; 3]),
                     top: [(0, 0., [("", 0.); 4]); 3],
                     top_split: [("", 0.); 4],
+                    builds: 0,
                 },
             );
         }
@@ -291,6 +296,12 @@ impl Animations {
     /// The commit with `id`'s final pose returns its `Slide` (once).
     pub fn committed(&mut self, id: &str, drawn: f64, now: f64) -> Option<Slide> {
         self.committed_timed(id, drawn, now, None, now, &NO_SPLITS)
+    }
+    /// Charge `builds` main-thread rasters of this frame to `id`'s motion (B0388).
+    pub fn add_builds(&mut self, id: &str, builds: usize) {
+        if let Some(motion) = self.states.get_mut(id) {
+            motion.builds += builds;
+        }
     }
     /// `committed` with the frame's timing: the frame callback that triggered the draw (if any)
     /// and the draw start, on the same clock as `now`. They split the worst gap for `Slide`.
@@ -357,6 +368,7 @@ impl Animations {
             top_splits: motion
                 .top
                 .map(|(_, _, p)| p.map(|(stage, s)| (stage, s * 1000.))),
+            main_builds: motion.builds,
         };
         motion.frames = u32::MAX;
         Some(slide)
@@ -403,6 +415,7 @@ impl Animations {
                 worst: (0, [0.; 3]),
                 top: [(0, 0., [("", 0.); 4]); 3],
                 top_split: [("", 0.); 4],
+                builds: 0,
             },
         );
     }
@@ -498,16 +511,18 @@ mod tests {
         a.open_to("p", true, 1., 0., Curve::EaseOut);
         assert_eq!(a.value("p", 1.), Some((1., false)));
         assert!(!a.active(1.));
+        a.add_builds("p", 3);
+        a.add_builds("unknown", 9);
         let slide = a
             .committed_timed("p", 1., 1.1, None, 1.05, &NO_SPLITS)
             .unwrap();
-        assert!(slide.opening && slide.frames == 1);
+        assert!(slide.opening && slide.frames == 1 && slide.main_builds == 3);
         assert!((slide.first_frame_ms - 100.).abs() < 1e-6);
         // PANEL_SLIDE marks the slide-less open with an appended key (B0390).
         let text = slide.to_string();
         assert!(
             text.starts_with("dir=open first_frame_ms=100.0 frames=1 duration_ms=0.0 ")
-                && text.ends_with(" top_splits= slide=none"),
+                && text.ends_with(" top_splits= slide=none main_builds=3"),
             "{text}"
         );
         // A host fallback seeded held with a real duration, then the scene's zero duration.

@@ -535,6 +535,7 @@ impl Session {
         let base_palette = Palette::parse(&palette_bytes)
             .map_err(|e| Diagnostic::new(Path::new("palette.json"), 1, 1, e))?;
         let palette = merged_palette(&base_palette, self.runtime_palette.as_ref());
+        let session_phase = bead_core::profile::Phase::new("session");
         let (generation, mut stores) = Generation::load_with_picker(
             self.package.as_deref().map_or(
                 crate::generation::Origin::Dir(&self.root),
@@ -547,6 +548,7 @@ impl Session {
             &self.host_actions,
             &self.host_store_defaults,
         )?;
+        drop(session_phase);
         generation.set_frame_interval(self.frame_interval);
         bead_core::profile::mark("generation_ready");
         if self.generation.is_none()

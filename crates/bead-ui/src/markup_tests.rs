@@ -2915,6 +2915,22 @@ return kit.Bar{id="bar",edge="top",width=400,height=50,kit.Button{id="a",text="A
 }
 
 #[test]
+fn render_attributes_session_luau_and_layout_cpu_within_the_thread_cpu_spent() {
+    let f = fixture();
+    bead_core::profile::take_phases();
+    let start = bead_core::profile::thread_cpu_ns();
+    let _session = session(&f);
+    let spent = bead_core::profile::thread_cpu_ns() - start;
+    let [load, luau, layout, mirror] = bead_core::profile::take_phases();
+    assert!(load > 0 && luau > 0 && layout > 0, "{load} {luau} {layout}");
+    assert_eq!(mirror, 0);
+    assert!(
+        load + luau + layout <= spent,
+        "{load} {luau} {layout} > {spent}"
+    );
+}
+
+#[test]
 fn restored_panel_state_is_staged_and_commits_only_after_validation() {
     let f = fixture();
     let fallback = f.session().current.clone();

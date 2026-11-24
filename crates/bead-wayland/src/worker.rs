@@ -53,6 +53,7 @@ impl Mirror {
         last: &mut Arc<Self>,
     ) -> Arc<Self> {
         let _profile = bead_core::profile::Span::new("mirror");
+        let _phase = bead_core::profile::Phase::new("mirror");
         let wakeup_at = source.wakeup_at();
         let revision = source.state_revision();
         // A kept copy keeps its own revision, so the frame that ends the animation reads anew.
@@ -207,9 +208,21 @@ struct BusyWindow {
     /// B0384: thread CPU spent baking and rasters built, to split bake from stage.
     bake_ns: u64,
     rasters: usize,
+    /// B0388: thread CPU by phase (session, luau, layout, mirror) and PrepareCpu jobs run.
+    phases: [u64; 4],
+    cpu_preps: u32,
 }
 impl BusyWindow {
     fn new(seconds: u64, min_pct: f64) -> Self {
+        // Diagnostic arms only: BEAD_WORKER_BUSY_MIN_PCT replaces every window's threshold.
+        static OVERRIDE: std::sync::OnceLock<Option<f64>> = std::sync::OnceLock::new();
+        let min_pct = OVERRIDE
+            .get_or_init(|| {
+                std::env::var("BEAD_WORKER_BUSY_MIN_PCT")
+                    .ok()
+                    .and_then(|v| v.parse().ok())
+            })
+            .unwrap_or(min_pct);
         Self {
             seconds,
             min_pct,
@@ -223,6 +236,8 @@ impl BusyWindow {
             repeats: 0,
             bake_ns: 0,
             rasters: 0,
+            phases: [0; 4],
+            cpu_preps: 0,
         }
     }
     /// Add one finished job that began at `at`; the line body when its window closed hot.
@@ -262,12 +277,17 @@ impl BusyWindow {
             };
             (pct >= self.min_pct).then(|| {
                 format!(
-                    "window_s={} cpu_pct={pct:.0} jobs={} top={top} animation_packets={} bake_ms={} rasters={}{key}{}",
+                    "window_s={} cpu_pct={pct:.0} jobs={} top={top} animation_packets={} bake_ms={} rasters={} session_ms={} luau_ms={} layout_ms={} mirror_ms={} cpu_preps={}{key}{}",
                     wall.as_secs(),
                     self.jobs,
                     self.animation,
                     self.bake_ns / 1_000_000,
                     self.rasters,
+                    self.phases[0] / 1_000_000,
+                    self.phases[1] / 1_000_000,
+                    self.phases[2] / 1_000_000,
+                    self.phases[3] / 1_000_000,
+                    self.cpu_preps,
                     absorbed
                 )
             })
@@ -845,18 +865,25 @@ impl SceneSource for Source {
                 // Stretches (30 s at 25%) and the steady idle tick (10 min at 1%).
                 let mut busy = [BusyWindow::new(30, 25.), BusyWindow::new(600, 1.)];
                 let mut absorbed = Absorbed::default();
+                let mut cpu_preps = 0u32;
                 let mut running: Option<(std::time::Instant, u64, String, bool, Vec<String>)> = None;
                 'actor: loop {
                     if let Some((at, cpu, kind, animation, keys)) = running.take() {
                         let cpu = bead_core::profile::thread_cpu_ns().saturating_sub(cpu);
+                        // The first window also gets the factory's session CPU (it ran before any job).
+                        let phases = bead_core::profile::take_phases();
                         for window in &mut busy {
                             window.palettes += absorbed.replaced;
                             window.repeats += absorbed.repeats;
+                            for (total, ns) in window.phases.iter_mut().zip(phases) {
+                                *total += ns;
+                            }
+                            window.cpu_preps += cpu_preps;
                             if let Some(line) = window.record(at, kind.as_str(), cpu, animation, keys.as_slice()) {
                                 eprintln!("WORKER_BUSY session={label} {line}");
                             }
                         }
-                        (absorbed.replaced, absorbed.repeats) = (0, 0);
+                        (absorbed.replaced, absorbed.repeats, cpu_preps) = (0, 0, 0);
                     }
                     for job in receiver.try_iter() {
                         match job {
@@ -893,6 +920,7 @@ impl SceneSource for Source {
                         matches!(&job, Job::Stage(UiEvent::Model(v), _) if v.is_empty()),
                         model_keys(&job),
                     ));
+                    cpu_preps += u32::from(matches!(job, Job::PrepareCpu(_)));
                     let job = match prepare_resource_job(job, &mut cache, image_policy) {
                         Ok(result) => {
                             wakeup(UiEvent::ResourcesPrepared(result));
@@ -1169,10 +1197,13 @@ impl SceneSource for Source {
                             for job in std::mem::take(&mut queue) {
                                 match job {
                                     Job::RestoreImagePolicy => cache.set_image_policy(image_policy),
-                                    job => match prepare_resource_job(job, &mut cache, image_policy) {
-                                        Ok(result) => wakeup(UiEvent::ResourcesPrepared(result)),
-                                        Err(job) => queue.push_back(job),
-                                    },
+                                    job => {
+                                        cpu_preps += u32::from(matches!(job, Job::PrepareCpu(_)));
+                                        match prepare_resource_job(job, &mut cache, image_policy) {
+                                            Ok(result) => wakeup(UiEvent::ResourcesPrepared(result)),
+                                            Err(job) => queue.push_back(job),
+                                        }
+                                    }
                                 }
                             }
                             // No later script event may overwrite this staged transaction before its GPU acknowledgement.
@@ -1180,6 +1211,7 @@ impl SceneSource for Source {
                                 match receiver.recv() {
                                     Ok(Job::Stop) | Err(_) => break 'actor,
                                     Ok(job @ (Job::PrepareImages(_) | Job::PrepareCpu(_))) => {
+                                        cpu_preps += u32::from(matches!(job, Job::PrepareCpu(_)));
                                         wakeup(UiEvent::ResourcesPrepared(
                                             prepare_resource_job(job, &mut cache, image_policy)
                                                 .unwrap_or_else(|_| unreachable!()),
@@ -1508,6 +1540,8 @@ mod tests {
         }
         // B0384: bake CPU and rasters print when the window closes, then reset.
         (busy.bake_ns, busy.rasters) = (7_000_000, 3);
+        // B0388: phase CPU (session, luau, layout, mirror) and PrepareCpu jobs, in that order.
+        (busy.phases, busy.cpu_preps) = ([40 * ms, 9 * ms, 5 * ms, 3 * ms], 4);
         let line = busy
             .record(
                 at(30),
@@ -1519,12 +1553,13 @@ mod tests {
             .expect("hot window");
         assert_eq!(
             line,
-            "window_s=30 cpu_pct=33 jobs=5 top=A:2:4002,B:1:3000,C:1:2000 animation_packets=1 bake_ms=7 rasters=3"
+            "window_s=30 cpu_pct=33 jobs=5 top=A:2:4002,B:1:3000,C:1:2000 animation_packets=1 bake_ms=7 rasters=3 session_ms=40 luau_ms=9 layout_ms=5 mirror_ms=3 cpu_preps=4"
         );
         // The next window starts empty and stays under the threshold: no line.
         assert!(busy.record(at(31), "A", 100 * ms, false, &[]).is_none());
         assert!(busy.record(at(61), "A", 0, false, &[]).is_none());
         assert_eq!((busy.bake_ns, busy.rasters), (0, 0));
+        assert_eq!((busy.phases, busy.cpu_preps), ([0; 4], 0));
     }
     #[test]
     fn idle_tick_window_prints_a_steady_one_percent_with_the_top_key() {
@@ -1544,7 +1579,7 @@ mod tests {
             .expect("steady tick");
         assert_eq!(
             line,
-            "window_s=600 cpu_pct=2 jobs=600 top=Stage/Model:600:12000 animation_packets=0 bake_ms=0 rasters=0 top_key=bead.desktop.clock.seconds:600"
+            "window_s=600 cpu_pct=2 jobs=600 top=Stage/Model:600:12000 animation_packets=0 bake_ms=0 rasters=0 session_ms=0 luau_ms=0 layout_ms=0 mirror_ms=0 cpu_preps=0 top_key=bead.desktop.clock.seconds:600"
         );
         assert!(
             BusyWindow::new(30, 25.)

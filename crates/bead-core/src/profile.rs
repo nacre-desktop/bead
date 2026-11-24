@@ -87,6 +87,35 @@ impl Drop for Span {
     }
 }
 
+/// B0388: always-on CPU attribution for `WORKER_BUSY`. A guard adds the calling thread's CPU
+/// time to one of four named phases; [`take_phases`] drains them as nanoseconds in the order
+/// session, luau, layout, mirror. Guards must not nest within the same phase or overlap.
+pub struct Phase(usize, u64);
+const PHASES: [&str; 4] = ["session", "luau", "layout", "mirror"];
+thread_local! {
+    static PHASE_NS: std::cell::Cell<[u64; 4]> = const { std::cell::Cell::new([0; 4]) };
+}
+impl Phase {
+    pub fn new(name: &'static str) -> Self {
+        let slot = PHASES.iter().position(|p| *p == name).expect("known phase");
+        Self(slot, thread_cpu_ns())
+    }
+}
+impl Drop for Phase {
+    fn drop(&mut self) {
+        let spent = thread_cpu_ns().saturating_sub(self.1);
+        PHASE_NS.with(|p| {
+            let mut ns = p.get();
+            ns[self.0] += spent;
+            p.set(ns);
+        });
+    }
+}
+/// The calling thread's phase nanoseconds since the last call, then reset.
+pub fn take_phases() -> [u64; 4] {
+    PHASE_NS.with(|p| p.replace([0; 4]))
+}
+
 /// Opt-in cross-thread timeline; no clock read or allocation when profiling is off.
 pub fn mark(stage: &'static str) {
     if enabled() {
@@ -331,7 +360,21 @@ pub fn variant_name(value: &dyn std::fmt::Debug) -> String {
 }
 #[cfg(test)]
 mod tests {
-    use super::{BUSY_LIVE_NS, busy_prints};
+    use super::{BUSY_LIVE_NS, Phase, busy_prints, take_phases, thread_cpu_ns};
+    #[test]
+    fn phases_add_thread_cpu_to_their_slot_and_reset_when_taken() {
+        take_phases();
+        let start = thread_cpu_ns();
+        {
+            let _layout = Phase::new("layout");
+            std::hint::black_box((0..200_000u64).sum::<u64>());
+        }
+        let spent = thread_cpu_ns() - start;
+        let phases = take_phases();
+        assert!(phases[2] > 0 && phases[2] <= spent, "{phases:?} {spent}");
+        assert_eq!((phases[0], phases[1], phases[3]), (0, 0, 0));
+        assert_eq!(take_phases(), [0; 4]);
+    }
     #[test]
     fn live_busy_lines_need_16_ms_and_are_spaced_250_ms() {
         let (mut last, ms) = (0, 1_000_000);
