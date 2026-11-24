@@ -198,6 +198,9 @@ struct BusyWindow {
     /// B0332: queued palettes replaced by a newer one, and key repeats dropped.
     palettes: u32,
     repeats: u32,
+    /// B0384: thread CPU spent baking and rasters built, to split bake from stage.
+    bake_ns: u64,
+    rasters: usize,
 }
 impl BusyWindow {
     fn new(seconds: u64, min_pct: f64) -> Self {
@@ -212,6 +215,8 @@ impl BusyWindow {
             keys: Default::default(),
             palettes: 0,
             repeats: 0,
+            bake_ns: 0,
+            rasters: 0,
         }
     }
     /// Add one finished job that began at `at`; the line body when its window closed hot.
@@ -251,10 +256,12 @@ impl BusyWindow {
             };
             (pct >= self.min_pct).then(|| {
                 format!(
-                    "window_s={} cpu_pct={pct:.0} jobs={} top={top} animation_packets={}{key}{}",
+                    "window_s={} cpu_pct={pct:.0} jobs={} top={top} animation_packets={} bake_ms={} rasters={}{key}{}",
                     wall.as_secs(),
                     self.jobs,
                     self.animation,
+                    self.bake_ns / 1_000_000,
+                    self.rasters,
                     absorbed
                 )
             })
@@ -1047,6 +1054,8 @@ impl SceneSource for Source {
                             }
                             needs_trim = true;
                             let bake_profile = bead_core::profile::Span::new("bake");
+                            let (bake_cpu, bake_builds) =
+                                (bead_core::profile::thread_cpu_ns(), cache.builds);
                             let mut baked = bake(&mut cache, &mut scene, &scales);
                             if baked
                                 .as_ref()
@@ -1100,6 +1109,12 @@ impl SceneSource for Source {
                                 continue;
                             }
                             drop(bake_profile);
+                            let bake_ns = bead_core::profile::thread_cpu_ns().saturating_sub(bake_cpu);
+                            let rasters = cache.builds.saturating_sub(bake_builds);
+                            for window in &mut busy {
+                                window.bake_ns += bake_ns;
+                                window.rasters += rasters;
+                            }
                             bead_core::profile::mark("worker_paint_ready");
                             bead_core::profile::trace("worker_scene", || {
                                 format!(
@@ -1466,6 +1481,8 @@ mod tests {
         ] {
             assert!(busy.record(at(s), kind, cpu * ms, s == 4, &[]).is_none());
         }
+        // B0384: bake CPU and rasters print when the window closes, then reset.
+        (busy.bake_ns, busy.rasters) = (7_000_000, 3);
         let line = busy
             .record(
                 at(30),
@@ -1477,11 +1494,12 @@ mod tests {
             .expect("hot window");
         assert_eq!(
             line,
-            "window_s=30 cpu_pct=33 jobs=5 top=A:2:4002,B:1:3000,C:1:2000 animation_packets=1"
+            "window_s=30 cpu_pct=33 jobs=5 top=A:2:4002,B:1:3000,C:1:2000 animation_packets=1 bake_ms=7 rasters=3"
         );
         // The next window starts empty and stays under the threshold: no line.
         assert!(busy.record(at(31), "A", 100 * ms, false, &[]).is_none());
         assert!(busy.record(at(61), "A", 0, false, &[]).is_none());
+        assert_eq!((busy.bake_ns, busy.rasters), (0, 0));
     }
     #[test]
     fn idle_tick_window_prints_a_steady_one_percent_with_the_top_key() {
@@ -1501,7 +1519,7 @@ mod tests {
             .expect("steady tick");
         assert_eq!(
             line,
-            "window_s=600 cpu_pct=2 jobs=600 top=Stage/Model:600:12000 animation_packets=0 top_key=bead.desktop.clock.seconds:600"
+            "window_s=600 cpu_pct=2 jobs=600 top=Stage/Model:600:12000 animation_packets=0 bake_ms=0 rasters=0 top_key=bead.desktop.clock.seconds:600"
         );
         assert!(
             BusyWindow::new(30, 25.)
