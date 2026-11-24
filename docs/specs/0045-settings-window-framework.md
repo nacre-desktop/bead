@@ -4,7 +4,7 @@
 
 - `app_id` and `title` for window identity;
 - `command_targets` for the exact commands dispatched to its source;
-- initial logical `size` and `min_size`. An axis the compositor leaves to the client takes `size` clamped to xdg-shell's `configure_bounds` (the work area; a zero bound is unknown), and `min_size` wins over both (B0385);
+- initial logical `size` and `min_size`. An axis the compositor leaves to the client takes `size` clamped to xdg-shell's `configure_bounds` (the work area; a zero bound is unknown), and `min_size` wins over both (B0385); an axis the compositor sizes (a tiled column) is taken as is, even below `min_size` (B0399);
 - optional `size_for_output` and `on_resize` host callbacks;
 - a fallback scene, a `factory` with the shape `&[serde_json::Value] -> Result<Box<dyn SceneSource>, String>`, and a `model` mapper with the shape `&[serde_json::Value] -> BTreeMap<String, bead_core::Value>` that turns arguments into a store patch for an already-open window.
 

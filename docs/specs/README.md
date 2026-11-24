@@ -7,7 +7,7 @@ This index contains current framework contracts and repository-boundary decision
 | [0025 — Per-output UI sessions](0025-per-output-ui-sessions.md) | Host-owned output identity and independent UI sessions |
 | [0032 — Internationalization consumer](0032-i18n-consumer.md) | Application-provided translation catalogs |
 | [0035 — Settings stores](0035-settings-stores.md) | Stable-ID state and host-backed persistence |
-| [0045 — Settings window framework](0045-settings-window-framework.md) | Reusable window/session framework boundary; a window the compositor leaves to size itself opens inside xdg-shell's `configure_bounds`, so it never runs off a small screen (B0385) |
+| [0045 — Settings window framework](0045-settings-window-framework.md) | Reusable window/session framework boundary; a window the compositor leaves to size itself opens inside xdg-shell's `configure_bounds`, so it never runs off a small screen (B0385), and a compositor-sized axis (a tiled column) is kept even below `min_size` (B0399) |
 | [0135 — Scrolling](0135-scrolling.md) | Bounded lists, input routing, and scroll state |
 | [0186 — Markup budget](0186-markup-budget.md) | Markup execution limits and recovery behavior |
 | [0203 — Plugins v1](0203-plugins-v1.md) | Plugin format, capabilities, and lifecycle |

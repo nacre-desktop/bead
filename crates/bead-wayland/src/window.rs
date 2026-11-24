@@ -969,7 +969,8 @@ impl App {
 
 /// A toplevel's size from a configure. An axis the compositor leaves to the client takes the
 /// preferred size, clamped to xdg-shell's configure_bounds (the work area), so a window never
-/// opens past the screen (B0385). A zero bound is unknown. min_size wins over both.
+/// opens past the screen (B0385). A zero bound is unknown. min_size wins over both. An axis the
+/// compositor sizes (a tiled column) is taken as is, even below min_size (B0399).
 fn configured_size(
     new_size: (Option<std::num::NonZeroU32>, Option<std::num::NonZeroU32>),
     bounds: Option<(u32, u32)>,
@@ -983,7 +984,7 @@ fn configured_size(
         } else {
             preferred
         };
-        size.map_or(free, std::num::NonZeroU32::get).max(min)
+        size.map_or(free.max(min), std::num::NonZeroU32::get)
     };
     (
         axis(new_size.0, bound_w, preferred.0, min.0),
@@ -1020,6 +1021,16 @@ mod configured_size_tests {
         assert_eq!(
             configured_size((None, None), Some((1240, 500)), (1100, 800), (760, 560)),
             (1100, 560)
+        );
+        // B0399: niri tiles a min-800-high window into a 740-high column under a bar: the
+        // compositor's height is kept, while the client-chosen width still follows bounds and min.
+        assert_eq!(
+            configured_size((None, n(740)), Some((1000, 740)), (1100, 800), (1100, 800)),
+            (1100, 740)
+        );
+        assert_eq!(
+            configured_size((None, n(740)), Some((900, 740)), (1100, 800), (950, 800)),
+            (950, 740)
         );
     }
 }
