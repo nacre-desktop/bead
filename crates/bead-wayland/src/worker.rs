@@ -43,16 +43,22 @@ impl Mirror {
     }
 
     /// Read `source` into a new `last`, sharing `last`'s accessibility tree, summary and
-    /// saved state while the source's state revision is unchanged.
+    /// saved state while the source's state revision is unchanged, and through an animation
+    /// (B0391): every frame commits, but the copies are rebuilt only on the frame that ends it.
     fn read(
         source: &dyn SceneSource,
         cache: &bead_render::tree::TreeCache,
         stack_bytes: usize,
+        animation_frame: bool,
         last: &mut Arc<Self>,
     ) -> Arc<Self> {
         let _profile = bead_core::profile::Span::new("mirror");
+        let wakeup_at = source.wakeup_at();
         let revision = source.state_revision();
-        let same = revision.is_some() && revision == last.revision;
+        // A kept copy keeps its own revision, so the frame that ends the animation reads anew.
+        let same = (revision.is_some() && revision == last.revision)
+            || (animation_frame && wakeup_at.is_some());
+        let revision = if same { last.revision } else { revision };
         *last = Arc::new(Self {
             dormant_ready: source.dormant_ready(),
             retained_bytes: source.warm_retained_bytes().and_then(|bytes| {
@@ -61,7 +67,7 @@ impl Mirror {
                     .checked_add(cache.retained_bytes())?
                     .checked_add(4096)
             }),
-            wakeup_at: source.wakeup_at(),
+            wakeup_at,
             drag_visuals: source.drag_visuals(),
             focused_dismiss: source.focused_dismiss(),
             tracks_origin: source.tracks_origin(),
@@ -989,6 +995,7 @@ impl SceneSource for Source {
                                             source.as_ref(),
                                             &cache,
                                             stack_bytes,
+                                            animation_frame,
                                             &mut mirrored,
                                         )),
                                         error: None,
@@ -1044,6 +1051,7 @@ impl SceneSource for Source {
                                         source.as_ref(),
                                         &cache,
                                         stack_bytes,
+                                        animation_frame,
                                         &mut mirrored,
                                     )),
                                     error: None,
@@ -1201,6 +1209,7 @@ impl SceneSource for Source {
                                                         source.as_ref(),
                                                         &cache,
                                                         stack_bytes,
+                                                        animation_frame,
                                                         &mut mirrored,
                                                     )),
                                                     error: fault,
@@ -1221,6 +1230,7 @@ impl SceneSource for Source {
                                                             source.as_ref(),
                                                             &cache,
                                                             stack_bytes,
+                                                            animation_frame,
                                                             &mut mirrored,
                                                         )),
                                                         error: Some(error),
@@ -2149,6 +2159,101 @@ mod tests {
                     "an unknown revision always reads"
                 );
             }
+        }
+    }
+    #[test]
+    fn animation_frames_share_state_copies_and_the_last_frame_reads_anew() {
+        struct Animated {
+            revision: Arc<std::sync::atomic::AtomicU64>,
+            frames: Arc<AtomicUsize>,
+            reads: Arc<AtomicUsize>,
+        }
+        impl SceneSource for Animated {
+            fn watch(
+                &mut self,
+                _: Box<dyn Fn(Result<(), String>) + Send>,
+            ) -> Result<(), Box<dyn Error>> {
+                Ok(())
+            }
+            fn stage(&mut self, _: UiEvent) -> Result<Option<Scene>, Box<dyn Error>> {
+                Ok(None)
+            }
+            fn validate(&self) -> Result<(), Box<dyn Error>> {
+                Ok(())
+            }
+            fn state_revision(&self) -> Option<u64> {
+                Some(self.revision.load(Ordering::SeqCst))
+            }
+            fn wakeup_at(&self) -> Option<std::time::Instant> {
+                (self.frames.load(Ordering::SeqCst) > 0)
+                    .then(|| std::time::Instant::now() + Duration::from_secs(1))
+            }
+            fn state_summary(&self) -> String {
+                let read = self.reads.fetch_add(1, Ordering::SeqCst);
+                format!("read {read}")
+            }
+            fn commit(&mut self) -> bool {
+                true
+            }
+            fn error_scene(&mut self, _: String) -> Scene {
+                scene()
+            }
+        }
+        // The last frame ends the animation with and without a new revision; both read anew.
+        for last_commits in [true, false] {
+            let revision = Arc::new(std::sync::atomic::AtomicU64::new(1));
+            let frames = Arc::new(AtomicUsize::new(2));
+            let reads = Arc::new(AtomicUsize::new(0));
+            let (source_revision, source_frames, source_reads) =
+                (revision.clone(), frames.clone(), reads.clone());
+            let mut source = Source::new(
+                Box::new(move || {
+                    Ok(Box::new(Animated {
+                        revision: source_revision,
+                        frames: source_frames,
+                        reads: source_reads,
+                    }))
+                }),
+                scene(),
+            );
+            let (sender, receiver) = mpsc::channel();
+            source.services(Box::new(move |event| {
+                let _ = sender.send(event);
+            }));
+            let run = |source: &mut Source, event: UiEvent| {
+                source.stage(event).unwrap();
+                let event = receiver.recv_timeout(Duration::from_secs(2)).unwrap();
+                let UiEvent::Worker(packet) = &event else {
+                    panic!("worker packet expected")
+                };
+                let mirror = packet.mirror.clone().unwrap();
+                assert!(source.stage(event).unwrap().is_none());
+                mirror
+            };
+            let frame = || UiEvent::Model(Default::default());
+            // An input starts the animation: its copies are read once.
+            let start = run(&mut source, UiEvent::Hover { x: 1., y: 1. });
+            assert_eq!(&*start.summary, "read 0");
+            // Frames that schedule another commit (a new revision each) but share the copies.
+            for _ in 0..2 {
+                revision.fetch_add(1, Ordering::SeqCst);
+                let moving = run(&mut source, frame());
+                assert!(moving.wakeup_at.is_some());
+                assert!(Arc::ptr_eq(&start.summary, &moving.summary));
+            }
+            assert_eq!(reads.load(Ordering::SeqCst), 1, "no copies during motion");
+            // The frame that ends the animation, where the content settles, reads it.
+            frames.store(0, Ordering::SeqCst);
+            if last_commits {
+                revision.fetch_add(1, Ordering::SeqCst);
+            }
+            let settled = run(&mut source, frame());
+            assert!(settled.wakeup_at.is_none());
+            assert_eq!(&*settled.summary, "read 1", "the end of motion reads anew");
+            // An input after the animation shares the settled copies again.
+            let after = run(&mut source, UiEvent::Hover { x: 2., y: 2. });
+            assert!(Arc::ptr_eq(&settled.summary, &after.summary));
+            assert_eq!(reads.load(Ordering::SeqCst), 2);
         }
     }
     #[test]
