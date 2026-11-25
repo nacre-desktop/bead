@@ -40,6 +40,11 @@ impl Cache {
         budget: usize,
     ) {
         let Some(bytes) = charge(source.as_ref(), name.capacity(), budget) else {
+            bead_core::vprintln!(
+                "WARM_PARK_REFUSED name={name} dormant={} retained={:?} budget={budget}",
+                source.dormant_ready(),
+                source.warm_retained_bytes()
+            );
             return;
         };
         self.0
@@ -66,7 +71,16 @@ impl Cache {
         source: Box<dyn SceneSource>,
         budget: usize,
     ) {
-        self.1 = (source.alive() && source.warm_retained_bytes().is_some()).then(|| {
+        // B0411: verbose-only WARM_CLOSING_* lines name why a closing source parks late or not.
+        let admitted = source.alive() && source.warm_retained_bytes().is_some();
+        if !admitted {
+            bead_core::vprintln!(
+                "WARM_CLOSING_REFUSED epoch={epoch} alive={} retained={:?}",
+                source.alive(),
+                source.warm_retained_bytes()
+            );
+        }
+        self.1 = admitted.then(|| {
             let entry = Entry {
                 overlay,
                 name,
@@ -93,7 +107,8 @@ impl Cache {
             self.park(overlay, name, epoch, source, budget);
             return false;
         }
-        if source.stage(UiEvent::PanelVisibility(false)).is_err() {
+        if let Err(error) = source.stage(UiEvent::PanelVisibility(false)) {
+            bead_core::vprintln!("WARM_CLOSING_REFUSED epoch={epoch} stage_error={error}");
             return false;
         }
         self.park_closing(overlay, name, epoch, source, budget);
@@ -106,6 +121,7 @@ impl Cache {
             .as_ref()
             .is_some_and(|(entry, _)| entry.overlay == overlay && entry.epoch == epoch)
         {
+            bead_core::vprintln!("WARM_CLOSING_EXPIRED epoch={epoch}");
             self.1 = None;
         }
     }
@@ -116,6 +132,7 @@ impl Cache {
             .as_ref()
             .is_some_and(|(entry, _)| entry.overlay == overlay && entry.name == name)
         {
+            bead_core::vprintln!("WARM_CLOSING_RETIRED event=take name={name}");
             self.1 = None;
         }
         let index = self
@@ -154,7 +171,18 @@ impl Cache {
             if kept && entry.source.dormant_ready() {
                 self.park(overlay, entry.name, epoch, entry.source, budget);
             } else if kept {
+                bead_core::vprintln!(
+                    "WARM_CLOSING_WAIT epoch={epoch} event={}",
+                    bead_core::profile::variant_name(event)
+                );
                 self.1 = Some((entry, budget));
+            } else {
+                // A Worker without packet_error failed to stage.
+                bead_core::vprintln!(
+                    "WARM_CLOSING_RETIRED epoch={epoch} event={} packet_error={}",
+                    bead_core::profile::variant_name(event),
+                    matches!(event, UiEvent::Worker(packet) if packet.has_error())
+                );
             }
             return true;
         }
