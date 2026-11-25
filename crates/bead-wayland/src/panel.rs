@@ -30,6 +30,11 @@ fn should_stop_app_after_panel_release(
 fn baked_fallback_current(started: (u64, u64), now: (u64, u64), target: bool, ready: bool) -> bool {
     started == now && target && !ready
 }
+/// B0404: how much longer a baked fallback waits for the worker's first scene; `None` shows it now.
+fn fallback_wait(delay_ms: Option<u32>, since_open: Duration) -> Option<Duration> {
+    let wait = Duration::from_millis(delay_ms?.into()).checked_sub(since_open)?;
+    (!wait.is_zero()).then_some(wait)
+}
 
 impl App {
     pub(super) fn notify_panel_owner(&self, event: UiEvent) {
@@ -1316,6 +1321,25 @@ impl App {
             return;
         };
         scene.prepared = prepared;
+        // The bake started at the open. A worker scene that comes within the delay shows instead.
+        if let Some(wait) = fallback_wait(self.options.panel_fallback_delay_ms, started.elapsed()) {
+            let timer =
+                self.loop_handle
+                    .insert_source(Timer::from_duration(wait), move |_, _, app| {
+                        let now = (app.panel_epoch, app.panel_close_epoch);
+                        if baked_fallback_current(token, now, app.panel_target, app.panel_ready) {
+                            app.show_panel_fallback();
+                        }
+                        TimeoutAction::Drop
+                    });
+            if let Err(error) = timer {
+                self.fail(error);
+            }
+            return;
+        }
+        self.show_panel_fallback();
+    }
+    fn show_panel_fallback(&mut self) {
         self.panel_fallback_ready = true;
         if let Err(error) = self.sync_all_decorations() {
             self.fail(error);
@@ -1932,6 +1956,17 @@ mod placement_tests {
         assert!(!baked_fallback_current((3, 7), (3, 7), false, false));
         // The worker's first scene arrived first.
         assert!(!baked_fallback_current((3, 7), (3, 7), true, true));
+    }
+
+    #[test]
+    fn a_fallback_delay_waits_only_for_what_is_left_of_it() {
+        let ms = Duration::from_millis;
+        assert_eq!(fallback_wait(None, ms(0)), None);
+        assert_eq!(fallback_wait(Some(120), ms(30)), Some(ms(90)));
+        // The bake took the whole delay: the fallback shows at once.
+        assert_eq!(fallback_wait(Some(120), ms(120)), None);
+        assert_eq!(fallback_wait(Some(120), ms(150)), None);
+        assert_eq!(fallback_wait(Some(0), ms(0)), None);
     }
 
     #[test]

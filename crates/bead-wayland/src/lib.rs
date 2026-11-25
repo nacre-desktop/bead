@@ -850,6 +850,9 @@ pub struct Options {
     /// conservative worker-stack charges. Sources
     /// without a trustworthy retained-byte bound always use cold creation.
     pub warm_source_budget: usize,
+    /// B0404: a cold open of a panel with a `fallback_factory` waits up to this long (from the
+    /// open) for the worker's first scene before showing the baked fallback. `None`: at once.
+    pub panel_fallback_delay_ms: Option<u32>,
     /// B0053: views offered into the overlay slot (see [`UiEvent::CompanionOffer`]).
     pub overlays: Option<Overlays>,
     /// Optional output-sized canvas views, created on first offer per output and name.
@@ -934,6 +937,7 @@ impl Default for Options {
             panel_spec: None,
             panels: None,
             warm_source_budget: 0,
+            panel_fallback_delay_ms: None,
             overlays: None,
             canvases: None,
             canvas_layers: Default::default(),
