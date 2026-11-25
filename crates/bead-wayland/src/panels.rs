@@ -28,6 +28,19 @@ pub(crate) fn initial_extent(scene: &crate::Scene, open: Option<(u32, u32)>) -> 
     open.unwrap_or_else(|| content_extent(scene))
 }
 
+/// B0412/B0413: the open extent a staged panel scene leaves for its view. An open scene records its
+/// own; a closed one (a prepared view) fills an unknown only at its open pose: a slide's `open_y`, or
+/// `-bounds.y`, the margin the presenter poses an open panel at. A slid-out offset never counts.
+pub(crate) fn open_extent(scene: &crate::Scene, known: Option<(u32, u32)>) -> Option<(u32, u32)> {
+    let open = scene.motion.as_ref().is_none_or(|m| m.open);
+    let at_open_pose = scene.slide.is_some() || scene.offset.1 == -scene.bounds.y;
+    if open || (known.is_none() && at_open_pose) {
+        Some(content_extent(scene))
+    } else {
+        known
+    }
+}
+
 pub(crate) fn anchored_position(
     scene: &crate::Scene,
     anchor: crate::PanelAnchor,
@@ -250,6 +263,64 @@ mod tests {
             (1164, 1244),
             "unknown: as today"
         );
+    }
+
+    fn panel_motion(open: bool, slide_distance: Option<f32>) -> bead_render::Motion {
+        bead_render::Motion {
+            id: "panel".into(),
+            open,
+            duration: 0.2,
+            return_duration: None,
+            return_curve: None,
+            auto_open: false,
+            spring: false,
+            curve: None,
+            edge: bead_core::Edge::Bottom,
+            slide_distance,
+            scale_from: None,
+            fade: false,
+            reveal: true,
+            progress: 1.,
+            parts: Vec::new(),
+            art: None,
+            body: None,
+        }
+    }
+
+    #[test]
+    fn a_closed_scene_at_its_open_pose_records_its_open_scenes_extent() {
+        // B0413: a prepared view's staged closed scene carries the layout's margin offset.
+        let mut open = bead_render::Scene {
+            offset: (32., 32.),
+            bounds: bead_render::Rect::new(-32., -32., 544., 1084.),
+            ..bead_render::Scene::empty(480., 1020.)
+        };
+        open.motion = Some(panel_motion(true, Some(480.)));
+        let mut closed = open.clone();
+        closed.motion = Some(panel_motion(false, Some(480.)));
+        assert_eq!(open_extent(&open, None), Some((544, 1084)));
+        assert_eq!(open_extent(&closed, None), open_extent(&open, None));
+        // A slide names the open pose whatever the offset holds.
+        closed.offset.1 = 32. + 480.;
+        assert_eq!(open_extent(&closed, None), None, "slid out");
+        closed.slide = Some(bead_render::Slide {
+            closed_y: 32. + 480.,
+            open_y: 32.,
+            period_seconds: 2.,
+        });
+        assert_eq!(open_extent(&closed, None), Some((544, 1084)));
+        // An open record is never replaced by a closed one; an open one always records.
+        assert_eq!(open_extent(&closed, Some((9, 9))), Some((9, 9)));
+        assert_eq!(open_extent(&open, Some((9, 9))), Some((544, 1084)));
+    }
+
+    #[test]
+    fn a_closed_launcher_like_scene_slid_out_records_nothing() {
+        let mut closed = bead_render::Scene::empty(1164., 654.);
+        closed.offset.1 = 590.;
+        closed.motion = Some(panel_motion(false, Some(590.)));
+        assert_eq!(open_extent(&closed, None), None);
+        assert_eq!(open_extent(&closed, Some((1164, 654))), Some((1164, 654)));
     }
 
     #[test]

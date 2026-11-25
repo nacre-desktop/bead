@@ -1129,8 +1129,9 @@ impl App {
                 }
                 if self.options.content_size {
                     let (width, height) = panels::content_extent(&self.scene);
-                    if self.processing_panel && self.scene.motion.as_ref().is_none_or(|m| m.open) {
-                        self.panel_open_extent = Some((width, height));
+                    if self.processing_panel {
+                        self.panel_open_extent =
+                            panels::open_extent(&self.scene, self.panel_open_extent);
                     }
                     for surface in self.surfaces.iter().filter(|s| {
                         s.native.is_none()
