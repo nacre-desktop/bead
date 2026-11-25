@@ -897,7 +897,7 @@ impl SceneSource for Source {
                             window.repeats += absorbed.repeats;
                             window.cpu_preps += cpu_preps;
                             if let Some(line) = window.record(at, kind.as_str(), cpu, phases, animation, keys.as_slice()) {
-                                eprintln!("WORKER_BUSY session={label} {line}");
+                                bead_core::profile::eline(format_args!("WORKER_BUSY session={label} {line}"));
                             }
                         }
                         (absorbed.replaced, absorbed.repeats, cpu_preps) = (0, 0, 0);

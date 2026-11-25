@@ -684,13 +684,13 @@ impl Dispatch<WpPresentationFeedback, PresentationData> for App {
             if let Some(open) =
                 PanelOpen::take_first_content(&mut state.panel_open, data.visibility, data.content)
             {
-                eprintln!(
+                bead_core::profile::eline(format_args!(
                     "PANEL_OPEN_LATENCY name={} cold={} ms_to_first_content_frame={:.3} monotonic_ns={}",
                     open.name,
                     open.cold,
                     open.requested.elapsed().as_secs_f64() * 1000.,
                     super::monotonic_ns()
-                );
+                ));
             }
         }
         let mut frame_interval_update = None;

@@ -55,6 +55,12 @@ pub fn clock(id: libc::clockid_t) -> u64 {
 pub fn monotonic_ns() -> u64 {
     clock(libc::CLOCK_MONOTONIC)
 }
+/// An `eprintln!` in one write(2): unbuffered stderr writes each format piece on its own,
+/// so a stdout line sharing the log could land inside a marker line (B0411).
+pub fn eline(args: std::fmt::Arguments) {
+    use std::io::Write;
+    let _ = std::io::stderr().write_all(format!("{args}\n").as_bytes());
+}
 pub fn process_cpu_ns() -> u64 {
     clock(libc::CLOCK_PROCESS_CPUTIME_ID)
 }

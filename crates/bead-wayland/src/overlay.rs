@@ -102,7 +102,7 @@ impl Drop for Overlay {
 /// One journal line per finished slide, so a live session shows what the user saw (B0170).
 pub(super) fn log_slide(id: &str, slide: Option<bead_core::animation::Slide>) {
     if let Some(slide) = slide {
-        eprintln!("PANEL_SLIDE name={id} {slide}");
+        bead_core::profile::eline(format_args!("PANEL_SLIDE name={id} {slide}"));
     }
 }
 /// Logical surface size for a content-sized scene (same rule as a panel's).
