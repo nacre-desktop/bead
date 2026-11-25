@@ -3551,7 +3551,7 @@ mod tests {
     }
     #[test]
     fn a_closing_source_waits_through_its_own_close_request_and_any_other_request_retires_it() {
-        // B0414: a view hearing its close asks to be closed (Nacre's CompanionVisibility(false)).
+        // B0414: a view hearing its close may ask to be closed (CompanionVisibility(false)).
         let (source, events) =
             warm_worker(Default::default(), Default::default(), Default::default());
         let mut cache = crate::warm::Cache::default();
