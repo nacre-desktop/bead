@@ -513,6 +513,9 @@ struct Entry {
     previous: Option<Arc<Raster>>,
     touched: u64,
 }
+/// A reveal pose: frame key, progress bits, scale bits, opening. B0407: a slid close's last pose is
+/// not the reopen's held pose.
+type RevealPose = (u64, u32, u32, bool);
 #[derive(Default)]
 pub struct TreeCache {
     pub frame: Option<Arc<Frame>>,
@@ -539,8 +542,8 @@ pub struct TreeCache {
     frame_budget: Option<bead_core::cache::Budget>,
     /// B0117: pre-rasterised growing edges (None: unusable, draw that piece per frame); the artwork and a shadow.
     edges: Vec<(u64, Option<EdgeTemplate>)>,
-    /// The last frame derived for a reveal pose (frame key, progress bits, scale bits): an unchanged pose is not rebuilt.
-    revealed_pose: Option<((u64, u32, u32), Arc<Frame>)>,
+    /// The last frame derived for a reveal pose: an unchanged pose is not rebuilt.
+    revealed_pose: Option<(RevealPose, Arc<Frame>)>,
     validated_frame: Weak<Frame>,
     /// B8: the frame hash of the last generated frame before its trailing fill layers.
     fill_tail: Option<FillTail>,
@@ -2108,7 +2111,7 @@ impl TreeCache {
                 .motion
                 .as_ref()
                 .filter(|m| m.reveal && m.progress < 1.)
-                .map(|m| (frame.key, m.progress.to_bits(), scale.to_bits()));
+                .map(|m| (frame.key, m.progress.to_bits(), scale.to_bits(), m.open));
             let candidate = if let (Some(pose), Some((last, revealed))) =
                 (pose, &self.revealed_pose)
                 && *last == pose
@@ -6733,6 +6736,42 @@ mod tests {
             first == expected,
             "frame 1 differs from a layer built on it"
         );
+    }
+    #[test]
+    fn a_warm_reopen_of_a_slid_panel_builds_its_layer_in_the_hold() {
+        // B0407: a kept panel keeps its renderer through open, rest, close and reopen.
+        let hold = |open| {
+            let mut scene = sliding_panel(open, 0.);
+            scene.opacity = 0.;
+            scene
+        };
+        let mut renderer = TreeCpuRenderer::default();
+        draw_plain(&mut renderer, &hold(true));
+        assert_eq!(renderer.slide_layer_builds, 1, "the cold hold builds");
+        for scene in [
+            sliding_panel(true, 0.25),
+            sliding_panel(true, 1.),
+            sliding_panel(false, 0.5),
+            hold(false),
+        ] {
+            draw_plain(&mut renderer, &scene);
+        }
+        let builds = renderer.slide_layer_builds;
+        draw_plain(&mut renderer, &hold(true));
+        assert_eq!(
+            renderer.slide_layer_builds,
+            builds + 1,
+            "the warm hold builds, not the close's last pose"
+        );
+        let first = draw_plain(&mut renderer, &sliding_panel(true, 0.25));
+        assert_eq!(
+            renderer.slide_layer_builds,
+            builds + 1,
+            "frame 1 only poses it"
+        );
+        assert_eq!(renderer.slide_layer_repairs, 0);
+        let expected = draw_plain(&mut TreeCpuRenderer::default(), &sliding_panel(true, 0.25));
+        assert!(first == expected, "frame 1 differs from a cold frame 1");
     }
     #[test]
     fn a_panel_that_never_rests_starts_its_close_layer_at_the_first_close_frame() {
