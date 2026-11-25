@@ -204,7 +204,8 @@ struct BusyWindow {
     cpu_ns: u64,
     jobs: u32,
     animation: u32,
-    kinds: std::collections::HashMap<String, (u32, u64)>,
+    /// Per kind: jobs, thread CPU, and the luau and layout phase CPU (B0402).
+    kinds: std::collections::HashMap<String, (u32, u64, [u64; 2])>,
     keys: std::collections::HashMap<String, u32>,
     /// B0332: queued palettes replaced by a newer one, and key repeats dropped.
     palettes: u32,
@@ -250,6 +251,7 @@ impl BusyWindow {
         at: std::time::Instant,
         kind: &str,
         cpu_ns: u64,
+        phases: [u64; 4],
         animation: bool,
         keys: &[String],
     ) -> Option<String> {
@@ -259,10 +261,18 @@ impl BusyWindow {
             let pct = self.cpu_ns as f64 / wall.as_nanos() as f64 * 100.;
             let mut top = self.kinds.drain().collect::<Vec<_>>();
             top.sort_by(|a, b| b.1.1.cmp(&a.1.1).then_with(|| a.0.cmp(&b.0)));
+            top.truncate(3);
+            let ms = |ns: u64| ns / 1_000_000;
+            let split = top
+                .iter()
+                .map(|(kind, (_, _, [luau, layout]))| {
+                    format!("{kind}:{}/{}", ms(*luau), ms(*layout))
+                })
+                .collect::<Vec<_>>()
+                .join(",");
             let top = top
                 .iter()
-                .take(3)
-                .map(|(kind, (n, ns))| format!("{kind}:{n}:{}", ns / 1_000_000))
+                .map(|(kind, (n, ns, _))| format!("{kind}:{n}:{}", ms(*ns)))
                 .collect::<Vec<_>>()
                 .join(",");
             let key = self
@@ -281,7 +291,7 @@ impl BusyWindow {
             };
             (pct >= self.min_pct).then(|| {
                 format!(
-                    "window_s={} cpu_pct={pct:.0} jobs={} top={top} animation_packets={} bake_ms={} rasters={} session_ms={} luau_ms={} layout_ms={} mirror_ms={} cpu_preps={}{key}{}",
+                    "window_s={} cpu_pct={pct:.0} jobs={} top={top} animation_packets={} bake_ms={} rasters={} session_ms={} luau_ms={} layout_ms={} mirror_ms={} cpu_preps={} top_phases={split}{key}{}",
                     wall.as_secs(),
                     self.jobs,
                     self.animation,
@@ -306,6 +316,11 @@ impl BusyWindow {
         }
         entry.0 += 1;
         entry.1 += cpu_ns;
+        entry.2[0] += phases[1];
+        entry.2[1] += phases[2];
+        for (total, ns) in self.phases.iter_mut().zip(phases) {
+            *total += ns;
+        }
         self.cpu_ns += cpu_ns;
         self.jobs += 1;
         self.animation += u32::from(animation);
@@ -880,11 +895,8 @@ impl SceneSource for Source {
                         for window in &mut busy {
                             window.palettes += absorbed.replaced;
                             window.repeats += absorbed.repeats;
-                            for (total, ns) in window.phases.iter_mut().zip(phases) {
-                                *total += ns;
-                            }
                             window.cpu_preps += cpu_preps;
-                            if let Some(line) = window.record(at, kind.as_str(), cpu, animation, keys.as_slice()) {
+                            if let Some(line) = window.record(at, kind.as_str(), cpu, phases, animation, keys.as_slice()) {
                                 eprintln!("WORKER_BUSY session={label} {line}");
                             }
                         }
@@ -1550,7 +1562,17 @@ mod tests {
             (3, "D", 1000),
             (4, "A", 4000),
         ] {
-            assert!(busy.record(at(s), kind, cpu * ms, s == 4, &[]).is_none());
+            assert!(
+                busy.record(
+                    at(s),
+                    kind,
+                    cpu * ms,
+                    [0, cpu * ms / 2, cpu * ms / 4, 0],
+                    s == 4,
+                    &[]
+                )
+                .is_none()
+            );
         }
         // B0384: bake CPU and rasters print when the window closes, then reset.
         (busy.bake_ns, busy.rasters) = (7_000_000, 3);
@@ -1561,17 +1583,21 @@ mod tests {
                 at(30),
                 "E",
                 0,
+                [0; 4],
                 false,
                 &["bead.desktop.clock.seconds".into()],
             )
             .expect("hot window");
         assert_eq!(
             line,
-            "window_s=30 cpu_pct=33 jobs=5 top=A:2:4002,B:1:3000,C:1:2000 animation_packets=1 bake_ms=7 rasters=3 session_ms=40 luau_ms=9 layout_ms=5 mirror_ms=3 cpu_preps=4"
+            "window_s=30 cpu_pct=33 jobs=5 top=A:2:4002,B:1:3000,C:1:2000 animation_packets=1 bake_ms=7 rasters=3 session_ms=40 luau_ms=9 layout_ms=5 mirror_ms=3 cpu_preps=4 top_phases=A:2001/1000,B:1500/750,C:1000/500"
         );
         // The next window starts empty and stays under the threshold: no line.
-        assert!(busy.record(at(31), "A", 100 * ms, false, &[]).is_none());
-        assert!(busy.record(at(61), "A", 0, false, &[]).is_none());
+        assert!(
+            busy.record(at(31), "A", 100 * ms, [0; 4], false, &[])
+                .is_none()
+        );
+        assert!(busy.record(at(61), "A", 0, [0; 4], false, &[]).is_none());
         assert_eq!((busy.bake_ns, busy.rasters), (0, 0));
         assert_eq!((busy.phases, busy.cpu_preps), ([0; 4], 0));
     }
@@ -1584,20 +1610,27 @@ mod tests {
         for s in 0..600 {
             let at = t0 + Duration::from_secs(s);
             assert!(
-                busy.record(at, "Stage/Model", 20_000_000, false, &key)
+                busy.record(at, "Stage/Model", 20_000_000, [0; 4], false, &key)
                     .is_none()
             );
         }
         let line = busy
-            .record(t0 + Duration::from_secs(600), "Stage/Model", 0, false, &key)
+            .record(
+                t0 + Duration::from_secs(600),
+                "Stage/Model",
+                0,
+                [0; 4],
+                false,
+                &key,
+            )
             .expect("steady tick");
         assert_eq!(
             line,
-            "window_s=600 cpu_pct=2 jobs=600 top=Stage/Model:600:12000 animation_packets=0 bake_ms=0 rasters=0 session_ms=0 luau_ms=0 layout_ms=0 mirror_ms=0 cpu_preps=0 top_key=bead.desktop.clock.seconds:600"
+            "window_s=600 cpu_pct=2 jobs=600 top=Stage/Model:600:12000 animation_packets=0 bake_ms=0 rasters=0 session_ms=0 luau_ms=0 layout_ms=0 mirror_ms=0 cpu_preps=0 top_phases=Stage/Model:0/0 top_key=bead.desktop.clock.seconds:600"
         );
         assert!(
             BusyWindow::new(30, 25.)
-                .record(t0, "A", 1, false, &[])
+                .record(t0, "A", 1, [0; 4], false, &[])
                 .is_none()
         );
     }
