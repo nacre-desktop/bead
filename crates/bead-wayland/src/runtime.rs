@@ -124,6 +124,10 @@ pub(super) struct App {
     pub(super) viewporter: Option<WpViewporter>,
     pub(super) presentation: Option<WpPresentation>,
     pub(super) surfaces: Vec<Surface>,
+    /// B0317: warm mode (the host asks to keep the wallpaper fade's GL resident). B0403: dropped
+    /// before the wallpaper surfaces: that joins the upload thread, which may use their pools.
+    #[cfg_attr(not(feature = "native-gl"), allow(dead_code))]
+    pub(super) warm: crate::wallpaper_fade::Warm,
     pub(super) wallpaper_surfaces: Vec<WallpaperSurface>,
     pub(super) wallpaper_sender: Option<calloop::channel::Sender<UiEvent>>,
     pub(super) wallpaper_jobs: std::collections::BTreeSet<String>,
@@ -136,9 +140,6 @@ pub(super) struct App {
     pub(super) fade_animations: bead_core::animation::Animations,
     #[cfg_attr(not(feature = "native-gl"), allow(dead_code))]
     pub(super) wallpaper_gl_failed: bool,
-    /// B0317: warm mode (the host asks to keep the wallpaper fade's GL resident).
-    #[cfg_attr(not(feature = "native-gl"), allow(dead_code))]
-    pub(super) warm: crate::wallpaper_fade::Warm,
     #[cfg_attr(not(feature = "native-gl"), allow(dead_code))]
     pub(super) palette_tween: Option<crate::wallpaper_fade::PaletteTween>,
     #[cfg_attr(not(feature = "native-gl"), allow(dead_code))]
@@ -765,8 +766,15 @@ pub fn run_runtime(
     }
     // The connection lives: release the warm run (final attach, GL objects, upload thread).
     #[cfg(feature = "native-gl")]
-    if app.warm.on {
-        app.warm_off();
+    {
+        if app.warm.on {
+            app.warm_off();
+        }
+        // B0403: a final write still on the upload thread ends here, with its attach.
+        if app.wallpaper_surfaces.iter().any(|s| s.pin.is_some()) {
+            app.release_all_wallpaper_runs();
+            app.release_wallpaper_gl();
+        }
     }
     for s in &app.surfaces {
         println!(
@@ -991,17 +999,23 @@ impl App {
         {
             return;
         }
-        if let Some(surface) = self
+        if let Some(index) = self
             .wallpaper_surfaces
-            .iter_mut()
-            .find(|surface| surface.output == *output)
+            .iter()
+            .position(|surface| surface.output == *output)
         {
             let scale_factor = info.scale_factor.max(1);
+            let surface = &self.wallpaper_surfaces[index];
             if (surface.width, surface.height, surface.scale_factor)
                 == (width as u32, height as u32, scale_factor)
             {
                 return;
             }
+            // B0403: the upload thread is done with the pool before it goes.
+            #[cfg(feature = "native-gl")]
+            self.flush_shm_jobs();
+            let surface = &mut self.wallpaper_surfaces[index];
+            surface.pin = None;
             surface.width = width as u32;
             surface.height = height as u32;
             surface.scale_factor = scale_factor;
@@ -1066,6 +1080,7 @@ impl App {
                 layer,
                 pool: SlotPool::new(4096, &self.shm)?,
                 buffers: Vec::with_capacity(2),
+                pin: None,
                 staged: None,
                 viewport,
                 viewport_destination: None,
@@ -1496,6 +1511,7 @@ impl App {
             frame.height,
             &frame.rgba,
             None,
+            surface.pin.is_some(),
         ) {
             surface.staged = Some(StagedWallpaperBuffer {
                 revision,
@@ -1972,6 +1988,7 @@ impl App {
                     logical,
                     reserved_buffer: staged_index,
                     prepared_buffer: staged_index.filter(|_| staged_matches),
+                    pinned: surface.pin.is_some(),
                     feedback: self
                         .presentation
                         .as_ref()
@@ -2101,6 +2118,7 @@ impl App {
                     logical,
                     reserved_buffer: surface.staged.as_ref().map(|staged| staged.index),
                     prepared_buffer,
+                    pinned: surface.pin.is_some(),
                     feedback: self
                         .presentation
                         .as_ref()
@@ -2213,7 +2231,9 @@ impl App {
             return;
         };
         self.wallpaper_surfaces[index].release_timer_pending = false;
-        if self.wallpaper_surfaces[index].staged.is_some() {
+        // B0403: a pinned pool stays until its job answered.
+        let surface = &self.wallpaper_surfaces[index];
+        if surface.staged.is_some() || surface.pin.is_some() {
             let surface = &mut self.wallpaper_surfaces[index];
             surface.release_wait_ms = surface.release_wait_ms.saturating_add(100);
             if surface.release_wait_ms <= 3000 {
@@ -2688,6 +2708,8 @@ pub(super) struct WallpaperBufferTarget<'a> {
     pub(super) logical: Option<(i32, i32)>,
     pub(super) reserved_buffer: Option<usize>,
     pub(super) prepared_buffer: Option<usize>,
+    /// B0403: a job of the upload thread holds the pool (`WallpaperSurface::pin`).
+    pub(super) pinned: bool,
     pub(super) feedback: Option<(&'a WpPresentation, &'a QueueHandle<App>, u64)>,
 }
 
@@ -2698,7 +2720,24 @@ fn prepare_wallpaper_buffer(
     height: u32,
     rgba: &[u8],
     reserved: Option<usize>,
+    pinned: bool,
 ) -> Result<usize, String> {
+    let (index, bytes) =
+        wallpaper_canvas(pool, buffers, (width, height), rgba.len(), reserved, pinned)?;
+    write_bgra(bytes, rgba);
+    Ok(index)
+}
+
+/// A free SHM slot for a wallpaper of `len` bytes and its bytes, unwritten (B0403: the upload
+/// thread may write them).
+pub(super) fn wallpaper_canvas<'a>(
+    pool: &'a mut SlotPool,
+    buffers: &mut Vec<smithay_client_toolkit::shm::slot::Buffer>,
+    (width, height): (u32, u32),
+    len: usize,
+    reserved: Option<usize>,
+    pinned: bool,
+) -> Result<(usize, &'a mut [u8]), String> {
     let expected = (width as usize)
         .checked_mul(height as usize)
         .and_then(|pixels| pixels.checked_mul(4))
@@ -2708,7 +2747,7 @@ fn prepare_wallpaper_buffer(
         || width > MAX_WALLPAPER_DIMENSION
         || height > MAX_WALLPAPER_DIMENSION
         || expected > MAX_WALLPAPER_RGBA_BYTES
-        || rgba.len() != expected
+        || len != expected
     {
         return Err("wallpaper frame size mismatch".into());
     }
@@ -2716,28 +2755,44 @@ fn prepare_wallpaper_buffer(
         .map_err(|_| "wallpaper stride overflow")?;
     let buffer_width = i32::try_from(width).map_err(|_| "wallpaper width overflow")?;
     let buffer_height = i32::try_from(height).map_err(|_| "wallpaper height overflow")?;
-    for (index, buffer) in buffers.iter_mut().enumerate() {
-        if Some(index) != reserved
-            && let Some(bytes) = buffer.canvas(pool)
-        {
-            write_bgra(bytes, rgba);
-            return Ok(index);
+    let writable: Vec<bool> = buffers.iter().map(|b| b.canvas(pool).is_some()).collect();
+    let index = match wallpaper_slot(&writable, reserved, pinned)? {
+        Some(index) => index,
+        None => {
+            let (buffer, _) = pool
+                .create_buffer(
+                    buffer_width,
+                    buffer_height,
+                    stride,
+                    wl_shm::Format::Argb8888,
+                )
+                .map_err(|_| "wallpaper SHM allocation failed")?;
+            buffers.push(buffer);
+            buffers.len() - 1
         }
+    };
+    let bytes = buffers[index]
+        .canvas(pool)
+        .ok_or("wallpaper buffer unavailable")?;
+    Ok((index, bytes))
+}
+
+/// The slot a wallpaper write takes: a writable one other than `reserved`, else a new one
+/// (`None`) while fewer than two exist. B0403: none while a job pins the pool: the write could
+/// hit the job's slot, and growing the pool remaps it under the job.
+pub(super) fn wallpaper_slot(
+    writable: &[bool],
+    reserved: Option<usize>,
+    pinned: bool,
+) -> Result<Option<usize>, &'static str> {
+    if pinned {
+        return Err("wallpaper buffers busy");
     }
-    if buffers.len() < 2 {
-        let (buffer, bytes) = pool
-            .create_buffer(
-                buffer_width,
-                buffer_height,
-                stride,
-                wl_shm::Format::Argb8888,
-            )
-            .map_err(|_| "wallpaper SHM allocation failed")?;
-        write_bgra(bytes, rgba);
-        buffers.push(buffer);
-        return Ok(buffers.len() - 1);
+    match (0..writable.len()).find(|&index| writable[index] && Some(index) != reserved) {
+        Some(index) => Ok(Some(index)),
+        None if writable.len() < 2 => Ok(None),
+        None => Err("wallpaper buffers busy"),
     }
-    Err("wallpaper buffers busy".into())
 }
 
 pub(super) fn attach_wallpaper_buffer(
@@ -2756,22 +2811,18 @@ pub(super) fn attach_wallpaper_buffer(
         logical,
         reserved_buffer,
         prepared_buffer,
+        pinned,
         feedback,
     } = target;
-    let expected = (width as usize)
-        .checked_mul(height as usize)
-        .and_then(|n| n.checked_mul(4))
-        .ok_or("wallpaper frame too large")?;
-    if rgba.len() != expected {
-        return Err("wallpaper frame size mismatch".into());
-    }
+    // A prepared buffer holds its pixels already (B0403: the final write may have taken `rgba`);
+    // `prepare_wallpaper_buffer` checks the size.
     let selected = if let Some(index) = prepared_buffer {
         if Some(index) != reserved_buffer || index >= buffers.len() {
             return Err("staged wallpaper buffer unavailable".into());
         }
         index
     } else {
-        prepare_wallpaper_buffer(pool, buffers, width, height, rgba, reserved_buffer)?
+        prepare_wallpaper_buffer(pool, buffers, width, height, rgba, reserved_buffer, pinned)?
     };
     let buffer = buffers
         .get(selected)
@@ -2830,6 +2881,82 @@ fn starts_input_less(
 }
 
 #[cfg(test)]
+mod slot_tests {
+    use super::{wallpaper_slot, write_bgra};
+
+    #[test]
+    fn a_pinned_pool_is_never_written_or_grown_and_the_write_retries() {
+        // (writable per buffer, reserved (staged), pinned)
+        assert_eq!(wallpaper_slot(&[false, true], None, false), Ok(Some(1)));
+        assert_eq!(wallpaper_slot(&[true, true], Some(0), false), Ok(Some(1)));
+        assert_eq!(
+            wallpaper_slot(&[false], None, false),
+            Ok(None),
+            "a second slot is made"
+        );
+        assert!(
+            wallpaper_slot(&[false, false], None, false).is_err(),
+            "backpressure"
+        );
+        assert!(
+            wallpaper_slot(&[false, true], None, true).is_err(),
+            "the free slot may be the job's own (a release write)"
+        );
+        assert!(
+            wallpaper_slot(&[false], None, true).is_err(),
+            "growing would remap the pool under the job: deferred to the retry path"
+        );
+        assert!(wallpaper_slot(&[], None, true).is_err());
+    }
+
+    /// B0403 micro-measurement (printed, not asserted): `cargo test -p bead-wayland --lib
+    /// shm_write_timing -- --ignored --nocapture`. The copies are libc's, so a debug build shows
+    /// their page-fault share; `write_bgra`'s loop is unoptimized there.
+    #[test]
+    #[ignore]
+    fn shm_write_timing() {
+        const LEN: usize = 2880 * 1800 * 4;
+        let ms = |began: std::time::Instant| began.elapsed().as_secs_f64() * 1e3;
+        // SAFETY: plain libc calls on a fresh memfd this test owns; `unmap` ends each mapping.
+        let fresh_shm = || unsafe {
+            let fd = libc::memfd_create(c"bead-b0403".as_ptr(), 0);
+            assert!(fd >= 0 && libc::ftruncate(fd, LEN as i64) == 0);
+            let prot = libc::PROT_READ | libc::PROT_WRITE;
+            let map = libc::mmap(std::ptr::null_mut(), LEN, prot, libc::MAP_SHARED, fd, 0);
+            libc::close(fd);
+            assert_ne!(map, libc::MAP_FAILED);
+            std::slice::from_raw_parts_mut(map.cast::<u8>(), LEN)
+        };
+        // SAFETY: a mapping of `fresh_shm`, not used afterwards.
+        let unmap = |bytes: &mut [u8]| unsafe { libc::munmap(bytes.as_mut_ptr().cast(), LEN) };
+        let source = vec![7u8; LEN];
+        let mut line = format!("B0403_TIMING bytes={LEN}");
+        for pass in 0..3 {
+            let (copied, swizzled) = (fresh_shm(), fresh_shm());
+            let began = std::time::Instant::now();
+            copied.copy_from_slice(&source);
+            let (copy_fresh, began) = (ms(began), std::time::Instant::now());
+            copied.copy_from_slice(&source);
+            let (copy_reused, began) = (ms(began), std::time::Instant::now());
+            write_bgra(swizzled, &source);
+            let (bgra_fresh, began) = (ms(began), std::time::Instant::now());
+            write_bgra(swizzled, &source);
+            let (bgra_reused, began) = (ms(began), std::time::Instant::now());
+            drop(std::hint::black_box(source.to_vec()));
+            let vec_fresh = ms(began);
+            unmap(copied);
+            unmap(swizzled);
+            line += &format!(
+                " pass{pass}=memcpy_shm_fresh:{copy_fresh:.2},memcpy_shm_reused:{copy_reused:.2},\
+                 write_bgra_shm_fresh:{bgra_fresh:.2},write_bgra_shm_reused:{bgra_reused:.2},\
+                 to_vec_fresh:{vec_fresh:.2}"
+            );
+        }
+        println!("{line}");
+    }
+}
+
+#[cfg(test)]
 mod input_rule_tests {
     use super::starts_input_less;
 
@@ -2858,7 +2985,7 @@ mod input_rule_tests {
     }
 }
 
-fn write_bgra(bytes: &mut [u8], rgba: &[u8]) {
+pub(super) fn write_bgra(bytes: &mut [u8], rgba: &[u8]) {
     let (pixels, pixel_remainder) = bytes.as_chunks_mut::<4>();
     let (colors, color_remainder) = rgba.as_chunks::<4>();
     debug_assert!(pixel_remainder.is_empty() && color_remainder.is_empty());

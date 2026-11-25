@@ -10,7 +10,9 @@
 // Without a GL renderer there is no fade: its state and helpers stay unused.
 #![cfg_attr(not(feature = "native-gl"), allow(dead_code, unused_imports))]
 use super::*;
-use crate::runtime::{WallpaperBufferTarget, attach_wallpaper_buffer};
+use crate::runtime::{
+    WallpaperBufferTarget, attach_wallpaper_buffer, wallpaper_canvas, write_bgra,
+};
 use bead_core::animation::Curve;
 
 /// How a new wallpaper replaces the shown one.
@@ -476,6 +478,11 @@ pub(crate) fn prime_wanted(
 pub(crate) fn final_attach_needed(target: &[u8]) -> bool {
     !target.is_empty()
 }
+/// B0403: the surface whose pool the job of `token` pinned; none once it was removed or resized
+/// (its answer is then dropped) or the pin was flushed.
+pub(crate) fn pinned_by(pins: impl IntoIterator<Item = Option<u64>>, token: u64) -> Option<usize> {
+    pins.into_iter().position(|pin| pin == Some(token))
+}
 /// B0325: one line per primed output; `ms` is the main-thread time (B0398: of all its turns),
 /// `upload_wait_ms` the wait for the upload thread, `prepare_wait_ms` the wait for the transport's
 /// preparation (0: one was there). B0403: `copy_ms` the shown image's hand-over, `run_ms` the
@@ -680,6 +687,9 @@ pub(super) struct FadeRun {
     upload: Option<PendingUpload>,
     /// B0317 marker fields of the current fade.
     start: StartInfo,
+    /// B0403: the SHM slot the upload thread writes (or wrote) the final image into, which the
+    /// release attaches; forgotten when a new frame takes the run.
+    final_slot: Option<usize>,
 }
 
 #[cfg(feature = "native-gl")]
@@ -961,12 +971,19 @@ impl App {
     }
 
     /// Copies the shown image (BGRA) from the attached SHM buffer (still mapped until the idle
-    /// release).
+    /// release). B0403: a prime reading it on the upload thread finishes first.
     fn shown_wallpaper_bgra(&mut self, index: usize) -> Option<Vec<u8>> {
-        let surface = &mut self.wallpaper_surfaces[index];
-        let slot = surface.buffers.get(surface.attached?)?.slot();
-        let len = surface.width as usize * surface.height as usize * 4;
-        Some(surface.pool.raw_data_mut(&slot).get(..len)?.to_vec())
+        self.flush_shm_jobs();
+        shown_bytes(&mut self.wallpaper_surfaces[index]).map(|bytes| bytes.to_vec())
+    }
+
+    /// B0403: wait until the upload thread is done with every pool it pinned.
+    pub(super) fn flush_shm_jobs(&self) {
+        if let Some(thread) = &self.warm.upload
+            && self.wallpaper_surfaces.iter().any(|s| s.pin.is_some())
+        {
+            thread.uploader.flush();
+        }
     }
 
     /// Start (or retarget) the crossfade to `frame`. The frame comes back when this is a cut.
@@ -1124,6 +1141,7 @@ impl App {
             run.resting = false;
         }
         run.target = std::mem::take(&mut frame.rgba);
+        run.final_slot = None;
         run.generation += 1;
         run.gaps = GapProbe::default();
         (run.clock, run.held_since, run.done) = (None, self.started.elapsed().as_secs_f64(), false);
@@ -1253,8 +1271,22 @@ impl App {
     /// The upload thread answered: start the fade from the texture, if its frame is still the
     /// run's newest. A failure starts it from the pixels on this thread.
     pub(super) fn upload_done(&mut self, done: bead_render::gl::Uploaded) {
+        // B0403: the job's pool is free again; a final write's run is released with its slot.
+        let pinned = pinned_by(self.wallpaper_surfaces.iter().map(|s| s.pin), done.token);
+        if let Some(index) = pinned {
+            self.wallpaper_surfaces[index].pin = None;
+            let surface = &self.wallpaper_surfaces[index];
+            if surface
+                .fade
+                .as_ref()
+                .is_some_and(|run| run.final_slot.is_some())
+            {
+                let _busy = bead_core::profile::Busy::new("warm_release");
+                return self.release_wallpaper_run(index);
+            }
+        }
         if let Some(prime) = self.warm.take_prime(done.token) {
-            return self.prime_done(prime, done);
+            return self.prime_done(prime, done, pinned);
         }
         let _busy = bead_core::profile::Busy::new("fade_launch");
         let waiting = self.wallpaper_surfaces.iter().position(|s| {
@@ -1353,7 +1385,7 @@ impl App {
         let waiting = self
             .wallpaper_surfaces
             .iter()
-            .any(|s| s.fade.as_ref().is_some_and(|run| run.upload.is_some()));
+            .any(|s| s.pin.is_some() || s.fade.as_ref().is_some_and(|run| run.upload.is_some()));
         if !waiting && !worker_wanted(self.warm.on, self.wallpaper_gl_failed, self.warm.failed) {
             self.stop_upload_thread();
         }
@@ -1361,6 +1393,11 @@ impl App {
 
     /// The thread stops when the uploader the caller gets is dropped (that joins it).
     fn stop_upload_thread(&mut self) -> Option<bead_render::gl::Uploader> {
+        // B0403: no job outlives its pin (the caller may join the thread elsewhere, later).
+        self.flush_shm_jobs();
+        self.wallpaper_surfaces
+            .iter_mut()
+            .for_each(|s| s.pin = None);
         // The thread deletes the texture of a prime in flight; its answer is never read.
         self.warm.prime = None;
         let thread = self.warm.upload.take()?;
@@ -1462,6 +1499,7 @@ impl App {
             resting: false,
             upload: None,
             start: StartInfo::default(),
+            final_slot: None,
         })
     }
 
@@ -1538,19 +1576,25 @@ impl App {
         }
         self.start_upload_thread(&name);
         let token = self.warm.next_token + 1;
-        // Not retried on failure: a prime is chained only from a successful one. Only the copy
-        // reads the SHM buffer here; GL takes the BGRA bytes on the upload thread.
+        // Not retried on failure: a prime is chained only from a successful one. B0403: GL reads
+        // the BGRA bytes in place on the upload thread; nothing is copied here.
         let copy = std::time::Instant::now();
-        let Some(bgra) = self.shown_wallpaper_bgra(index) else {
-            return;
-        };
         let Some(thread) = &self.warm.upload else {
             return;
         };
-        if thread.uploader.upload(token, size, bgra, true).is_err() {
+        let surface = &mut self.wallpaper_surfaces[index];
+        let Some(bytes) = shown_bytes(surface) else {
+            return;
+        };
+        // SAFETY: the pin set below keeps this pool mapped and unwritten until the answer: every
+        // write waits (`wallpaper_slot`), the release poll keeps it, and a resize, a removal, a
+        // cold start's read, the thread's stop and shutdown flush the thread first.
+        let bytes = unsafe { bead_render::gl::Shared::new(bytes) };
+        if !thread.uploader.upload_shared(token, size, bytes) {
             self.warm_upload_failed(&name, "upload thread gone");
             return;
         }
+        surface.pin = Some(token);
         let copy_ms = ms_since(copy);
         let turn = adopt_ms + ms_since(began);
         self.warm.next_token = token;
@@ -1567,7 +1611,7 @@ impl App {
 
     /// The upload thread made the shown image's texture: the resting run takes it, nothing is
     /// drawn or presented and the provider hears nothing. A texture nobody wants is deleted.
-    fn prime_done(&mut self, prime: Prime, done: bead_render::gl::Uploaded) {
+    fn prime_done(&mut self, prime: Prime, done: bead_render::gl::Uploaded, pinned: Option<usize>) {
         let _busy = bead_core::profile::Busy::new("warm_prime");
         let began = std::time::Instant::now();
         let upload_wait_ms = prime.queued.elapsed().as_secs_f64() * 1e3;
@@ -1579,10 +1623,10 @@ impl App {
                 return;
             }
         };
-        let index = self.wallpaper_surfaces.iter().position(|s| {
-            s.name == prime.name
-                && s.fade.is_none()
-                && s.width as usize * s.height as usize * 4 == done.rgba.len()
+        // B0403: the surface it pinned (none: resized or removed meanwhile), still without a run.
+        let index = pinned.filter(|&index| {
+            let s = &self.wallpaper_surfaces[index];
+            s.name == prime.name && s.fade.is_none()
         });
         let wanted = worker_wanted(self.warm.on, self.wallpaper_gl_failed, self.warm.failed);
         let Some(index) = index.filter(|_| wanted) else {
@@ -1929,19 +1973,30 @@ impl App {
         if self.warm.releasing {
             self.warm.turn.get_or_insert_with(std::time::Instant::now);
         }
-        if self.release_run_objects(index) {
+        if self.release_run_objects(index, false) {
             self.release_wallpaper_gl();
         }
         self.release_warm_if_due();
         self.warm.end_release_turn();
     }
 
-    fn release_run_objects(&mut self, index: usize) -> bool {
+    /// B0403: `off_main` hands the final write to the upload thread (false: it went there, the
+    /// answer releases the run).
+    fn release_run_objects(&mut self, index: usize, off_main: bool) -> bool {
+        if self.wallpaper_surfaces[index].pin.is_some() {
+            // B0403: a cut or a GL failure ends a run whose pool a job holds: the job ends first.
+            self.flush_shm_jobs();
+            self.wallpaper_surfaces[index].pin = None;
+        }
+        if off_main && self.write_final_off_main(index) {
+            return false;
+        }
         let Some(mut run) = self.wallpaper_surfaces[index].fade.take() else {
             return false;
         };
         let began = std::time::Instant::now();
         let target = std::mem::take(&mut run.target);
+        let written = run.final_slot;
         let mut commit = run.commit.take();
         let palette = run.palette.clone();
         self.drop_fade_run(run);
@@ -1955,7 +2010,7 @@ impl App {
         let surface = &mut self.wallpaper_surfaces[index];
         self.fade_animations.retain(|id| id != name);
         let attach = std::time::Instant::now();
-        let attached = if final_attach_needed(&target) {
+        let attached = if written.is_some() || final_attach_needed(&target) {
             Some(attach_wallpaper_buffer(
                 WallpaperBufferTarget {
                     pool: &mut surface.pool,
@@ -1966,8 +2021,9 @@ impl App {
                     width: surface.width,
                     height: surface.height,
                     logical,
-                    reserved_buffer: None,
-                    prepared_buffer: None,
+                    reserved_buffer: written,
+                    prepared_buffer: written,
+                    pinned: false,
                     feedback: None,
                 },
                 &target,
@@ -1982,10 +2038,8 @@ impl App {
         };
         self.warm.release_ms.2 += ms_since(attach);
         match attached {
-            // A primed run that never presented: the SHM buffer is still attached.
-            None => {}
             Some(Ok(selected)) => surface.attached = Some(selected),
-            Some(Err(_)) => {
+            Some(Err(_)) if final_attach_needed(&target) => {
                 // Buffer backpressure: the transition retry slot attaches it on the next tick.
                 surface.transition = Some(WallpaperTransition {
                     commit: None,
@@ -1997,6 +2051,9 @@ impl App {
                 });
                 self.schedule_wallpaper_tick(name.clone());
             }
+            // A primed run that never presented (the SHM buffer is still attached), or a
+            // written slot that would not attach (nothing is left to retry with).
+            _ => {}
         }
         if let Some((revision, token)) = commit.take() {
             self.wallpaper_committed(&name, revision, &token, false);
@@ -2015,11 +2072,60 @@ impl App {
         true
     }
 
+    /// B0403: the upload thread swizzles the run's final image into a free SHM slot; its answer
+    /// releases the run with the slot attached (`upload_done`), and the run shows the image until
+    /// then. False when the write stays here.
+    fn write_final_off_main(&mut self, index: usize) -> bool {
+        let Some(thread) = &self.warm.upload else {
+            return false;
+        };
+        let surface = &mut self.wallpaper_surfaces[index];
+        let Some(run) = surface.fade.as_mut() else {
+            return false;
+        };
+        if run.final_slot.is_some() || !final_attach_needed(&run.target) {
+            return false;
+        }
+        let (size, pinned) = ((surface.width, surface.height), surface.pin.is_some());
+        let (pool, buffers) = (&mut surface.pool, &mut surface.buffers);
+        let Ok((slot, bytes)) =
+            wallpaper_canvas(pool, buffers, size, run.target.len(), None, pinned)
+        else {
+            return false;
+        };
+        // SAFETY: the pin set below keeps this slot's pool mapped and unused here until the
+        // answer (see `prime_next`); the compositor sees the slot only once it is attached.
+        let mut bytes = unsafe { bead_render::gl::Shared::new(bytes) };
+        let target = std::mem::take(&mut run.target);
+        let write = move || {
+            write_bgra(bytes.bytes(), &target);
+            drop(target);
+            // SAFETY: plain libc call; the final pixels go back to the system off the main thread.
+            #[cfg(all(target_os = "linux", target_env = "gnu"))]
+            unsafe {
+                libc::malloc_trim(0);
+            }
+        };
+        run.final_slot = Some(slot);
+        let token = self.warm.next_token + 1;
+        match thread.uploader.run(token, Box::new(write)) {
+            Ok(()) => {
+                (surface.pin, self.warm.next_token) = (Some(token), token);
+                true
+            }
+            // The thread is gone: the write runs here and the release goes on.
+            Err(write) => {
+                write();
+                false
+            }
+        }
+    }
+
     /// The shared transport is about to be dropped by another owner (GL failure, switch to the CPU
     /// renderer): end every wallpaper run first (final attach as a cut, GL objects, upload thread).
     pub(super) fn release_all_wallpaper_runs(&mut self) {
         for index in 0..self.wallpaper_surfaces.len() {
-            self.release_run_objects(index);
+            self.release_run_objects(index, false);
         }
         self.stop_upload_thread();
     }
@@ -2060,8 +2166,13 @@ impl App {
         self.warm.preparing = None;
         (self.warm.release_ms, self.warm.turn) = ((0., 0., 0.), Some(began));
         self.release_wallpaper_gl();
-        // A fade that still runs keeps its run; the line with nothing left follows its end.
-        if self.warm.releasing {
+        // A fade that still runs keeps its run; the line with nothing left follows its end (B0403:
+        // also the final writes' answers, which print no line of their own).
+        let fading = self
+            .wallpaper_surfaces
+            .iter()
+            .any(|s| s.fade.is_some() && s.pin.is_none());
+        if self.warm.releasing && fading {
             self.report_warm(false, ms_since(began));
         }
         self.warm.end_release_turn();
@@ -2127,19 +2238,18 @@ impl App {
     /// True when the transport went to the release thread (`release_transport`).
     fn release_gl_objects(&mut self) -> bool {
         for index in 0..self.wallpaper_surfaces.len() {
-            let idle = self.wallpaper_surfaces[index]
-                .fade
-                .as_ref()
-                .is_some_and(|run| {
-                    release_idle(
-                        self.warm.on,
-                        self.wallpaper_gl_failed,
-                        run.resting,
-                        run.upload.is_some(),
-                    )
-                });
+            let surface = &self.wallpaper_surfaces[index];
+            // B0403: a run whose pool a job holds waits for its answer, like a pending upload.
+            let idle = surface.fade.as_ref().is_some_and(|run| {
+                release_idle(
+                    self.warm.on,
+                    self.wallpaper_gl_failed,
+                    run.resting,
+                    run.upload.is_some() || surface.pin.is_some(),
+                )
+            });
             if idle {
-                self.release_run_objects(index);
+                self.release_run_objects(index, true);
             }
         }
         let fading = self.wallpaper_surfaces.iter().any(|s| s.fade.is_some());
@@ -2200,6 +2310,13 @@ impl App {
             }
         }
     }
+}
+
+/// The shown image's bytes in the attached SHM buffer (still mapped until the idle release).
+fn shown_bytes(surface: &mut WallpaperSurface) -> Option<&mut [u8]> {
+    let slot = surface.buffers.get(surface.attached?)?.slot();
+    let len = surface.width as usize * surface.height as usize * 4;
+    surface.pool.raw_data_mut(&slot).get_mut(..len)
 }
 
 /// No wallpaper texture is left once the runs and the upload thread are gone (B0317).
@@ -2400,6 +2517,17 @@ mod tests {
     fn a_primed_run_that_never_presented_releases_without_an_attach() {
         assert!(!final_attach_needed(&[]));
         assert!(final_attach_needed(&[0, 0, 0, 255]));
+    }
+    #[test]
+    fn a_late_answer_for_a_removed_or_resized_surface_finds_no_pin() {
+        assert_eq!(pinned_by([None, Some(7)], 7), Some(1));
+        assert_eq!(pinned_by([None, Some(8)], 7), None, "another job's pool");
+        assert_eq!(
+            pinned_by([None, None], 7),
+            None,
+            "resized or flushed: the pin was cleared, the answer is dropped"
+        );
+        assert_eq!(pinned_by([], 7), None, "the surface was removed");
     }
     #[test]
     fn a_primed_output_reports_its_cost_in_one_line() {

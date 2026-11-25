@@ -1071,11 +1071,33 @@ enum Job {
         size: (u32, u32),
         rgba: Vec<u8>,
         bgra: bool,
+        /// B0403: uploaded instead of `rgba`, in place.
+        shared: Option<Shared>,
     },
+    /// B0403: CPU work (an SHM write) in order with the uploads.
+    Run(u64, Box<dyn FnOnce() + Send>),
+    /// B0403: answered once every job queued before it has finished.
+    Flush(std::sync::mpsc::Sender<()>),
     /// The main thread took the texture over and deletes it.
     Adopt(u32),
     /// A texture nobody wants any more (a superseded frame).
     Delete(u32),
+}
+/// B0403: bytes the upload thread uses in place (an SHM slot's), without a copy.
+pub struct Shared(*mut u8, usize);
+// SAFETY: `Shared::new`'s caller keeps the bytes valid and exclusive to the job.
+unsafe impl Send for Shared {}
+impl Shared {
+    /// # Safety
+    /// Until the job holding it has answered (or `Uploader::flush` or the drop returned), `bytes`
+    /// stays mapped and nothing else in this process reads or writes it.
+    pub unsafe fn new(bytes: &mut [u8]) -> Self {
+        Self(bytes.as_mut_ptr(), bytes.len())
+    }
+    pub fn bytes(&mut self) -> &mut [u8] {
+        // SAFETY: `new`'s contract.
+        unsafe { std::slice::from_raw_parts_mut(self.0, self.1) }
+    }
 }
 /// The one upload thread (B0317): a context shared with the transport's, current on it without a
 /// surface. It owns every texture it made until the main thread adopts it, and deletes the ones
@@ -1197,14 +1219,16 @@ impl Uploader {
                                 size,
                                 rgba,
                                 bgra,
+                                mut shared,
                             },
                             setup,
                         ) => {
                             let began = std::time::Instant::now();
+                            let pixels = shared.as_mut().map_or(&rgba[..], |s| &*s.bytes());
                             let texture = match setup {
                                 Ok((_, gl)) => {
                                     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                                        gl.upload(size, &rgba, bgra)
+                                        gl.upload(size, pixels, bgra)
                                     }))
                                     .unwrap_or_else(|_| Err("upload panicked".into()))
                                 }
@@ -1219,6 +1243,24 @@ impl Uploader {
                                 texture,
                                 ms: began.elapsed().as_secs_f64() * 1e3,
                             });
+                        }
+                        (Job::Run(token, work), _) => {
+                            let began = std::time::Instant::now();
+                            let work = std::panic::AssertUnwindSafe(work);
+                            let texture = std::panic::catch_unwind(work)
+                                .map(|()| 0)
+                                .map_err(|_| "job panicked".to_string());
+                            let ms = began.elapsed().as_secs_f64() * 1e3;
+                            let rgba = Vec::new();
+                            done(Uploaded {
+                                token,
+                                rgba,
+                                texture,
+                                ms,
+                            });
+                        }
+                        (Job::Flush(answer), _) => {
+                            let _ = answer.send(());
                         }
                         (Job::Adopt(texture), _) => {
                             outstanding.remove(&texture);
@@ -1261,10 +1303,50 @@ impl Uploader {
             size,
             rgba,
             bgra,
+            shared: None,
         };
         match self.jobs.as_ref().map(|jobs| jobs.send(job)) {
             Some(Err(std::sync::mpsc::SendError(Job::Upload { rgba, .. }))) => Err(rgba),
             _ => Ok(()),
+        }
+    }
+    /// B0403: queue an upload of BGRA bytes in place (an SHM slot's): no copy, and the answer's
+    /// `rgba` is empty. False when the thread is gone.
+    pub fn upload_shared(&self, token: u64, size: (u32, u32), bytes: Shared) -> bool {
+        let job = Job::Upload {
+            token,
+            size,
+            rgba: Vec::new(),
+            bgra: true,
+            shared: Some(bytes),
+        };
+        self.jobs
+            .as_ref()
+            .is_some_and(|jobs| jobs.send(job).is_ok())
+    }
+    /// B0403: run CPU work (an SHM write) on this thread, answered in order with the uploads
+    /// (`texture: Ok(0)`, or the panic). The work comes back when the thread is gone.
+    pub fn run(
+        &self,
+        token: u64,
+        work: Box<dyn FnOnce() + Send>,
+    ) -> std::result::Result<(), Box<dyn FnOnce() + Send>> {
+        match self
+            .jobs
+            .as_ref()
+            .map(|jobs| jobs.send(Job::Run(token, work)))
+        {
+            Some(Err(std::sync::mpsc::SendError(Job::Run(_, work)))) => Err(work),
+            _ => Ok(()),
+        }
+    }
+    /// B0403: wait until every job queued before this call has finished.
+    pub fn flush(&self) {
+        let (answer, finished) = std::sync::mpsc::channel();
+        if let Some(jobs) = &self.jobs
+            && jobs.send(Job::Flush(answer)).is_ok()
+        {
+            let _ = finished.recv();
         }
     }
     /// The texture of a finished upload now belongs to the caller.

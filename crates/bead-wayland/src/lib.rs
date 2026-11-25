@@ -1158,6 +1158,10 @@ struct WallpaperSurface {
     layer: LayerSurface,
     pool: SlotPool,
     buffers: Vec<Buffer>,
+    /// B0403: the token of the upload thread's job that uses a slot of `pool` in place. Until
+    /// its answer nothing writes or grows the pool (`wallpaper_slot`), the release poll keeps
+    /// it, and whoever drops or replaces it flushes the thread first (`flush_shm_jobs`).
+    pin: Option<u64>,
     staged: Option<StagedWallpaperBuffer>,
     viewport: Option<WpViewport>,
     viewport_destination: Option<(i32, i32)>,

@@ -841,6 +841,9 @@ impl OutputHandler for App {
             .filter(|s| s.output == output)
             .map(|s| s.name.clone())
             .collect();
+        // B0403: the upload thread is done with their pools before they go.
+        #[cfg(feature = "native-gl")]
+        self.flush_shm_jobs();
         #[cfg(feature = "native-gl")]
         for run in self
             .wallpaper_surfaces
