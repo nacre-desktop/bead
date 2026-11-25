@@ -23,6 +23,11 @@ pub(crate) fn content_extent(scene: &crate::Scene) -> (u32, u32) {
     )
 }
 
+/// B0412: a companion surface starts at its view's last open extent when known, else as today.
+pub(crate) fn initial_extent(scene: &crate::Scene, open: Option<(u32, u32)>) -> (u32, u32) {
+    open.unwrap_or_else(|| content_extent(scene))
+}
+
 pub(crate) fn anchored_position(
     scene: &crate::Scene,
     anchor: crate::PanelAnchor,
@@ -231,6 +236,20 @@ mod tests {
                 (target.0 as i32 - 32, target.1 as i32 - 32)
             );
         }
+    }
+
+    #[test]
+    fn a_new_surface_prefers_the_open_extent_and_else_keeps_todays_content_extent() {
+        // The launcher's retained closed scene: 654 open, slid out by 590.
+        let mut closed = bead_render::Scene::empty(1164., 654.);
+        closed.offset.1 = 590.;
+        assert_eq!(content_extent(&closed), (1164, 1244));
+        assert_eq!(initial_extent(&closed, Some((1164, 654))), (1164, 654));
+        assert_eq!(
+            initial_extent(&closed, None),
+            (1164, 1244),
+            "unknown: as today"
+        );
     }
 
     #[test]

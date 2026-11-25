@@ -265,6 +265,7 @@ pub(crate) struct Group {
     policy: policy::Policy,
     dismiss: Option<panel::Dismiss>,
     ui_serial: u64,
+    open_extent: Option<(u32, u32)>,
     spec: Option<PanelSpec>,
     option_companion: Option<(Scene, RendererKind)>,
     lazy_gl: bool,
@@ -298,6 +299,7 @@ impl Group {
             policy: Default::default(),
             dismiss: None,
             ui_serial: 0,
+            open_extent: None,
             spec,
             option_companion: None,
             lazy_gl: false,
@@ -430,6 +432,7 @@ impl App {
         swap(&mut self.companion_policy, &mut g.policy);
         swap(&mut self.dismiss, &mut g.dismiss);
         swap(&mut self.panel_ui_serial, &mut g.ui_serial);
+        swap(&mut self.panel_open_extent, &mut g.open_extent);
         swap(&mut self.options.panel_spec, &mut g.spec);
         swap(&mut self.options.companion, &mut g.option_companion);
         swap(&mut self.options.lazy_gl, &mut g.lazy_gl);

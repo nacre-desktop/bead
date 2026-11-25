@@ -3550,6 +3550,42 @@ mod tests {
         assert_eq!(stages.load(Ordering::SeqCst), 3, "no second close");
     }
     #[test]
+    fn a_parked_view_keeps_its_open_extent_through_both_park_paths_and_never_another_views() {
+        let (source, events) =
+            warm_worker(Default::default(), Default::default(), Default::default());
+        let mut cache = crate::warm::Cache::default();
+        // B0412: a prepared panel waits in the closing slot first; its extent moves with it.
+        assert!(cache.park_closed(false, "A".into(), 1, source, usize::MAX, false));
+        cache.set_extent(false, 1, Some((544, 1084)));
+        for _ in 0..2 {
+            let packet = events.recv_timeout(Duration::from_secs(2)).unwrap();
+            assert!(cache.handle_event(false, 1, &packet));
+        }
+        assert_eq!(cache.stats().0, 1, "parked once its close is acknowledged");
+        let (other, _other_events) =
+            warm_worker(Default::default(), Default::default(), Default::default());
+        cache.park(false, "B".into(), 2, other, usize::MAX);
+        cache.set_extent(true, 1, Some((9, 9)));
+        let b = cache.take(false, "B").expect("parked B");
+        assert_eq!(b.extent, None, "B never takes A's extent");
+        let entry = cache.take(false, "A").expect("parked A");
+        assert_eq!(
+            entry.extent,
+            Some((544, 1084)),
+            "no overlay epoch retags a panel"
+        );
+        // A closed source parks at once and carries its newer extent.
+        let mut source = entry.source;
+        assert!(source.resume().unwrap().is_none());
+        settle(source.as_mut(), &events);
+        source.stage(UiEvent::PanelVisibility(false)).unwrap();
+        settle(source.as_mut(), &events);
+        assert!(!cache.park_closed(false, "A".into(), 1, source, usize::MAX, true));
+        cache.set_extent(false, 1, Some((1164, 654)));
+        let entry = cache.take(false, "A").expect("parked A again");
+        assert_eq!(entry.extent, Some((1164, 654)));
+    }
+    #[test]
     fn a_closing_source_retires_on_a_payload_its_timeout_or_its_own_request() {
         for retire in 0..3 {
             let (mut source, events) =

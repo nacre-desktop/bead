@@ -409,6 +409,8 @@ impl App {
                 let budget = self.options.warm_source_budget;
                 self.warm_sources
                     .park_closing(false, retiring, epoch, source, budget);
+                self.warm_sources
+                    .set_extent(false, epoch, self.panel_open_extent);
                 self.expire_closing_panel(epoch);
             }
             // B0409: an open view replaced by another retires as a closed one, so it hears its
@@ -936,6 +938,8 @@ impl App {
                 .and_then(|name| self.warm_sources.take(false, name))
         });
         let reused = warm.is_some();
+        // B0412: a warm view reopens at its last open size; a cold one at its fallback's.
+        self.panel_open_extent = warm.as_ref().and_then(|entry| entry.extent);
         if reused && let Some(open) = &mut self.panel_open {
             open.cold = false;
         }
@@ -1635,6 +1639,8 @@ impl App {
             {
                 self.expire_closing_panel(retired_panel_epoch);
             }
+            self.warm_sources
+                .set_extent(false, retired_panel_epoch, self.panel_open_extent);
         }
         self.panel_resuming = false;
         #[cfg(feature = "native-gl")]

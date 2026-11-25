@@ -6,6 +6,8 @@ use std::collections::VecDeque;
 pub(super) struct Entry {
     pub epoch: u64,
     pub source: Box<dyn SceneSource>,
+    /// B0412: the view's last open content extent, so its reopened surface starts at that size.
+    pub extent: Option<(u32, u32)>,
     overlay: bool,
     name: String,
     bytes: usize,
@@ -57,6 +59,7 @@ impl Cache {
             name,
             epoch,
             source,
+            extent: None,
             bytes,
         });
         self.trace();
@@ -86,6 +89,7 @@ impl Cache {
                 name,
                 epoch,
                 source,
+                extent: None,
                 bytes: 0,
             };
             (entry, budget)
@@ -113,6 +117,15 @@ impl Cache {
         }
         self.park_closing(overlay, name, epoch, source, budget);
         true
+    }
+    /// B0412: the parked or closing source `epoch` remembers its view's last open content extent.
+    pub fn set_extent(&mut self, overlay: bool, epoch: u64, extent: Option<(u32, u32)>) {
+        let closing = self.1.as_mut().map(|(entry, _)| entry);
+        for entry in self.0.iter_mut().chain(closing) {
+            if entry.overlay == overlay && entry.epoch == epoch {
+                entry.extent = extent;
+            }
+        }
     }
     /// A closing source not acknowledged in time retires as a cold one does.
     pub fn drop_closing(&mut self, overlay: bool, epoch: u64) {
@@ -170,6 +183,7 @@ impl Cache {
             };
             if kept && entry.source.dormant_ready() {
                 self.park(overlay, entry.name, epoch, entry.source, budget);
+                self.set_extent(overlay, epoch, entry.extent);
             } else if kept {
                 bead_core::vprintln!(
                     "WARM_CLOSING_WAIT epoch={epoch} event={}",

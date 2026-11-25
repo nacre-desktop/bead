@@ -41,6 +41,8 @@ pub(super) struct App {
     pub(super) panel_resuming: bool,
     /// B0405: the panel source's last staged visibility was a close.
     pub(super) panel_close_heard: bool,
+    /// B0412: the current view's last open content extent; None until it has shown content.
+    pub(super) panel_open_extent: Option<(u32, u32)>,
     /// A validated app snapshot can be shown while its live panel worker starts.
     pub(super) panel_fallback_ready: bool,
     pub(super) panel_reload_pending: bool,
@@ -431,6 +433,7 @@ pub fn run_runtime(
         panel_ready: true,
         panel_resuming: false,
         panel_close_heard: false,
+        panel_open_extent: None,
         panel_fallback_ready: false,
         panel_reload_pending: false,
         panel_target: false,
@@ -2512,7 +2515,7 @@ impl App {
                 }
             };
             let size = if content {
-                panels::content_extent(scene)
+                panels::initial_extent(scene, self.panel_open_extent.filter(|_| companion))
             } else if self.options.bar && !companion {
                 self.bar_size()
             } else if self.options.panel || companion {
