@@ -193,9 +193,12 @@ impl Cache {
             } else {
                 // A Worker without packet_error failed to stage.
                 bead_core::vprintln!(
-                    "WARM_CLOSING_RETIRED epoch={epoch} event={} packet_error={}",
+                    "WARM_CLOSING_RETIRED epoch={epoch} event={} packet_error={:?}",
                     bead_core::profile::variant_name(event),
-                    matches!(event, UiEvent::Worker(packet) if packet.has_error())
+                    match event {
+                        UiEvent::Worker(packet) => packet.error(),
+                        _ => None,
+                    }
                 );
             }
             return true;
