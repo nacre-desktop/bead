@@ -3550,6 +3550,29 @@ mod tests {
         assert_eq!(stages.load(Ordering::SeqCst), 3, "no second close");
     }
     #[test]
+    fn a_closing_source_waits_through_its_own_close_request_and_any_other_request_retires_it() {
+        // B0414: a view hearing its close asks to be closed (Nacre's CompanionVisibility(false)).
+        let (source, events) =
+            warm_worker(Default::default(), Default::default(), Default::default());
+        let mut cache = crate::warm::Cache::default();
+        assert!(cache.park_closed(false, "A".into(), 1, source, usize::MAX, false));
+        assert!(cache.handle_event(false, 1, &UiEvent::CompanionVisibility(false)));
+        for _ in 0..2 {
+            let packet = events.recv_timeout(Duration::from_secs(2)).unwrap();
+            assert!(cache.handle_event(false, 1, &packet));
+        }
+        assert_eq!(cache.stats().0, 1, "parked once its close is acknowledged");
+        let (other, _other_events) =
+            warm_worker(Default::default(), Default::default(), Default::default());
+        assert!(cache.park_closed(false, "B".into(), 2, other, usize::MAX, false));
+        assert!(cache.handle_event(false, 2, &UiEvent::CompanionVisibility(true)));
+        assert!(
+            !cache.handle_event(false, 2, &UiEvent::Model(Default::default())),
+            "any other request still retires it"
+        );
+        assert_eq!(cache.stats().0, 1);
+    }
+    #[test]
     fn a_parked_view_keeps_its_open_extent_through_both_park_paths_and_never_another_views() {
         let (source, events) =
             warm_worker(Default::default(), Default::default(), Default::default());

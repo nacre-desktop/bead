@@ -168,6 +168,8 @@ impl Cache {
         {
             let kept = match event {
                 UiEvent::Model(values) => values.is_empty(),
+                // B0414: the closing view's own request to be closed carries no state.
+                UiEvent::CompanionVisibility(false) => true,
                 UiEvent::Worker(packet) if !packet.has_error() => {
                     match entry.source.stage(UiEvent::Worker(packet.clone())) {
                         // Ready sends its Ack; Accepted commits the candidate.
