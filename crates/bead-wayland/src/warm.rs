@@ -77,6 +77,28 @@ impl Cache {
             (entry, budget)
         });
     }
+    /// B0405: a closed source parks. One that never heard its close (a prepared panel never
+    /// shown) hears it once and waits in the closing slot; true when it does, so the caller
+    /// arms `drop_closing`.
+    pub fn park_closed(
+        &mut self,
+        overlay: bool,
+        name: String,
+        epoch: u64,
+        mut source: Box<dyn SceneSource>,
+        budget: usize,
+        close_heard: bool,
+    ) -> bool {
+        if close_heard {
+            self.park(overlay, name, epoch, source, budget);
+            return false;
+        }
+        if source.stage(UiEvent::PanelVisibility(false)).is_err() {
+            return false;
+        }
+        self.park_closing(overlay, name, epoch, source, budget);
+        true
+    }
     /// A closing source not acknowledged in time retires as a cold one does.
     pub fn drop_closing(&mut self, overlay: bool, epoch: u64) {
         if self

@@ -39,6 +39,8 @@ pub(super) struct App {
     /// The panel's own scene has been committed at least once (no dark/empty first frame before).
     pub(super) panel_ready: bool,
     pub(super) panel_resuming: bool,
+    /// B0405: the panel source's last staged visibility was a close.
+    pub(super) panel_close_heard: bool,
     /// A validated app snapshot can be shown while its live panel worker starts.
     pub(super) panel_fallback_ready: bool,
     pub(super) panel_reload_pending: bool,
@@ -427,6 +429,7 @@ pub fn run_runtime(
         panel_dock_transition: None,
         panel_ready: true,
         panel_resuming: false,
+        panel_close_heard: false,
         panel_fallback_ready: false,
         panel_reload_pending: false,
         panel_target: false,

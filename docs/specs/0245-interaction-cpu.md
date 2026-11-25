@@ -178,6 +178,9 @@ close settles (its surface unmaps), not at the 120 s keep-alive; a reopen within
 those 2 s stays live. A view switched away mid-close waits in one closing slot: the
 cache acknowledges that source's own clean packets without a surface and parks it
 once dormant; any other callback, a request for it, or 2 s without the ack drops it.
+A prepared panel that was never shown (B0405) hears `PanelVisibility(false)` once at its
+release and waits in that slot, so it parks like a closed one and drops its host leases;
+a source that already heard its close parks at once, with no second one.
 Such releases skip the immediate allocator trim; the idle trim 100 ms later stays.
 Budget 0 keeps the keep-alive, the cold switch and both trims.
 Surfaces, renderer instances, focus and protocol objects follow normal teardown.

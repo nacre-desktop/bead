@@ -399,7 +399,9 @@ impl App {
         let warm = self.warm_sources.take(false, &name);
         if self.panel_runtime.is_some() {
             // B0392: a view switched away mid-close parks once its close is acknowledged.
+            // One that never heard a close hears it in release_panel (B0405).
             if self.panel_parks_early()
+                && self.panel_close_heard
                 && let Some(retiring) = self.panel_name.clone()
                 && let Some(source) = self.panel_runtime.take_if(|s| !s.dormant_ready())
             {
@@ -407,15 +409,7 @@ impl App {
                 let budget = self.options.warm_source_budget;
                 self.warm_sources
                     .park_closing(false, retiring, epoch, source, budget);
-                if let Err(error) = self.loop_handle.insert_source(
-                    Timer::from_duration(PANEL_PARK_GRACE),
-                    move |_, _, app| {
-                        app.warm_sources.drop_closing(false, epoch);
-                        TimeoutAction::Drop
-                    },
-                ) {
-                    self.fail(error);
-                }
+                self.expire_closing_panel(epoch);
             }
             self.release_panel();
         }
@@ -1034,6 +1028,7 @@ impl App {
         source.viewport(viewport.0, viewport.1);
         self.panel_ui_serial = 0;
         self.panel_runtime = Some(source);
+        self.panel_close_heard = false;
         let qh = self.qh.clone();
         if open {
             self.add_output(&qh, output);
@@ -1160,6 +1155,9 @@ impl App {
         });
         if self.panel_runtime.is_none() || self.companion.is_none() {
             return;
+        }
+        if let UiEvent::PanelVisibility(open) = &event {
+            self.panel_close_heard = !open;
         }
         let (bar, panel, content, kind, keyboard) = (
             self.options.bar,
@@ -1480,6 +1478,18 @@ impl App {
             self.fail(e);
         }
     }
+    /// A closing source not acknowledged within PANEL_PARK_GRACE retires cold.
+    fn expire_closing_panel(&mut self, epoch: u64) {
+        if let Err(error) = self.loop_handle.insert_source(
+            Timer::from_duration(PANEL_PARK_GRACE),
+            move |_, _, app| {
+                app.warm_sources.drop_closing(false, epoch);
+                TimeoutAction::Drop
+            },
+        ) {
+            self.fail(error);
+        }
+    }
     fn panel_parks_early(&self) -> bool {
         parks_early(
             self.options.warm_source_budget,
@@ -1604,19 +1614,22 @@ impl App {
         if let Some(source) = self.panel_runtime.take() {
             // Open replacements cold-retire: only an acknowledged closed source
             // may preserve interaction state. Worker readiness fences its close.
+            // B0405: a prepared panel never shown hears its close first, so its leases drop.
             if check_app_lifetime
                 && closed
                 && self.pearl.is_none()
                 && self.options.app.is_none()
                 && let Some(name) = self.panel_name.clone()
-            {
-                self.warm_sources.park(
+                && self.warm_sources.park_closed(
                     false,
                     name,
                     retired_panel_epoch,
                     source,
                     self.options.warm_source_budget,
-                );
+                    self.panel_close_heard,
+                )
+            {
+                self.expire_closing_panel(retired_panel_epoch);
             }
         }
         self.panel_resuming = false;

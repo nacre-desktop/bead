@@ -3518,6 +3518,38 @@ mod tests {
         assert_eq!(factories.load(Ordering::SeqCst), 1, "no factory call");
     }
     #[test]
+    fn a_prepared_panel_hears_one_close_before_it_parks_and_a_closed_one_none() {
+        let stages = Arc::new(AtomicUsize::new(0));
+        let (source, events) = warm_worker(Default::default(), stages.clone(), Default::default());
+        assert_eq!(
+            stages.load(Ordering::SeqCst),
+            1,
+            "prepared: its Reload only"
+        );
+        let mut cache = crate::warm::Cache::default();
+        assert!(cache.park_closed(false, "A".into(), 1, source, usize::MAX, false));
+        assert_eq!(
+            cache.stats().0,
+            0,
+            "not parked before its close is accepted"
+        );
+        for _ in 0..2 {
+            let packet = events.recv_timeout(Duration::from_secs(2)).unwrap();
+            assert!(cache.handle_event(false, 1, &packet));
+        }
+        assert_eq!(cache.stats().0, 1, "parked once its close is acknowledged");
+        assert_eq!(stages.load(Ordering::SeqCst), 2, "exactly one close staged");
+        // A real close was staged already: the release parks it at once, adding none.
+        let mut source = cache.take(false, "A").expect("parked A").source;
+        assert!(source.resume().unwrap().is_none());
+        settle(source.as_mut(), &events);
+        source.stage(UiEvent::PanelVisibility(false)).unwrap();
+        settle(source.as_mut(), &events);
+        assert!(!cache.park_closed(false, "A".into(), 2, source, usize::MAX, true));
+        assert_eq!(cache.stats().0, 1);
+        assert_eq!(stages.load(Ordering::SeqCst), 3, "no second close");
+    }
+    #[test]
     fn a_closing_source_retires_on_a_payload_its_timeout_or_its_own_request() {
         for retire in 0..3 {
             let (mut source, events) =
