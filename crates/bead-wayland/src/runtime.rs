@@ -2664,6 +2664,7 @@ impl App {
                 activate_ms: Vec::new(),
                 callbacks_ms: Vec::new(),
                 last_callback: None,
+                callback_sent_ago: 0.,
                 presented_ms: Vec::new(),
                 last_presented: None,
                 refresh_ns: 0,

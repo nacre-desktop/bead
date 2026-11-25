@@ -158,7 +158,7 @@ mod retained_gl_open_tests {
             !kept_gl_grace_due(false, true, false),
             "a fallback already left GL"
         );
-        assert_eq!(super::KEPT_GL_GRACE, std::time::Duration::from_secs(300));
+        assert_eq!(super::KEPT_GL_GRACE, std::time::Duration::from_secs(120));
     }
 
     #[test]
@@ -324,7 +324,7 @@ pub(super) fn keeps_gl_closed(companion: Option<RendererKind>) -> bool {
 /// B0339: how long a closed panel keeps its GL renderer and context before the CPU snapshot
 /// close path takes over (the idle rule: a kept context above ~10 MiB gets a grace).
 #[cfg(feature = "native-gl")]
-const KEPT_GL_GRACE: Duration = Duration::from_secs(300);
+const KEPT_GL_GRACE: Duration = Duration::from_secs(120);
 /// B0339: the grace ends only for the same close of a panel that is still closed and kept.
 #[cfg(feature = "native-gl")]
 fn kept_gl_grace_due(open: bool, same_close: bool, kept: bool) -> bool {
@@ -4068,9 +4068,13 @@ impl App {
             // The first committed frame of a motion starts its clock: preparation, configure and
             // a slow first frame never spend the slide (B0170).
             let committed_at = self.started.elapsed().as_secs_f64();
-            let callback = self.surfaces[index]
-                .last_callback
-                .map(|c| c.saturating_duration_since(self.started).as_secs_f64());
+            let sent_ago = self.surfaces[index].callback_sent_ago;
+            let callback = self.surfaces[index].last_callback.map(|c| {
+                (
+                    c.saturating_duration_since(self.started).as_secs_f64(),
+                    sent_ago,
+                )
+            });
             bead_core::profile::split("post");
             self.animations.add_builds(&id, main_builds);
             let slide = self.animations.committed_timed(

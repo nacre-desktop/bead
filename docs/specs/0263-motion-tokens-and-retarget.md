@@ -186,6 +186,7 @@ niri sends a layer surface its frame callback only after drawing the surface its
 ## Slide gap attribution (B0295)
 
 The always-on `PANEL_SLIDE` line appends `gap_at` (commit index that ended the worst gap), `gap_wait_ms` (previous commit to the frame callback that drew it, 0 if none), `gap_queue_ms` (callback or previous commit to draw start) and `gap_render_ms` (draw start to commit); the three sum to `max_gap_ms`. Earlier fields keep their order. Presentation-feedback gaps are not included: feedback arrives after the slide line is written.
+B0408: the line ends with `gap_dispatch_ms`, the part of `gap_wait_ms` between the compositor's own timestamp on that frame callback (`wl_callback.done` time, milliseconds on CLOCK_MONOTONIC, as niri sends it) and its dispatch on Bead's main thread; `gap_wait_ms - gap_dispatch_ms` is the compositor's lateness. 0 without a callback or when the stamp is ahead or over 1 s behind (another clock); 1 ms resolution.
 
 ## Slide edge frames (B0301)
 

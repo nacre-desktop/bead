@@ -25,6 +25,42 @@ fn companion_frame_active(animation_active: bool, frame_until: Option<f64>, now:
     animation_active || frame_until.is_some_and(|until| now <= until)
 }
 
+/// B0408: seconds from a frame callback's stamp (`time`: milliseconds on CLOCK_MONOTONIC, as niri
+/// sends it) to `now_ns`; 0 when the stamp is ahead or more than 1 s behind (another clock).
+fn callback_sent_ago(now_ns: u64, time: u32) -> f64 {
+    let late = ((now_ns / 1_000_000) as u32).wrapping_sub(time);
+    if late <= 1000 {
+        f64::from(late) / 1000.
+    } else {
+        0.
+    }
+}
+
+#[cfg(test)]
+mod callback_stamp_tests {
+    use super::callback_sent_ago;
+
+    #[test]
+    fn a_callback_stamp_on_the_monotonic_clock_gives_its_dispatch_delay_and_any_other_none() {
+        assert_eq!(callback_sent_ago(5_003_400_000, 5_000), 0.003);
+        // Milliseconds wrap at 2^32 (about 49.7 days of uptime).
+        assert_eq!(
+            callback_sent_ago((1u64 << 32) * 1_000_000 + 2_000_000, u32::MAX - 1),
+            0.004
+        );
+        assert_eq!(
+            callback_sent_ago(5_000_000_000, 5_001),
+            0.,
+            "stamped ahead: another clock"
+        );
+        assert_eq!(
+            callback_sent_ago(9_000_000_000, 5_000),
+            0.,
+            "4 s behind: another clock"
+        );
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum LayerCloseAction {
     IgnoreDormantXdg,
@@ -302,6 +338,7 @@ impl CompositorHandler for App {
                     .push(now.duration_since(last).as_secs_f64() * 1000.);
             }
             s.last_callback = Some(now);
+            s.callback_sent_ago = callback_sent_ago(bead_core::profile::monotonic_ns(), time);
             if !s.ready {
                 s.ready = true;
                 println!(

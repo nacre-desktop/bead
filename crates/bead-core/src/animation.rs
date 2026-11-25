@@ -170,8 +170,9 @@ struct Motion {
     frames: u32,
     last_frame: f64,
     max_gap: f64,
-    /// The worst gap's commit index and its split (wait, queue, render), seconds (B0295).
-    worst: (u32, [f64; 3]),
+    /// The worst gap's commit index and its split (wait, queue, render), seconds (B0295), then
+    /// the part of the wait after the compositor stamped its callback (B0408).
+    worst: (u32, [f64; 4]),
     /// The three costliest frame renders (commit index, seconds, largest phases), costliest first
     /// (B0305, B0380).
     top: [(u32, f64, Phases); 3],
@@ -202,6 +203,9 @@ pub struct Slide {
     pub top_splits: [[(&'static str, f64); 4]; 3],
     /// Rasters the main-thread presenter built over the slide (B0388).
     pub main_builds: usize,
+    /// B0408: of `gap_wait_ms`, the time from the compositor's timestamp on that frame callback to
+    /// its dispatch here (0 without a callback or a usable stamp): the rest is the compositor's.
+    pub gap_dispatch_ms: f64,
 }
 impl std::fmt::Display for Slide {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -250,7 +254,11 @@ impl std::fmt::Display for Slide {
         if self.duration_ms == 0. {
             f.write_str(" slide=none")?;
         }
-        write!(f, " main_builds={}", self.main_builds)
+        write!(
+            f,
+            " main_builds={} gap_dispatch_ms={:.1}",
+            self.main_builds, self.gap_dispatch_ms
+        )
     }
 }
 #[derive(Default)]
@@ -280,7 +288,7 @@ impl Animations {
                     frames: 0,
                     last_frame: now,
                     max_gap: 0.,
-                    worst: (0, [0.; 3]),
+                    worst: (0, [0.; 4]),
                     top: [(0, 0., [("", 0.); 4]); 3],
                     top_split: [("", 0.); 4],
                     builds: 0,
@@ -303,14 +311,15 @@ impl Animations {
             motion.builds += builds;
         }
     }
-    /// `committed` with the frame's timing: the frame callback that triggered the draw (if any)
-    /// and the draw start, on the same clock as `now`. They split the worst gap for `Slide`.
+    /// `committed` with the frame's timing: the frame callback that triggered the draw (if any:
+    /// its dispatch, on the same clock as `now`, and how long before that the compositor stamped
+    /// it, B0408) and the draw start. They split the worst gap for `Slide`.
     pub fn committed_timed(
         &mut self,
         id: &str,
         drawn: f64,
         now: f64,
-        callback: Option<f64>,
+        callback: Option<(f64, f64)>,
         draw_start: f64,
         splits: &Splits,
     ) -> Option<Slide> {
@@ -330,11 +339,12 @@ impl Animations {
             let gap = now - motion.last_frame;
             if gap > motion.max_gap {
                 let start = draw_start.clamp(motion.last_frame, now);
-                let callback = callback.map(|c| c.clamp(motion.last_frame, start));
-                let wait = callback.map_or(0., |c| c - motion.last_frame);
-                let queue = start - callback.unwrap_or(motion.last_frame);
+                let dispatched = callback.map(|(c, _)| c.clamp(motion.last_frame, start));
+                let wait = dispatched.map_or(0., |c| c - motion.last_frame);
+                let queue = start - dispatched.unwrap_or(motion.last_frame);
+                let dispatch = callback.map_or(0., |(_, sent)| sent.clamp(0., wait));
                 motion.max_gap = gap;
-                motion.worst = (motion.frames, [wait, queue, now - start]);
+                motion.worst = (motion.frames, [wait, queue, now - start, dispatch]);
             }
         }
         let render = now - draw_start.clamp(motion.last_frame, now);
@@ -369,6 +379,7 @@ impl Animations {
                 .top
                 .map(|(_, _, p)| p.map(|(stage, s)| (stage, s * 1000.))),
             main_builds: motion.builds,
+            gap_dispatch_ms: motion.worst.1[3] * 1000.,
         };
         motion.frames = u32::MAX;
         Some(slide)
@@ -412,7 +423,7 @@ impl Animations {
                 frames: 0,
                 last_frame: now,
                 max_gap: 0.,
-                worst: (0, [0.; 3]),
+                worst: (0, [0.; 4]),
                 top: [(0, 0., [("", 0.); 4]); 3],
                 top_split: [("", 0.); 4],
                 builds: 0,
@@ -522,7 +533,7 @@ mod tests {
         let text = slide.to_string();
         assert!(
             text.starts_with("dir=open first_frame_ms=100.0 frames=1 duration_ms=0.0 ")
-                && text.ends_with(" top_splits= slide=none main_builds=3"),
+                && text.ends_with(" top_splits= slide=none main_builds=3 gap_dispatch_ms=0.0"),
             "{text}"
         );
         // A host fallback seeded held with a real duration, then the scene's zero duration.
@@ -576,13 +587,13 @@ mod tests {
         // Gap 0.1: wait 0.04, queue 0.02, render 0.04.
         let mut frame1 = NO_SPLITS;
         frame1[0] = ("swap", 0.01);
-        a.committed_timed("p", 0.1, 0.1, Some(0.04), 0.06, &frame1);
+        a.committed_timed("p", 0.1, 0.1, Some((0.04, 0.)), 0.06, &frame1);
         // Smaller gap 0.05, no callback: queue 0.01, render 0.04.
         a.committed_timed("p", 0.15, 0.15, None, 0.11, &NO_SPLITS);
         let mut splits = NO_SPLITS;
         splits[..3].copy_from_slice(&[("prepare", 0.01), ("gl_draw", 0.03), ("swap", 0.002)]);
         let slide = a
-            .committed_timed("p", 1., 1.15, Some(0.2), 1.1, &splits)
+            .committed_timed("p", 1., 1.15, Some((0.2, 0.03)), 1.1, &splits)
             .unwrap();
         assert_eq!((slide.gap_at, slide.frames), (3, 4));
         assert!((slide.max_gap_ms - 1000.).abs() < 1e-6);
@@ -592,6 +603,8 @@ mod tests {
         let text = slide.to_string();
         assert!(text.starts_with("dir=open first_frame_ms=0.0 frames=4 duration_ms="));
         assert!(text.contains(" max_gap_ms=1000.0 gap_at=3 gap_wait_ms=50.0"));
+        // B0408: 30 ms of the 50 ms wait came after the compositor stamped the callback.
+        assert!((slide.gap_dispatch_ms - 30.).abs() < 1e-6);
         // The three costliest renders by commit index, costliest first (the last render is 50 ms).
         assert!(text.contains(" render_top=3:50.0,"), "{text}");
         // The phases of that costliest render, largest first.
@@ -602,7 +615,8 @@ mod tests {
         // The same phases for each costliest render that has any, by commit index (B0380).
         assert!(
             text.ends_with(
-                " top_splits=3:gl_draw:30.0/prepare:10.0/swap:2.0;1:swap:10.0 main_builds=0"
+                " top_splits=3:gl_draw:30.0/prepare:10.0/swap:2.0;1:swap:10.0 main_builds=0 \
+                 gap_dispatch_ms=30.0"
             ),
             "{text}"
         );

@@ -1084,6 +1084,8 @@ struct Surface {
     activate_ms: Vec<f64>,
     callbacks_ms: Vec<f64>,
     last_callback: Option<Instant>,
+    /// B0408: seconds from the compositor's stamp on the last frame callback to its dispatch.
+    callback_sent_ago: f64,
     presented_ms: Vec<f64>,
     last_presented: Option<u64>,
     refresh_ns: u32,
