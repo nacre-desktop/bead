@@ -1103,6 +1103,12 @@ impl App {
             return Ok(());
         }
         let upload = self.prime_target().is_some();
+        // B0406: a canvas per wallpaper output to prime, so none compiles on the main thread.
+        let canvases = if upload {
+            self.wallpaper_surfaces.len()
+        } else {
+            1
+        };
         let release = std::mem::take(&mut self.gl_release);
         let (sender, result) = std::sync::mpsc::channel();
         let connection = self.conn.clone();
@@ -1119,7 +1125,7 @@ impl App {
                     // SAFETY: the pending shutdown is joined, this is the one preparation and no
                     // transport exists (synchronous owners wait for it); the guard holds the
                     // connection.
-                    unsafe { bead_render::gl::PreparedTransport::new(display, upload) }
+                    unsafe { bead_render::gl::PreparedTransport::new(display, upload, canvases) }
                         .map_err(|e| e.to_string())
                 })();
                 if let Err(std::sync::mpsc::SendError(Ok(prepared))) = sender.send(prepared) {

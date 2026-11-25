@@ -38,8 +38,16 @@ pub struct Transport {
     surfaceless: bool,
     /// B0334: process-unique per transport (so per context): a kept canvas names its context.
     pub generation: u64,
-    /// B0376: the prewarm's canvas until the first renderer drawing here claims it.
-    pub warm: std::cell::Cell<Option<WarmCanvas>>,
+    /// B0376: the prewarm's canvas until the first renderer drawing here claims it (B0406: one per
+    /// wallpaper output the preparation was made for; `take_warm` claims one).
+    pub warm: std::cell::Cell<Vec<WarmCanvas>>,
+}
+/// B0406: claim one of a transport's prewarmed canvases, if any is left.
+pub(crate) fn take_warm<C>(warm: &std::cell::Cell<Vec<C>>) -> Option<C> {
+    let mut canvases = warm.take();
+    let canvas = canvases.pop();
+    warm.set(canvases);
+    canvas
 }
 /// B0376: the B0342 prewarm's canvas: its programs are compiled and have drawn once on this
 /// context, so the renderer that claims it compiles nothing on its first frame. Never dropped (a
@@ -70,7 +78,7 @@ pub struct PreparedTransport {
     pub display: Display,
     swap_damage: DamageSwap,
     surfaceless: bool,
-    warm: Option<WarmCanvas>,
+    warm: Vec<WarmCanvas>,
 }
 fn assert_send<T: Send>() {}
 const _: fn() = assert_send::<PreparedTransport>;
@@ -93,14 +101,15 @@ impl Drop for Transport {
 impl PreparedTransport {
     /// Prepare the EGL display, config, extension function, and non-current
     /// OpenGL 3.3 context without requiring a window handle. `upload` also makes
-    /// the context `Transport::uploader` shares (B0398), when surfaceless contexts exist.
+    /// the context `Transport::uploader` shares (B0398), when surfaceless contexts exist; `canvases`
+    /// prewarms that many canvases (B0406: one per wallpaper output to prime, at least one).
     ///
     /// # Safety
     /// The native display/connection must remain alive until this value and all
     /// surfaces created from it are destroyed. Do not initialize another
     /// transport concurrently for the same native display; the caller must
     /// serialize setup and later convert this value into the sole `Transport`.
-    pub unsafe fn new(display: RawDisplayHandle, upload: bool) -> Result<Self> {
+    pub unsafe fn new(display: RawDisplayHandle, upload: bool, canvases: usize) -> Result<Self> {
         let (display, config, swap_damage, supports_surfaceless) =
             unsafe { initialize_display(display) }?;
         let attrs = ContextAttributesBuilder::new()
@@ -120,8 +129,8 @@ impl PreparedTransport {
             }
         };
         let (context, warm) = if supports_surfaceless {
-            match warm_surfaceless(context, &display) {
-                Ok((context, warm)) => (context, Some(warm)),
+            match warm_surfaceless(context, &display, canvases) {
+                Ok((context, warm)) => (context, warm),
                 Err(error) => {
                     drop(config);
                     if let Err(cleanup_error) = unsafe { terminate_exclusive(&display) } {
@@ -133,7 +142,7 @@ impl PreparedTransport {
                 }
             }
         } else {
-            (context, None)
+            (context, Vec::new())
         };
         // Best effort: without it `uploader` makes the shared context on its caller's thread.
         let upload = (upload && supports_surfaceless)
@@ -166,7 +175,7 @@ impl PreparedTransport {
             swap_damage: self.swap_damage,
             surfaceless: self.surfaceless,
             generation: next_generation(),
-            warm: self.warm.take().into(),
+            warm: std::mem::take(&mut self.warm).into(),
         }
     }
 
@@ -278,11 +287,12 @@ unsafe fn initialize_display(
 fn warm_surfaceless(
     context: NotCurrentContext,
     display: &Display,
-) -> Result<(NotCurrentContext, WarmCanvas)> {
+    count: usize,
+) -> Result<(NotCurrentContext, Vec<WarmCanvas>)> {
     match context {
         NotCurrentContext::Egl(context) => {
             let current = context.make_current_surfaceless()?;
-            let warmed = (|| -> Result<_> {
+            let warm = || -> Result<_> {
                 let _span = bead_core::profile::Span::new("panel_shader_prewarm");
                 // SAFETY: this worker owns the current context. The canvas leaves with it
                 // (B0376), as a WarmCanvas.
@@ -295,7 +305,10 @@ fn warm_surfaceless(
                 // B0342: best effort; a failed warm-up draw never costs the GL path.
                 let _ = warm_draw(&mut canvas, display);
                 Ok(WarmCanvas(std::mem::ManuallyDrop::new(canvas)))
-            })();
+            };
+            let warmed = (0..count.max(1))
+                .map(|_| warm())
+                .collect::<Result<Vec<_>>>();
             // Unbind even if shader setup failed, before the caller retires EGL.
             let context = current.make_not_current()?;
             Ok((NotCurrentContext::Egl(context), warmed?))
@@ -391,7 +404,7 @@ pub struct GlTarget<'a> {
     /// The transport's `generation`.
     pub context: u64,
     /// The transport's `warm`.
-    pub warm: &'a std::cell::Cell<Option<WarmCanvas>>,
+    pub warm: &'a std::cell::Cell<Vec<WarmCanvas>>,
 }
 impl Transport {
     /// Release a process-owned EGL display, including the driver's display pool.
@@ -437,7 +450,7 @@ impl Transport {
             swap_damage,
             surfaceless,
             generation: next_generation(),
-            warm: None.into(),
+            warm: Vec::new().into(),
         })
     }
     /// B0317: start the upload thread on a context shared with this transport's (the prepared one
@@ -860,7 +873,7 @@ impl WallpaperFader {
     fn bare(transport: &Transport, size: (u32, u32)) -> Result<Self> {
         let began = std::time::Instant::now();
         let display = &transport.display;
-        let canvas = match transport.warm.take() {
+        let canvas = match take_warm(&transport.warm) {
             // B0398: the prewarm's canvas, as a renderer's first one (B0376): nothing compiles here.
             Some(WarmCanvas(canvas)) => std::mem::ManuallyDrop::into_inner(canvas),
             None => {
@@ -1685,11 +1698,7 @@ impl GlRenderer {
         }
         Ok(())
     }
-    fn upload(
-        &mut self,
-        display: &Display,
-        warm: &std::cell::Cell<Option<WarmCanvas>>,
-    ) -> Result<()> {
+    fn upload(&mut self, display: &Display, warm: &std::cell::Cell<Vec<WarmCanvas>>) -> Result<()> {
         let frame = self.cache.frame.as_ref().ok_or("unprepared layer tree")?;
         for payload in frame.items.iter().filter_map(|item| item.image.as_ref()) {
             if let Some(error) = payload.failure() {
@@ -1714,10 +1723,7 @@ impl GlRenderer {
 
         claim_canvas(
             &mut self.canvas,
-            || {
-                warm.take()
-                    .map(|WarmCanvas(canvas)| std::mem::ManuallyDrop::into_inner(canvas))
-            },
+            || take_warm(warm).map(|WarmCanvas(canvas)| std::mem::ManuallyDrop::into_inner(canvas)),
             || {
                 let _span = bead_core::profile::Span::new("gl_canvas_new");
                 // SAFETY: Transport made its retained context current on this thread.
@@ -2221,25 +2227,34 @@ mod group_tests {
 }
 #[cfg(test)]
 mod warm_canvas_tests {
-    use super::claim_canvas;
+    use super::{claim_canvas, take_warm};
 
     /// B0376: a cold or post-grace open's first frame draws with the prewarm canvas, so the main
     /// thread compiles no programs; the transport's one warm canvas goes to one renderer.
     #[test]
     fn the_first_renderer_draws_with_the_prewarm_canvas_and_compiles_nothing() {
-        let warm = std::cell::Cell::new(Some("prewarm"));
+        let warm = std::cell::Cell::new(vec!["prewarm"]);
         let compiled = std::cell::Cell::new(0);
         let new = || {
             compiled.set(compiled.get() + 1);
             Ok("compiled")
         };
         let mut first = None;
-        claim_canvas(&mut first, || warm.take(), new).unwrap();
-        claim_canvas(&mut first, || warm.take(), new).unwrap();
+        claim_canvas(&mut first, || take_warm(&warm), new).unwrap();
+        claim_canvas(&mut first, || take_warm(&warm), new).unwrap();
         assert_eq!((first, compiled.get()), (Some("prewarm"), 0));
         let mut second = None;
-        claim_canvas(&mut second, || warm.take(), new).unwrap();
+        claim_canvas(&mut second, || take_warm(&warm), new).unwrap();
         assert_eq!((second, compiled.get()), (Some("compiled"), 1));
+    }
+    /// B0406: a preparation for two wallpaper outputs warms two canvases, so neither output's
+    /// resting run compiles on the main thread; a third renderer still compiles its own.
+    #[test]
+    fn each_output_a_preparation_was_made_for_claims_its_own_prewarm_canvas() {
+        let warm = std::cell::Cell::new(vec!["b", "a"]);
+        let claimed: Vec<_> = (0..3).map(|_| take_warm(&warm)).collect();
+        assert_eq!(claimed, [Some("a"), Some("b"), None]);
+        assert!(warm.take().is_empty());
     }
 }
 

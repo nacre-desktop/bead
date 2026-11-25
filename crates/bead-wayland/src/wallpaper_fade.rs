@@ -486,18 +486,20 @@ pub(crate) fn pinned_by(pins: impl IntoIterator<Item = Option<u64>>, token: u64)
 /// B0325: one line per primed output; `ms` is the main-thread time (B0398: of all its turns),
 /// `upload_wait_ms` the wait for the upload thread, `prepare_wait_ms` the wait for the transport's
 /// preparation (0: one was there). B0403: `copy_ms` the shown image's hand-over, `run_ms` the
-/// resting run's creation, `turn_max_ms` the longest main-thread turn.
+/// resting run's creation, `turn_max_ms` the longest main-thread turn. B0406: `surface_ms` and
+/// `canvas_ms` split `run_ms`: the EGL window surface and its first bind, the fader's canvas.
 pub(crate) fn prime_marker(
     output: &str,
     ms: f64,
     upload_wait_ms: f64,
     prepare_wait_ms: f64,
     (copy_ms, run_ms, turn_max_ms): (f64, f64, f64),
+    (surface_ms, canvas_ms): (f64, f64),
 ) -> String {
     format!(
         "WALLPAPER_WARM_PRIME output={output} ms={ms:.1} upload_wait_ms={upload_wait_ms:.1} \
          prepare_wait_ms={prepare_wait_ms:.1} copy_ms={copy_ms:.1} run_ms={run_ms:.1} \
-         turn_max_ms={turn_max_ms:.1}"
+         turn_max_ms={turn_max_ms:.1} surface_ms={surface_ms:.1} canvas_ms={canvas_ms:.1}"
     )
 }
 /// B0325: the shown image of an output without a run is on the upload thread; its resting run is
@@ -1647,6 +1649,7 @@ impl App {
                     thread.uploader.adopt(texture);
                 }
                 (run.resting, run.done) = (true, true);
+                let split = (run.setup.surface, run.setup.canvas);
                 self.wallpaper_surfaces[index].fade = Some(run);
                 let turn = ms_since(began);
                 let parts = (prime.copy_ms, run_ms, prime.turn_max_ms.max(turn));
@@ -1657,7 +1660,8 @@ impl App {
                         prime.ms + turn,
                         upload_wait_ms,
                         prime.prepare_wait_ms,
-                        parts
+                        parts,
+                        split
                     )
                 );
                 self.schedule_prime();
@@ -2532,9 +2536,16 @@ mod tests {
     #[test]
     fn a_primed_output_reports_its_cost_in_one_line() {
         assert_eq!(
-            prime_marker("eDP-1", 12.34, 5.67, 81.26, (0.04, 3.12, 4.96)),
+            prime_marker(
+                "eDP-1",
+                12.34,
+                5.67,
+                81.26,
+                (0.04, 3.12, 4.96),
+                (2.06, 0.94)
+            ),
             "WALLPAPER_WARM_PRIME output=eDP-1 ms=12.3 upload_wait_ms=5.7 prepare_wait_ms=81.3 \
-             copy_ms=0.0 run_ms=3.1 turn_max_ms=5.0"
+             copy_ms=0.0 run_ms=3.1 turn_max_ms=5.0 surface_ms=2.1 canvas_ms=0.9"
         );
     }
     #[test]
