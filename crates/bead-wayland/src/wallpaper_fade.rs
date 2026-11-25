@@ -364,16 +364,22 @@ pub(crate) fn transition_marker(
 
 /// One journal line per change of warm mode (and when a release that waited for a fade is done),
 /// so a resident run that never goes is visible. `bytes` estimates the textures held; `ms` is the
-/// main-thread time of the release that printed it (B0398; 0 for `on`).
+/// main-thread time of the release that printed it (B0398; 0 for `on`). B0403: an `off` line adds
+/// the final SHM attaches' share and the release's longest main-thread turn.
 pub(crate) fn warm_marker(
     on: bool,
     outputs: usize,
     textures: usize,
     bytes: u64,
-    ms: f64,
+    (ms, turn_max_ms, attach_ms): (f64, f64, f64),
 ) -> String {
+    let tail = if on {
+        String::new()
+    } else {
+        format!(" attach_ms={attach_ms:.1} turn_max_ms={turn_max_ms:.1}")
+    };
     format!(
-        "WALLPAPER_WARM state={} outputs={outputs} textures={textures} bytes={bytes} ms={ms:.1}",
+        "WALLPAPER_WARM state={} outputs={outputs} textures={textures} bytes={bytes} ms={ms:.1}{tail}",
         if on { "on" } else { "off" }
     )
 }
@@ -472,16 +478,19 @@ pub(crate) fn final_attach_needed(target: &[u8]) -> bool {
 }
 /// B0325: one line per primed output; `ms` is the main-thread time (B0398: of all its turns),
 /// `upload_wait_ms` the wait for the upload thread, `prepare_wait_ms` the wait for the transport's
-/// preparation (0: one was there).
+/// preparation (0: one was there). B0403: `copy_ms` the shown image's hand-over, `run_ms` the
+/// resting run's creation, `turn_max_ms` the longest main-thread turn.
 pub(crate) fn prime_marker(
     output: &str,
     ms: f64,
     upload_wait_ms: f64,
     prepare_wait_ms: f64,
+    (copy_ms, run_ms, turn_max_ms): (f64, f64, f64),
 ) -> String {
     format!(
         "WALLPAPER_WARM_PRIME output={output} ms={ms:.1} upload_wait_ms={upload_wait_ms:.1} \
-         prepare_wait_ms={prepare_wait_ms:.1}"
+         prepare_wait_ms={prepare_wait_ms:.1} copy_ms={copy_ms:.1} run_ms={run_ms:.1} \
+         turn_max_ms={turn_max_ms:.1}"
     )
 }
 /// B0325: the shown image of an output without a run is on the upload thread; its resting run is
@@ -490,9 +499,11 @@ pub(crate) struct Prime {
     name: String,
     token: u64,
     queued: std::time::Instant,
-    /// Main-thread ms spent so far.
+    /// Main-thread ms spent so far; B0403: the hand-over's share and the longest turn.
     ms: f64,
     prepare_wait_ms: f64,
+    copy_ms: f64,
+    turn_max_ms: f64,
 }
 /// Warm mode's state: the host's switch, and the upload thread while it is wanted.
 #[derive(Default)]
@@ -510,8 +521,13 @@ pub(crate) struct Warm {
     next_token: u64,
     /// B0325: the one prime in flight (outputs are primed one at a time).
     prime: Option<Prime>,
-    /// B0398: a prime waits for the transport's preparation: since when, and its main-thread ms.
-    preparing: Option<(std::time::Instant, f64)>,
+    /// B0398: a prime waits for the transport's preparation: since when, and its main-thread ms
+    /// (B0403: the adopting poll's apart: the hand-over runs in its loop turn).
+    preparing: Option<(std::time::Instant, f64, f64)>,
+    /// B0403: a warm release's main-thread ms so far (sum, longest turn, final attaches) and the
+    /// start of its current turn.
+    release_ms: (f64, f64, f64),
+    turn: Option<std::time::Instant>,
     #[cfg(feature = "native-gl")]
     upload: Option<UploadThread>,
 }
@@ -544,6 +560,14 @@ impl Warm {
             self.prime = None;
         }
         hit
+    }
+    /// B0403: a turn of a release ended before its last line: its main-thread ms count.
+    fn end_release_turn(&mut self) {
+        if let Some(began) = self.turn.take() {
+            let ms = ms_since(began);
+            self.release_ms.0 += ms;
+            self.release_ms.1 = self.release_ms.1.max(ms);
+        }
     }
     /// The prime an upload answer belongs to; `None` once it was cancelled or released.
     fn take_prime(&mut self, token: u64) -> Option<Prime> {
@@ -1463,8 +1487,8 @@ impl App {
     /// B0398: a preparation's poll ended (`adopt_ms`: its main-thread ms); a prime that waited
     /// for it goes on.
     pub(super) fn wallpaper_gl_prepared(&mut self, adopt_ms: f64) {
-        if let Some((_, ms)) = self.warm.preparing.as_mut() {
-            *ms += adopt_ms;
+        if let Some((_, _, adopt)) = self.warm.preparing.as_mut() {
+            *adopt += adopt_ms;
         }
         if self.prime_target().is_some() {
             self.schedule_prime();
@@ -1496,15 +1520,17 @@ impl App {
                 return;
             }
             let ms = ms_since(began);
-            let (_, spent) = self.warm.preparing.get_or_insert((began, 0.));
+            let (_, spent, _) = self.warm.preparing.get_or_insert((began, 0., 0.));
             *spent += ms;
             return;
         }
-        let (prepare_wait_ms, carried_ms) = self
+        let (prepare_wait_ms, carried_ms, adopt_ms) = self
             .warm
             .preparing
             .take()
-            .map_or((0., 0.), |(since, ms)| (ms_since(since), ms));
+            .map_or((0., 0., 0.), |(since, ms, adopt)| {
+                (ms_since(since), ms, adopt)
+            });
         // The upload thread shares the transport's context, which a prime must make first.
         if let Some(Err(error)) = self.gl.as_mut().map(|gl| gl.ensure_context()) {
             self.warm_upload_failed(&name, error);
@@ -1514,6 +1540,7 @@ impl App {
         let token = self.warm.next_token + 1;
         // Not retried on failure: a prime is chained only from a successful one. Only the copy
         // reads the SHM buffer here; GL takes the BGRA bytes on the upload thread.
+        let copy = std::time::Instant::now();
         let Some(bgra) = self.shown_wallpaper_bgra(index) else {
             return;
         };
@@ -1524,13 +1551,17 @@ impl App {
             self.warm_upload_failed(&name, "upload thread gone");
             return;
         }
+        let copy_ms = ms_since(copy);
+        let turn = adopt_ms + ms_since(began);
         self.warm.next_token = token;
         self.warm.prime = Some(Prime {
             name,
             token,
             queued: std::time::Instant::now(),
-            ms: carried_ms + ms_since(began),
+            ms: carried_ms + turn,
             prepare_wait_ms,
+            copy_ms,
+            turn_max_ms: carried_ms.max(turn),
         });
     }
 
@@ -1564,17 +1595,26 @@ impl App {
         let surface = &self.wallpaper_surfaces[index];
         let size = (surface.width, surface.height);
         let spec = self.options.wallpaper_fade.unwrap_or_default();
+        let created = std::time::Instant::now();
         match self.create_fade_run(index, size, spec, Seed::Rest(texture)) {
             Ok(mut run) => {
+                let run_ms = ms_since(created);
                 if let Some(thread) = &self.warm.upload {
                     thread.uploader.adopt(texture);
                 }
                 (run.resting, run.done) = (true, true);
                 self.wallpaper_surfaces[index].fade = Some(run);
-                let ms = prime.ms + ms_since(began);
+                let turn = ms_since(began);
+                let parts = (prime.copy_ms, run_ms, prime.turn_max_ms.max(turn));
                 println!(
                     "{}",
-                    prime_marker(&prime.name, ms, upload_wait_ms, prime.prepare_wait_ms)
+                    prime_marker(
+                        &prime.name,
+                        prime.ms + turn,
+                        upload_wait_ms,
+                        prime.prepare_wait_ms,
+                        parts
+                    )
                 );
                 self.schedule_prime();
             }
@@ -1886,10 +1926,14 @@ impl App {
 
     /// Attach the final SHM buffer, then give the run's GL objects (and, last, the transport) back.
     pub(super) fn release_wallpaper_run(&mut self, index: usize) {
+        if self.warm.releasing {
+            self.warm.turn.get_or_insert_with(std::time::Instant::now);
+        }
         if self.release_run_objects(index) {
             self.release_wallpaper_gl();
         }
         self.release_warm_if_due();
+        self.warm.end_release_turn();
     }
 
     fn release_run_objects(&mut self, index: usize) -> bool {
@@ -1910,6 +1954,7 @@ impl App {
         let name = self.wallpaper_surfaces[index].name.clone();
         let surface = &mut self.wallpaper_surfaces[index];
         self.fade_animations.retain(|id| id != name);
+        let attach = std::time::Instant::now();
         let attached = if final_attach_needed(&target) {
             Some(attach_wallpaper_buffer(
                 WallpaperBufferTarget {
@@ -1935,6 +1980,7 @@ impl App {
         } else {
             None
         };
+        self.warm.release_ms.2 += ms_since(attach);
         match attached {
             // A primed run that never presented: the SHM buffer is still attached.
             None => {}
@@ -2012,11 +2058,13 @@ impl App {
         self.warm.failed = false;
         self.warm.releasing = true;
         self.warm.preparing = None;
+        (self.warm.release_ms, self.warm.turn) = ((0., 0., 0.), Some(began));
         self.release_wallpaper_gl();
         // A fade that still runs keeps its run; the line with nothing left follows its end.
         if self.warm.releasing {
             self.report_warm(false, ms_since(began));
         }
+        self.warm.end_release_turn();
     }
 
     /// A fade runs (or waits for its upload), or a frame waits for its fade.
@@ -2042,6 +2090,7 @@ impl App {
     }
 
     fn report_warm(&self, on: bool, ms: f64) {
+        let ms = (ms, ms, self.warm.release_ms.2);
         let runs = self
             .wallpaper_surfaces
             .iter()
@@ -2063,7 +2112,11 @@ impl App {
         let handed_off = self.release_gl_objects();
         if self.warm.releasing && !self.wallpaper_surfaces.iter().any(|s| s.fade.is_some()) {
             self.warm.releasing = false;
-            println!("{}", warm_marker(false, 0, 0, 0, ms_since(began)));
+            // B0403: every turn of the release, this one (from its start) included.
+            let turn = ms_since(self.warm.turn.take().unwrap_or(began));
+            let (sum, max, attach) = std::mem::take(&mut self.warm.release_ms);
+            let ms = (sum + turn, max.max(turn), attach);
+            println!("{}", warm_marker(false, 0, 0, 0, ms));
             // A transport handed off is checked on its thread, after the upload thread's join.
             if !handed_off {
                 warm_leak_check();
@@ -2279,12 +2332,14 @@ mod tests {
     #[test]
     fn warm_mode_reports_its_state_in_one_line() {
         assert_eq!(
-            warm_marker(true, 2, 2, 40_608_000, 0.),
+            warm_marker(true, 2, 2, 40_608_000, (0., 0., 0.)),
             "WALLPAPER_WARM state=on outputs=2 textures=2 bytes=40608000 ms=0.0"
         );
         assert_eq!(
-            warm_marker(false, 0, 0, 0, 1.26),
-            "WALLPAPER_WARM state=off outputs=0 textures=0 bytes=0 ms=1.3"
+            warm_marker(false, 0, 0, 0, (3.26, 2.04, 0.34)),
+            "WALLPAPER_WARM state=off outputs=0 textures=0 bytes=0 ms=3.3 attach_ms=0.3 \
+             turn_max_ms=2.0",
+            "B0403: the total, the final attaches and the longest turn"
         );
     }
     fn primed(name: &str, token: u64) -> Warm {
@@ -2295,6 +2350,8 @@ mod tests {
                 queued: std::time::Instant::now(),
                 ms: 0.,
                 prepare_wait_ms: 0.,
+                copy_ms: 0.,
+                turn_max_ms: 0.,
             }),
             ..Warm::default()
         }
@@ -2347,8 +2404,9 @@ mod tests {
     #[test]
     fn a_primed_output_reports_its_cost_in_one_line() {
         assert_eq!(
-            prime_marker("eDP-1", 12.34, 5.67, 81.26),
-            "WALLPAPER_WARM_PRIME output=eDP-1 ms=12.3 upload_wait_ms=5.7 prepare_wait_ms=81.3"
+            prime_marker("eDP-1", 12.34, 5.67, 81.26, (0.04, 3.12, 4.96)),
+            "WALLPAPER_WARM_PRIME output=eDP-1 ms=12.3 upload_wait_ms=5.7 prepare_wait_ms=81.3 \
+             copy_ms=0.0 run_ms=3.1 turn_max_ms=5.0"
         );
     }
     #[test]
