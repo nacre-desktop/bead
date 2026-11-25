@@ -1390,9 +1390,6 @@ return ui.Column{id="root",width=400,height=300,
     #[test]
     fn reorder_remaps_interaction_and_discards_older_snapshots() {
         let (f, mut s) = session();
-        // A snapshot landing during the reload would move the positions this test compares against.
-        settle(s.graphs.get_mut("root.canvas").unwrap());
-        let positions = s.graphs["root.canvas"].positions.to_vec();
         let canvas = s.graphs.get_mut("root.canvas").unwrap();
         (canvas.hover, canvas.selected) = (Some(1), Some(2));
         let revision = canvas.command_revision;
@@ -1407,7 +1404,9 @@ graph=ui.graph({{id="b",label="Beta"},{id="c"},{id="a",label="Alpha",weight=5}},
         let id = |i: Option<u32>| i.map(|i| c.data.topology.nodes[i as usize].id.to_string());
         assert_eq!(id(c.hover).as_deref(), Some("b"));
         assert_eq!(id(c.selected).as_deref(), Some("c"));
-        assert_eq!(c.positions[0], positions[1]);
+        // Not positions: the reload's pull may already hold the worker's first step from the
+        // remapped ones. a_filtered_graph_keeps_survivors_in_place_without_a_new_settle checks
+        // that positions follow ids, before any pull.
         // A snapshot computed for the old order would scramble the new one.
         assert!(c.command_revision > revision);
         let stale = Snapshot {
