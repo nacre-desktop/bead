@@ -3949,6 +3949,52 @@ mod tests {
         }
     }
     #[test]
+    fn a_palette_stage_without_a_scene_still_settles_the_palette_fence() {
+        // B0410: Session::set_runtime_palette returns no scene for the accepted palette; the
+        // Settled packet still carries it, so the host's palette fence settles.
+        struct Unchanged;
+        impl SceneSource for Unchanged {
+            fn watch(
+                &mut self,
+                _: Box<dyn Fn(Result<(), String>) + Send>,
+            ) -> Result<(), Box<dyn Error>> {
+                Ok(())
+            }
+            fn stage(&mut self, _: UiEvent) -> Result<Option<Scene>, Box<dyn Error>> {
+                Ok(None)
+            }
+            fn validate(&self) -> Result<(), Box<dyn Error>> {
+                Ok(())
+            }
+            fn state_summary(&self) -> String {
+                String::new()
+            }
+            fn commit(&mut self) -> bool {
+                true
+            }
+            fn error_scene(&mut self, _: String) -> Scene {
+                scene()
+            }
+        }
+        let mut source = Source::new(Box::new(|| Ok(Box::new(Unchanged))), scene());
+        let (sender, receiver) = mpsc::channel();
+        source.services(Box::new(move |event| {
+            let _ = sender.send(event);
+        }));
+        let palette = std::collections::BTreeMap::from([("surface".to_string(), [1, 2, 3, 4])]);
+        source
+            .stage(UiEvent::WallpaperPalette(palette.clone()))
+            .unwrap();
+        let packet = loop {
+            if let UiEvent::Worker(packet) = receiver.recv_timeout(Duration::from_secs(2)).unwrap()
+            {
+                break packet;
+            }
+        };
+        assert!(matches!(packet.phase, Phase::Settled) && packet.scene.is_none());
+        assert_eq!(packet.wallpaper_palette(), Some(&palette));
+    }
+    #[test]
     fn a_closed_panel_settles_data_and_palette_but_bakes_animation_frames() {
         let stages = Arc::new(AtomicUsize::new(0));
         let open = Arc::new(std::sync::atomic::AtomicBool::new(false));

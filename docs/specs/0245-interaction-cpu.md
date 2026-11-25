@@ -192,7 +192,9 @@ A worker that ran image/CPU hydration parks only once every such job it was sent
 has finished and a later mirror re-read its retained bytes; never while one is in flight.
 
 Reopening uses the normal surface path with an acknowledgement barrier before
-showing cached content. Palette and visibility updates precede resume; failed
+showing cached content. Palette and visibility updates precede resume (B0410: the
+accepted palette again returns no scene from `Session::set_runtime_palette`, so it
+costs no Luau or layout pass; the Settled packet still carries it for the fence); failed
 validation cold-creates the view. `Session::sources_current` checks accepted source
 bytes, palette and watcher revision without evaluation, including during staged
 store/layout updates. Staged source reloads still use `check_sources` and atomic

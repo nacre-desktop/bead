@@ -1260,7 +1260,10 @@ impl Session {
     /// Stage daemon-provided presentation colors without writing the palette file.
     pub fn set_runtime_palette(&mut self, overlay: Palette) -> Result<Option<Scene>, Diagnostic> {
         let palette = merged_palette(&self.base_palette, Some(&overlay));
-        let Some(generation) = &self.generation else {
+        // B0410: the accepted palette again (a parked view's resume restages it) runs nothing; a
+        // staged change still pending takes the full pass as before.
+        let unchanged = self.pending.is_none() && palette.0 == self.palette.0;
+        let Some(generation) = self.generation.as_ref().filter(|_| !unchanged) else {
             self.palette = palette;
             self.runtime_palette = Some(overlay);
             return Ok(None);

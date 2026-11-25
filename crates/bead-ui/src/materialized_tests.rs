@@ -70,6 +70,50 @@ fn root_panel_open_binding_falls_back_when_content_reads_same_store() {
     );
 }
 
+#[test]
+fn the_accepted_runtime_palette_again_runs_nothing_but_a_pending_change_still_does() {
+    let (_fixture, mut session) = markup_fixture(
+        "local ui=require('bead.ui')\nreturn ui.Panel{id='panel',width=200,height=120,ui.Text{id='label',text='fixed'}}",
+    );
+    let palette = |hex: &str| {
+        let json = format!(r#"{{"formatVersion":1,"colours":{{"primary":"{hex}"}}}}"#);
+        Palette::parse(json.as_bytes()).unwrap()
+    };
+    let scene = session
+        .set_runtime_palette(palette("ff0000"))
+        .unwrap()
+        .unwrap();
+    session.commit(scene);
+    #[cfg(feature = "test-counters")]
+    let passes = layout::layout_passes();
+    // B0410: a parked view's resume restages the accepted palette.
+    assert!(
+        session
+            .set_runtime_palette(palette("ff0000"))
+            .unwrap()
+            .is_none()
+    );
+    #[cfg(feature = "test-counters")]
+    assert_eq!(
+        layout::layout_passes(),
+        passes,
+        "no pass for the same palette"
+    );
+    // A change staged but not yet committed: returning to the accepted palette still runs.
+    assert!(
+        session
+            .set_runtime_palette(palette("00ff00"))
+            .unwrap()
+            .is_some()
+    );
+    assert!(
+        session
+            .set_runtime_palette(palette("ff0000"))
+            .unwrap()
+            .is_some()
+    );
+}
+
 #[cfg(feature = "test-counters")]
 #[test]
 fn root_panel_open_cache_misses_on_palette_and_viewport_changes() {
