@@ -43,7 +43,7 @@ This index contains current framework contracts and repository-boundary decision
 | [0280 — Kit batch 3](0280-kit-batch3.md) | Paint-only interaction poses (`visible_on_hover`, `press_scale`/`pressed_fill`, `reflow`), `shadow` on any surface and its parameters, `prewarm_shadows`, key repeat schedules, image `opacity` and `bake_size`, `font_features`, `scroll_steps` |
 | [0284 — Mirror validates once](0284-mirror-validate-once.md) | A mirrored snapshot is validated once per patch; `Publisher::publish_mirror` republishes it; one compare per publication |
 | [0281 — Cleanup and bloat pass](0281-cleanup-pass.md) | One snapshot hub for the event services, unused probes and dependency, stale spec text; deferred cleanup by owner |
-| [0285 — UI package](0285-ui-package.md) | `UiPackage` reads a UI root once; `FolderView::from_package` builds more views from memory (a lock screen survives a package upgrade) |
+| [0285 — UI package](0285-ui-package.md) | `UiPackage` reads a UI root once; `FolderView::from_package` builds more views from memory (a lock screen survives a package upgrade); `Session::entry()` lets a host key recovery across deploys (B0400) |
 | [0279 — Lip as its panel's tab](0279-lip-tab.md) | The edge lip rides its panel's inner edge as a subsurface posed with the panel each frame; 150 ms exit grace (panel profile), press/key pin; hover tooltip `Options::edge_tip`, a host-drawn Scene placed beside the lip after 400 ms (B0340) |
 | [0279 addendum — top tab (B0291)](0279-lip-tab.md) | Bar cue off while the tab is attached; top-tab rect tests at 50 px; detach before every unmap |
 | [0261 — Docs and tutorials pass](0261-docs-and-tutorials.md) | Reference pages and tutorials match the code; every snippet and tutorial step executed |

@@ -323,6 +323,11 @@ impl Session {
     pub fn root(&self) -> &Path {
         &self.root
     }
+    /// The entry this session renders, as the host passed it (`./` dropped), so a host whose
+    /// root moves per deploy can key recovery by entry instead of `recovery_key` (B0400).
+    pub fn entry(&self) -> &Path {
+        &self.entry
+    }
     /// Whether the current view schema declares a stable store ID.
     pub fn has_store(&self, id: &str) -> bool {
         self.stores.get(id).is_some()

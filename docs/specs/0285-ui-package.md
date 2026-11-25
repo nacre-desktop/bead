@@ -20,6 +20,8 @@ an old binary. A `UiPackage` is a read-once snapshot; later views are built from
 - Recovery writes nothing unless the host calls `enable_recovery`, as for any session. For a
   package view that only records the last-good bundle after a presented frame; startup
   restore is skipped (the package is already the known-good copy).
+- `Session::entry()` returns the entry as the host passed it, so a host whose root moves per
+  deploy can key recovery by entry (and output) instead of `recovery_key`'s canonical root (B0400).
 - `FolderView::load` is unchanged (it keeps live reload, so it is not a wrapper over the package).
 
 Tests (`markup_tests`): edit then delete the directory, build another view from the package,
