@@ -411,6 +411,9 @@ impl App {
                     .park_closing(false, retiring, epoch, source, budget);
                 self.expire_closing_panel(epoch);
             }
+            // B0409: an open view replaced by another retires as a closed one, so it hears its
+            // close and parks once that is acknowledged (B0405) instead of retiring cold.
+            self.panel_target = false;
             self.release_panel();
         }
         self.options.panel_spec = Some(spec);
@@ -1612,8 +1615,9 @@ impl App {
         self.panel_epoch = self.next_epoch();
         drop(self.dismiss.take());
         if let Some(source) = self.panel_runtime.take() {
-            // Open replacements cold-retire: only an acknowledged closed source
-            // may preserve interaction state. Worker readiness fences its close.
+            // Open releases cold-retire: only an acknowledged closed source may preserve
+            // interaction state. Worker readiness fences its close (a view switch, B0409,
+            // releases its open view as closed).
             // B0405: a prepared panel never shown hears its close first, so its leases drop.
             if check_app_lifetime
                 && closed

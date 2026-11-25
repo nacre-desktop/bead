@@ -181,6 +181,7 @@ once dormant; any other callback, a request for it, or 2 s without the ack drops
 A prepared panel that was never shown (B0405) hears `PanelVisibility(false)` once at its
 release and waits in that slot, so it parks like a closed one and drops its host leases;
 a source that already heard its close parks at once, with no second one.
+An open view replaced by another (B0409: control open, then the launcher) is released as closed too: it hears its close the same way and parks once that is acknowledged, so switching back is a warm reopen instead of a cold one.
 Such releases skip the immediate allocator trim; the idle trim 100 ms later stays.
 Budget 0 keeps the keep-alive, the cold switch and both trims.
 Surfaces, renderer instances, focus and protocol objects follow normal teardown.
