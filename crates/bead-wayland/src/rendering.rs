@@ -239,8 +239,13 @@ fn draw_waits_for_callback(pending: bool, gpu: bool, compositor_owns_motion: boo
 
 /// B0420: how long a stand-in waits for the callback niri may never send a commit without damage.
 fn missed_callback_delay(damage_px: u64, in_progress: bool, refresh: u32) -> Option<Duration> {
-    let ns = if refresh > 0 { refresh } else { 16_000_000 };
-    (damage_px == 0 && in_progress).then(|| Duration::from_nanos(ns.into()))
+    // B0420c: a panel's new surface has presented nothing yet, so take the last presented refresh.
+    let wait = if refresh > 0 {
+        Duration::from_nanos(refresh.into())
+    } else {
+        crate::scroll::tick()
+    };
+    (damage_px == 0 && in_progress).then_some(wait)
 }
 
 /// B0420b: niri ignores damage off its output, so per axis the surface centre clamped onto it.
@@ -300,9 +305,11 @@ mod missed_callback_tests {
         // which niri may never call back. A stand-in still lets the next pose draw a refresh later.
         let wait = missed_callback_delay(0, true, REFRESH).expect("no stand-in for the callback");
         assert!(wait <= Duration::from_nanos(REFRESH.into()));
+        // B0420c: a surface with no presented refresh (each panel open makes a new one) waits the
+        // last refresh any surface presented, not a fixed 16 ms (two refreshes at 120 Hz).
         assert_eq!(
             missed_callback_delay(0, true, 0),
-            Some(Duration::from_millis(16))
+            Some(crate::scroll::tick())
         );
         // It releases the owed callback (no compositor reply), so the waiting GPU draw goes ahead.
         let mut callbacks = crate::policy::Callbacks::default();
