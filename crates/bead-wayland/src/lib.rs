@@ -1081,6 +1081,8 @@ struct Surface {
     format: PixelFormat,
     previous: Option<Rect>,
     visual_damage: bead_render::damage::FrameDamage,
+    /// B0422: a slide's pose prepared ahead of the callback that presents it.
+    ahead: Option<rendering::Ahead>,
     allocations: usize,
     shm_trim_pending: bool,
     heap_trimmed_ui_serial: u64,

@@ -27,7 +27,7 @@ impl Record {
             && self.opacity == other.opacity
     }
 }
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct FrameDamage {
     previous: Vec<Record>,
     dimensions: Option<(u32, u32, u32)>,

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 //! Per-surface rendering, GPU staging and idle release.
 use super::*;
+use bead_render::damage::FrameDamage;
 
 fn layer_motion_renderer_supported(kind: RendererKind) -> bool {
     matches!(kind, RendererKind::Cpu | RendererKind::FemtovgGl)
@@ -247,6 +248,43 @@ fn visible_feedback_point(origin: i32, size: u32, span: i32, buffer: i32) -> u32
     let (lo, hi) = (origin.max(0), (origin + size as i32).min(span) - 1);
     let point = i64::from((origin + size as i32 / 2).min(hi).max(lo) - origin);
     (point * i64::from(buffer) / i64::from(size.max(1))).clamp(0, i64::from(buffer) - 1) as u32
+}
+
+/// B0422: what a pose drawn ahead was drawn for: UI serial, size, scale, renderer, and the panel's
+/// source and open/close epochs.
+pub(super) type AheadKey = (u64, (u32, u32), u32, RendererKind, (u64, u64));
+/// B0422: a slide pose's clock time and, once prepared ahead, its key, damage and damage state.
+pub(super) type Ahead = (f64, Option<(AheadKey, Vec<Damage>, FrameDamage)>);
+/// B0422: a pose drawn ahead is presented only for what it was drawn for, while mapped and soon.
+fn ahead_ready(drawn: AheadKey, now: AheadKey, unmapped: bool, age: f64) -> bool {
+    drawn == now && !unmapped && age < 0.1
+}
+
+#[cfg(test)]
+mod ahead_tests {
+    use super::{AheadKey, ahead_ready};
+    use bead_render::RendererKind::{Cpu, FemtovgGl};
+
+    #[test]
+    fn a_pose_drawn_ahead_is_discarded_by_any_change_it_was_drawn_for() {
+        // B0422: UI serial, size, scale, renderer, the panel's source and open/close epochs.
+        let drawn: AheadKey = (7, (984, 650), 180, Cpu, (3, 4));
+        assert!(ahead_ready(drawn, drawn, false, 0.004));
+        let changed: [AheadKey; 6] = [
+            (8, (984, 650), 180, Cpu, (3, 4)),
+            (7, (984, 651), 180, Cpu, (3, 4)),
+            (7, (984, 650), 120, Cpu, (3, 4)),
+            (7, (984, 650), 180, FemtovgGl, (3, 4)),
+            (7, (984, 650), 180, Cpu, (5, 4)),
+            (7, (984, 650), 180, Cpu, (3, 5)),
+        ];
+        for now in changed {
+            assert!(!ahead_ready(drawn, now, false, 0.004), "{now:?}");
+        }
+        // An unmapped panel's pose, or a stale one (a panel hidden or suspended since), never shows.
+        assert!(!ahead_ready(drawn, drawn, true, 0.004));
+        assert!(!ahead_ready(drawn, drawn, false, 0.1));
+    }
 }
 
 #[cfg(test)]
@@ -2357,6 +2395,7 @@ impl App {
         let mut pending_promotion_staged = false;
         // B0388: rasters this frame's main-thread prepare built, for PANEL_SLIDE `main_builds`.
         let mut main_builds = 0;
+        let mut slide_start = None;
         let result = (|| -> Result<(), Box<dyn Error>> {
             #[cfg(feature = "native-gl")]
             if self.surfaces[index].companion
@@ -2495,6 +2534,20 @@ impl App {
             if !s.configured {
                 return Ok(());
             }
+            // B0422: the next draw presents a pose prepared ahead while it is still current.
+            let epochs = (self.panel_epoch, self.panel_close_epoch);
+            let key = (s.ui_serial, (s.width, s.height), s.scale120, _kind, epochs);
+            let elapsed = self.started.elapsed().as_secs_f64();
+            let (pose_at, ready) = match s.ahead.take() {
+                Some((at, None)) => (Some(at), None),
+                Some((at, Some((drawn, regions, damage))))
+                    if ahead_ready(drawn, key, s.panel_unmapped, elapsed - at) =>
+                {
+                    (Some(at), Some((regions, damage)))
+                }
+                _ => (None, None),
+            };
+            let drawing_ahead = pose_at.is_some() && ready.is_none();
             let configured_size = (s.width, s.height);
             let mut render_size = effective_render_size(
                 configured_size,
@@ -2525,7 +2578,7 @@ impl App {
             let mut opaque_motion = self.options.animate;
             if let Some(motion) = scene.motion.as_ref() {
                 let prior_x = scene.offset.0;
-                let now = self.started.elapsed().as_secs_f64();
+                let now = pose_at.unwrap_or(elapsed);
                 let open = if self.options.animate {
                     ((now - 3.).max(0.) % 2.) >= 1. || now < 3.
                 } else if s.companion && self.options.panel_spec.is_some() {
@@ -2719,7 +2772,7 @@ impl App {
             // send its frame callback for ~1 s: that callback must not gate the first pose or a
             // retarget (B0294).
             if draw_waits_for_callback(
-                s.callbacks.pending,
+                s.callbacks.pending && !drawing_ahead,
                 _kind != RendererKind::Cpu,
                 compositor_motion_candidate && layer_motion_active,
             ) {
@@ -3258,14 +3311,19 @@ impl App {
             }
             renderer.presentation_motion(opaque_motion);
             bead_core::profile::split("pose");
-            {
+            if ready.is_none() {
                 let _prepare = bead_core::profile::Span::new("present_prepare");
                 let builds = renderer.raster_builds();
                 renderer.prepare_on_ui(scene, scale)?;
                 main_builds += renderer.raster_builds().saturating_sub(builds);
             }
             bead_core::profile::split("prepare");
-            let mut regions = {
+            // The pass ahead keeps the damage state of the frame on screen until its pose is presented.
+            let on_screen = drawing_ahead.then(|| s.visual_damage.clone());
+            let mut regions = if let Some((regions, damage)) = ready {
+                s.visual_damage = damage;
+                regions
+            } else {
                 let _damage = bead_core::profile::Span::new("visual_damage");
                 if self.options.damage {
                     if let Some(frame) = renderer.prepared_frame() {
@@ -3294,6 +3352,13 @@ impl App {
             };
             if resize_promoted_root || command_promotion_pending {
                 regions = vec![Damage::full(w as u32, h as u32)];
+            }
+            if let Some(on_screen) = on_screen {
+                let damage = std::mem::replace(&mut s.visual_damage, on_screen);
+                s.ahead = pose_at
+                    .filter(|_| !regions.is_empty())
+                    .map(|at| (at, Some((key, regions, damage))));
+                return Ok(());
             }
             bead_core::profile::split("damage");
             damage_px = regions
@@ -4163,6 +4228,7 @@ impl App {
                 .is_some_and(|(_, active)| active);
             if self.surfaces[index].companion && self.panel_frame_until.is_none() && motion_active {
                 self.panel_frame_until = Some(committed_at + duration);
+                slide_start = Some((committed_at, duration));
             }
         }
         // A pending frame callback already supplies the retry wakeup.
@@ -4320,6 +4386,18 @@ impl App {
                     }
                 }
             }
+        }
+        // B0422: after a panel slide's first commit, prepare its next pose (a refresh on) now, so
+        // that frame's callback only paints and presents it.
+        let refresh = crate::scroll::tick().as_secs_f64();
+        if let Some((at, duration)) = slide_start
+            && refresh < duration
+            && self.surfaces.iter().filter(|s| s.companion).count() == 1
+        {
+            self.surfaces[index].ahead = Some((at + refresh, None));
+            self.draw_current(index, qh);
+            let s = &mut self.surfaces[index];
+            s.ahead = s.ahead.take().filter(|(_, drawn)| drawn.is_some());
         }
         if let Err(e) = result {
             if self.prepare_surface_images(index, e.as_ref()) {
