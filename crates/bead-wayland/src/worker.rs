@@ -189,6 +189,8 @@ enum Job {
     Stage(UiEvent, Vec<f32>),
     /// A held key's repeat (B0332): dropped while an earlier one is still queued.
     Repeat(UiEvent, Vec<f32>),
+    /// B0416: a parked view's palette, baked although it is closed; no fence counts it.
+    Dormant(UiEvent, Vec<f32>),
     Resume(Vec<f32>),
     ContentScroll(UiEvent, Vec<f32>),
     Viewport(u32, u32),
@@ -362,6 +364,7 @@ fn model_keys(job: &Job) -> Vec<String> {
 fn job_kind(job: &Job) -> String {
     match job {
         Job::Stage(event, _) | Job::Repeat(event, _) => format!("Stage/{}", event_kind(event)),
+        Job::Dormant(event, _) => format!("Dormant/{}", event_kind(event)),
         Job::ContentScroll(event, _) => format!("ContentScroll/{}", event_kind(event)),
         Job::Resume(_) => "Resume".into(),
         Job::PrepareImages(_) => "PrepareImages".into(),
@@ -821,6 +824,14 @@ impl SceneSource for Source {
     fn wallpaper_palette_pending(&self) -> bool {
         true
     }
+    fn dormant_palette(
+        &mut self,
+        palette: std::collections::BTreeMap<String, [u8; 4]>,
+    ) -> Result<(), Box<dyn Error>> {
+        let palette = UiEvent::WallpaperPalette(palette);
+        self.send_counted(Job::Dormant(palette, self.scales.clone()))
+            .map(drop)
+    }
     fn services(&mut self, wakeup: Box<dyn Fn(UiEvent) + Send + Sync>) {
         let Some(factory) = self.factory.take() else {
             return;
@@ -947,13 +958,18 @@ impl SceneSource for Source {
                         Err(job) => job,
                     };
                     let resume = matches!(&job, Job::Resume(_));
+                    let dormant = matches!(&job, Job::Dormant(..));
                     let job = match job {
                         Job::Resume(scales) => Job::Stage(UiEvent::Relayout, scales),
-                        Job::Repeat(event, scales) => Job::Stage(event, scales),
+                        Job::Repeat(event, scales) | Job::Dormant(event, scales) => {
+                            Job::Stage(event, scales)
+                        }
                         job => job,
                     };
                     match job {
-                        Job::Resume(_) | Job::Repeat(..) => unreachable!("converted above"),
+                        Job::Resume(_) | Job::Repeat(..) | Job::Dormant(..) => {
+                            unreachable!("converted above")
+                        }
                         Job::PrepareImages(_) | Job::PrepareCpu(_) => {
                             unreachable!("resource jobs handled above")
                         }
@@ -1024,7 +1040,9 @@ impl SceneSource for Source {
                             let look_change = matches!(event, UiEvent::PanelDetached(_));
                             let baked_after = cache.serial();
                             let wallpaper_palette =
-                                if let UiEvent::WallpaperPalette(values) = &event {
+                                if let UiEvent::WallpaperPalette(values) = &event
+                                    && !dormant
+                                {
                                     let mut palettes = std::mem::take(&mut absorbed.palettes);
                                     palettes.push(values.clone());
                                     Some(palettes)
@@ -1093,9 +1111,11 @@ impl SceneSource for Source {
                             // anyway. A data update or palette only advances the source:
                             // no bake, no host commit. Closed means the host already holds a closed
                             // scene (idle), or the panel never opened; the stage that closes an open
-                            // panel still bakes, or the host never runs its close.
+                            // panel still bakes, or the host never runs its close. B0416: a parked
+                            // view's background palette bakes, so its next open finds it warm.
                             opened |= scene.motion.as_ref().is_some_and(|motion| motion.open);
                             if closed_settles
+                                && !dormant
                                 && (idle || !opened)
                                 && fault.is_none()
                                 && !resume
@@ -3128,8 +3148,16 @@ mod tests {
         ) -> Result<(), Box<dyn Error>> {
             Ok(())
         }
-        fn stage(&mut self, _: UiEvent) -> Result<Option<Scene>, Box<dyn Error>> {
+        fn stage(&mut self, event: UiEvent) -> Result<Option<Scene>, Box<dyn Error>> {
             self.stages.fetch_add(1, Ordering::SeqCst);
+            // B0416: a palette tints the shadow, so its raster tells which palette baked it.
+            if let UiEvent::WallpaperPalette(palette) = &event {
+                for primitive in &mut self.scene.primitives {
+                    if let bead_render::Primitive::Shadow { alpha, .. } = primitive {
+                        *alpha = f32::from(palette["primary"][0]) / 255.;
+                    }
+                }
+            }
             Ok(Some(self.scene.clone()))
         }
         fn validate(&self) -> Result<(), Box<dyn Error>> {
@@ -3962,6 +3990,27 @@ mod tests {
         assert!(source.stage(ready).unwrap().is_some());
         (source, receiver)
     }
+    fn motion(open: bool) -> bead_render::Motion {
+        bead_render::Motion {
+            id: "panel".into(),
+            open,
+            duration: 0.3,
+            return_duration: None,
+            return_curve: None,
+            auto_open: false,
+            spring: false,
+            curve: None,
+            edge: bead_core::Edge::Top,
+            slide_distance: None,
+            scale_from: None,
+            fade: false,
+            reveal: false,
+            progress: 0.,
+            parts: Vec::new(),
+            art: None,
+            body: None,
+        }
+    }
     struct ClosedPanel(Arc<AtomicUsize>, Arc<std::sync::atomic::AtomicBool>);
     impl SceneSource for ClosedPanel {
         fn watch(
@@ -3973,25 +4022,7 @@ mod tests {
         fn stage(&mut self, _: UiEvent) -> Result<Option<Scene>, Box<dyn Error>> {
             self.0.fetch_add(1, Ordering::SeqCst);
             let mut view = scene();
-            view.motion = Some(bead_render::Motion {
-                id: "panel".into(),
-                open: self.1.load(Ordering::SeqCst),
-                duration: 0.3,
-                return_duration: None,
-                return_curve: None,
-                auto_open: false,
-                spring: false,
-                curve: None,
-                edge: bead_core::Edge::Top,
-                slide_distance: None,
-                scale_from: None,
-                fade: false,
-                reveal: false,
-                progress: 0.,
-                parts: Vec::new(),
-                art: None,
-                body: None,
-            });
+            view.motion = Some(motion(self.1.load(Ordering::SeqCst)));
             Ok(Some(view))
         }
         fn validate(&self) -> Result<(), Box<dyn Error>> {
@@ -4170,5 +4201,172 @@ mod tests {
                 "the Dense adoption ran first, the restore last (restore_queued={restore_queued})"
             );
         }
+    }
+    /// B0416: a palette whose primary red becomes `Warm`'s shadow alpha.
+    fn tint(red: u8) -> BTreeMap<String, [u8; 4]> {
+        BTreeMap::from([("primary".to_string(), [red, 0, 0, 255])])
+    }
+    fn packet(events: &mpsc::Receiver<UiEvent>) -> Arc<Packet> {
+        match events.recv_timeout(Duration::from_secs(2)) {
+            Ok(UiEvent::Worker(packet)) => packet,
+            other => panic!("a worker packet expected, got {other:?}"),
+        }
+    }
+    /// A baked packet's shadow raster and the alpha its palette gave it.
+    fn shadow(packet: &Packet) -> (Arc<bead_render::tree::Raster>, f32) {
+        let scene = packet.scene.as_ref().expect("a baked scene");
+        let alpha = scene
+            .primitives
+            .iter()
+            .find_map(|primitive| match primitive {
+                bead_render::Primitive::Shadow { alpha, .. } => Some(*alpha),
+                _ => None,
+            });
+        let frame = &scene.prepared[&1_f32.to_bits()];
+        let raster = frame.items.iter().find_map(|item| item.raster.clone());
+        (raster.unwrap(), alpha.unwrap())
+    }
+    /// A closed view parked as its host parks it (idle once it holds the closed scene), whose
+    /// shadow raster shows the palette that baked it.
+    fn parked_tinted() -> (crate::warm::Cache, mpsc::Receiver<UiEvent>) {
+        let mut shown = scene();
+        shown.motion = Some(motion(false));
+        shown.primitives.push(bead_render::Primitive::Shadow {
+            rect: bead_render::Rect::new(2., 2., 12., 12.),
+            radius: 4.,
+            blur: 2.,
+            spread: 0.,
+            dy: 0.,
+            alpha: 1.,
+        });
+        let (mut source, events) = warm_worker_showing(
+            shown,
+            Default::default(),
+            Default::default(),
+            Default::default(),
+        );
+        source.set_idle(true);
+        let mut cache = crate::warm::Cache::default();
+        cache.park(false, "A".into(), 1, source, usize::MAX);
+        assert_eq!(cache.stats().0, 1);
+        (cache, events)
+    }
+    #[test]
+    fn a_parked_view_bakes_a_palette_in_the_background_and_resumes_without_a_palette_bake() {
+        let (mut cache, events) = parked_tinted();
+        // No commit was debounced yet: generation 0 is the newest.
+        cache.dormant_palette(0, &tint(128));
+        let ready = packet(&events);
+        assert!(matches!(ready.phase, Phase::Ready), "baked although closed");
+        assert!(
+            ready.wallpaper_palette().is_none(),
+            "no palette fence counts it"
+        );
+        let (baked, alpha) = shadow(&ready);
+        assert_eq!(alpha, 128. / 255.);
+        assert!(cache.handle_event(false, 1, &UiEvent::Worker(ready)));
+        let accepted = packet(&events);
+        assert!(accepted.is_accepted() && accepted.wallpaper_palette().is_none());
+        assert!(cache.handle_event(false, 1, &UiEvent::Worker(accepted)));
+        let mut source = cache.take(false, "A").expect("still parked").source;
+        assert!(source.dormant_ready(), "acknowledged, so dormant again");
+        // The open re-stages the same palette as before: it settles, and the resume builds nothing.
+        source.stage(UiEvent::WallpaperPalette(tint(128))).unwrap();
+        let settled = packet(&events);
+        assert!(settled.is_settled());
+        source.stage(UiEvent::Worker(settled)).unwrap();
+        assert!(source.resume().unwrap().is_none());
+        let resumed = packet(&events);
+        assert!(resumed.resume && matches!(resumed.phase, Phase::Ready));
+        assert!(
+            Arc::ptr_eq(&shadow(&resumed).0, &baked),
+            "0 palette bakes at the resume"
+        );
+    }
+    #[test]
+    fn palette_commits_every_half_second_stage_nothing_then_the_newest_once_they_stop() {
+        // A trailing debounce, never a periodic timer: palette churn (a video wallpaper) costs nothing.
+        struct Host(crate::warm::Cache, BTreeMap<String, [u8; 4]>);
+        fn run_until(
+            event_loop: &mut calloop::EventLoop<'static, Host>,
+            host: &mut Host,
+            start: std::time::Instant,
+            at: Duration,
+        ) {
+            while let Some(wait) = at.checked_sub(start.elapsed()) {
+                event_loop.dispatch(wait, host).unwrap();
+            }
+        }
+        let (cache, events) = parked_tinted();
+        let mut host = Host(cache, tint(0));
+        let mut event_loop = calloop::EventLoop::<Host>::try_new().unwrap();
+        let handle = event_loop.handle();
+        let start = std::time::Instant::now();
+        for commit in 0..10u8 {
+            host.1 = tint(10 + commit);
+            host.0
+                .debounce_palette(&handle, |host: &mut Host, generation| {
+                    let Host(cache, palette) = host;
+                    cache.dormant_palette(generation, palette);
+                });
+            let next = Duration::from_millis(500 * (u64::from(commit) + 1));
+            run_until(&mut event_loop, &mut host, start, next);
+            assert!(
+                events.try_recv().is_err(),
+                "commit {commit}: nothing staged"
+            );
+        }
+        // The last commit was at 4.5 s: one stage, of the newest palette, 1 s later.
+        run_until(
+            &mut event_loop,
+            &mut host,
+            start,
+            Duration::from_millis(5800),
+        );
+        let ready = packet(&events);
+        assert_eq!(shadow(&ready).1, 19. / 255., "the newest palette");
+        assert!(host.0.handle_event(false, 1, &UiEvent::Worker(ready)));
+        let accepted = packet(&events);
+        assert!(host.0.handle_event(false, 1, &UiEvent::Worker(accepted)));
+        run_until(
+            &mut event_loop,
+            &mut host,
+            start,
+            Duration::from_millis(7200),
+        );
+        assert!(
+            events.try_recv().is_err(),
+            "exactly one stage, no periodic one"
+        );
+        assert_eq!(host.0.stats().0, 1, "still parked");
+    }
+    #[test]
+    fn a_view_taken_while_its_background_palette_bakes_shows_the_newest_palette() {
+        let (mut cache, events) = parked_tinted();
+        cache.dormant_palette(0, &tint(64));
+        // Taken before its background packets arrive; the open stages the newest palette as before.
+        let mut source = cache.take(false, "A").expect("parked").source;
+        source.stage(UiEvent::WallpaperPalette(tint(200))).unwrap();
+        assert!(source.resume().unwrap().is_none());
+        // As the opening host: acknowledge each packet in turn; the resume's scene is the one shown.
+        let mut background = None;
+        let shown = loop {
+            let packet = packet(&events);
+            if matches!(packet.phase, Phase::Ready) {
+                if packet.resume {
+                    break shadow(&packet).1;
+                }
+                background = Some(shadow(&packet).1);
+            }
+            if source.stage(UiEvent::Worker(packet)).unwrap().is_some() {
+                source.commit();
+            }
+        };
+        assert_eq!(
+            background,
+            Some(64. / 255.),
+            "its background bake was in flight"
+        );
+        assert_eq!(shown, 200. / 255., "the newest palette is shown");
     }
 }

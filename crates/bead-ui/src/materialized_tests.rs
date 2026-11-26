@@ -142,6 +142,112 @@ fn root_panel_open_cache_misses_on_palette_and_viewport_changes() {
     );
 }
 
+/// B0416 risk 1: a parked view bakes its closed scene with a new palette in the background. Its
+/// open scene must then build no raster: a reveal and a slide panel, tinted text and image, CPU
+/// and upload policies. The control is today's parked view, which bakes only at its open.
+#[test]
+fn a_closed_panel_bake_warms_every_raster_its_open_scene_needs() {
+    use bead_render::tree::{ImagePolicy, TreeCache};
+    let palette = |hex: &str| {
+        let json = format!(r#"{{"formatVersion":1,"colours":{{"primary":"{hex}"}}}}"#);
+        Palette::parse(json.as_bytes()).unwrap()
+    };
+    let open = |value| BTreeMap::from([("open".into(), Value::Bool(value))]);
+    for motion in ["reveal=true,edge='top'", "slide_distance=140,edge='right'"] {
+        for policy in [ImagePolicy::Dense, ImagePolicy::UploadOnly] {
+            let fixture = Fixture::new();
+            fs::write(
+                fixture.0.join("palette.json"),
+                r#"{"formatVersion":1,"colours":{"surface":"101010","primary":"808080"}}"#,
+            )
+            .unwrap();
+            fs::create_dir_all(fixture.0.join("ui")).unwrap();
+            fs::write(
+                fixture.0.join("ui/dot.svg"),
+                r##"<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" fill="#fff"/></svg>"##,
+            )
+            .unwrap();
+            fs::write(
+                fixture.0.join("ui/behavior.luau"),
+                "return {stores={open=true},actions={},computed={}}",
+            )
+            .unwrap();
+            fs::write(
+                fixture.0.join("ui/main.luau"),
+                format!(
+                    "local ui=require('bead.ui')\nreturn ui.Panel{{id='panel',width=220,height=140,open=ui.bind('open'),{motion},body='body',\
+                     ui.Column{{id='body',width=200,height=120,fill='surface',padding=8,\
+                     ui.Text{{id='label',text='Tinted',font_size=14,height=20,color='primary'}},\
+                     ui.Image{{id='dot',path='ui/dot.svg',width=16,height=16,tint='primary'}}}}}}"
+                ),
+            )
+            .unwrap();
+            let mut session = fixture.session();
+            session.entry = "ui/main.luau".into();
+            let first = session.reload().unwrap();
+            session.commit(first);
+            let open_a = session.set_runtime_palette(palette("ff0000")).unwrap();
+            session.commit(open_a.clone().unwrap());
+            let closed_a = session.update(open(false)).unwrap();
+            session.commit(closed_a.clone().unwrap());
+            let closed_b = session.set_runtime_palette(palette("00ff00")).unwrap();
+            session.commit(closed_b.clone().unwrap());
+            let open_b = session.update(open(true)).unwrap().unwrap();
+            let [open_a, closed_a, closed_b] = [open_a, closed_a, closed_b].map(Option::unwrap);
+            assert!(
+                !closed_b.motion.as_ref().unwrap().open && open_b.motion.as_ref().unwrap().open
+            );
+            // Both views opened with palette A and closed: the worker's idle trim keeps the closed bake.
+            let (mut today, mut parked) = (
+                TreeCache::default().with_image_policy(policy),
+                TreeCache::default().with_image_policy(policy),
+            );
+            for cache in [&mut today, &mut parked] {
+                cache.prepare(&open_a, 1.).unwrap();
+                cache.prepare(&closed_a, 1.).unwrap();
+                cache.trim_idle();
+            }
+            parked.prepare(&closed_b, 1.).unwrap();
+            parked.trim_idle();
+            // Held, so an upload payload built again could not reuse the background one's address.
+            let background = parked.frame.clone().unwrap();
+            let payload = |frame: &bead_render::tree::Frame| {
+                frame
+                    .items
+                    .iter()
+                    .find(|item| matches!(item.primitive, Primitive::Image { .. }))
+                    .and_then(|item| item.image.as_ref().map(std::sync::Arc::as_ptr))
+            };
+            assert_eq!(
+                payload(&background).is_some(),
+                policy == ImagePolicy::UploadOnly
+            );
+            let (built_today, built_parked) = (today.builds, parked.builds);
+            today.prepare(&open_b, 1.).unwrap();
+            parked.prepare(&open_b, 1.).unwrap();
+            let label = format!("{motion} policy_dense={}", policy == ImagePolicy::Dense);
+            let today_builds = today.builds - built_today;
+            println!(
+                "B0416_RISK1 {label} open_builds_today={today_builds} open_builds_parked={}",
+                parked.builds - built_parked
+            );
+            assert!(
+                today_builds >= if policy == ImagePolicy::Dense { 2 } else { 1 },
+                "{label}: the control bakes the tinted layers at its open ({today_builds})"
+            );
+            assert_eq!(
+                parked.builds, built_parked,
+                "{label}: the closed bake warmed every raster the open scene needs"
+            );
+            assert_eq!(
+                payload(parked.frame.as_ref().unwrap()),
+                payload(&background),
+                "{label}: and the tinted upload payload"
+            );
+        }
+    }
+}
+
 /// A session over `content` with a fuller palette and the given behaviour stores.
 fn interaction_fixture(content: &str, behavior: &str) -> (Fixture, Session) {
     let fixture = Fixture::new();

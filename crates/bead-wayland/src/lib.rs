@@ -670,6 +670,15 @@ pub trait SceneSource {
     fn wallpaper_palette_pending(&self) -> bool {
         false
     }
+    /// B0416: a dormant source bakes a settled palette in the background although it is closed, so
+    /// its next open finds the rasters warm. Its packets settle no palette fence. A source without
+    /// this takes the palette when it resumes, as before.
+    fn dormant_palette(
+        &mut self,
+        _palette: std::collections::BTreeMap<String, [u8; 4]>,
+    ) -> Result<(), Box<dyn Error>> {
+        Ok(())
+    }
     /// Invocation coordinate along the panel's edge, in output logical pixels.
     fn panel_center(&mut self, _center: Option<f32>) {}
     fn set_idle(&mut self, _idle: bool) {}

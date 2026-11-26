@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 //! Dormant sources own no surfaces. Payload-free model hints wait for resume.
 use crate::{SceneSource, UiEvent};
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 
 pub(super) struct Entry {
     pub epoch: u64,
@@ -12,9 +12,10 @@ pub(super) struct Entry {
     name: String,
     bytes: usize,
 }
-/// Dormant entries, oldest first, and (B0392) one source retired mid-close with its budget.
+/// Dormant entries, oldest first, (B0392) one source retired mid-close with its budget, and
+/// (B0416) the newest palette commit's generation.
 #[derive(Default)]
-pub(super) struct Cache(VecDeque<Entry>, Option<(Entry, usize)>);
+pub(super) struct Cache(VecDeque<Entry>, Option<(Entry, usize)>, u64);
 /// The admission charge of a dormant source named with `name` bytes, if it fits `budget`.
 pub(super) fn charge(source: &dyn SceneSource, name: usize, budget: usize) -> Option<usize> {
     if !source.dormant_ready() {
@@ -24,6 +25,24 @@ pub(super) fn charge(source: &dyn SceneSource, name: usize, budget: usize) -> Op
         .warm_retained_bytes()
         .and_then(|bytes| bytes.checked_add(name + std::mem::size_of::<Entry>() + 64))
         .filter(|bytes| *bytes <= budget)
+}
+/// Whether a dormant source stays as it was: an empty model hint, or its own clean packet, which
+/// it stages and commits (Ready sends its Ack; Accepted commits the candidate).
+fn stays_dormant(source: &mut dyn SceneSource, event: &UiEvent) -> bool {
+    match event {
+        UiEvent::Model(values) => values.is_empty(),
+        UiEvent::Worker(packet) if !packet.has_error() => {
+            match source.stage(UiEvent::Worker(packet.clone())) {
+                Ok(Some(_)) => {
+                    source.commit();
+                    true
+                }
+                Ok(None) => true,
+                Err(_) => false,
+            }
+        }
+        _ => false,
+    }
 }
 impl Cache {
     pub fn stats(&self) -> (usize, usize) {
@@ -127,6 +146,30 @@ impl Cache {
             }
         }
     }
+    /// B0416: a trailing debounce. Each palette commit arms a one-shot 1 s timer with its
+    /// generation, and `dormant_palette` acts on the newest only: commits that never pause for
+    /// 1 s (a video wallpaper) stage nothing.
+    pub fn debounce_palette<T: 'static>(
+        &mut self,
+        handle: &calloop::LoopHandle<'static, T>,
+        fire: fn(&mut T, u64),
+    ) {
+        self.2 += 1;
+        let generation = self.2;
+        let timer = calloop::timer::Timer::from_duration(std::time::Duration::from_secs(1));
+        let _ = handle.insert_source(timer, move |_, _, state| {
+            fire(state, generation);
+            calloop::timer::TimeoutAction::Drop
+        });
+    }
+    /// B0416: unless a newer commit armed since, each parked source takes `palette` in the
+    /// background; `handle_event` acknowledges its packets. One that cannot stage it retires.
+    pub fn dormant_palette(&mut self, generation: u64, palette: &BTreeMap<String, [u8; 4]>) {
+        if generation == self.2 {
+            self.0
+                .retain_mut(|entry| entry.source.dormant_palette(palette.clone()).is_ok());
+        }
+    }
     /// A closing source not acknowledged in time retires as a cold one does.
     pub fn drop_closing(&mut self, overlay: bool, epoch: u64) {
         if self
@@ -160,29 +203,16 @@ impl Cache {
     /// Consume callbacks for dormant epochs. Empty model hints carry no state:
     /// mandatory resume polls their producers. Every payload/protocol event still
     /// retires the source, so stale state or a waiting acknowledgement cannot survive.
-    /// A closing source's own clean packets are acknowledged as a host without a surface would.
+    /// A source's own clean packets (a closing one's, or B0416 a parked one's background palette)
+    /// are acknowledged as a host without a surface would.
     pub fn handle_event(&mut self, overlay: bool, epoch: u64, event: &UiEvent) -> bool {
         if let Some((mut entry, budget)) = self
             .1
             .take_if(|(entry, _)| entry.overlay == overlay && entry.epoch == epoch)
         {
-            let kept = match event {
-                UiEvent::Model(values) => values.is_empty(),
-                // B0414: the closing view's own request to be closed carries no state.
-                UiEvent::CompanionVisibility(false) => true,
-                UiEvent::Worker(packet) if !packet.has_error() => {
-                    match entry.source.stage(UiEvent::Worker(packet.clone())) {
-                        // Ready sends its Ack; Accepted commits the candidate.
-                        Ok(Some(_)) => {
-                            entry.source.commit();
-                            true
-                        }
-                        Ok(None) => true,
-                        Err(_) => false,
-                    }
-                }
-                _ => false,
-            };
+            // B0414: the closing view's own request to be closed carries no state.
+            let kept = matches!(event, UiEvent::CompanionVisibility(false))
+                || stays_dormant(entry.source.as_mut(), event);
             if kept && entry.source.dormant_ready() {
                 self.park(overlay, entry.name, epoch, entry.source, budget);
                 self.set_extent(overlay, epoch, entry.extent);
@@ -205,14 +235,14 @@ impl Cache {
             }
             return true;
         }
-        if !self
+        let Some(entry) = self
             .0
-            .iter()
-            .any(|entry| entry.overlay == overlay && entry.epoch == epoch)
-        {
+            .iter_mut()
+            .find(|entry| entry.overlay == overlay && entry.epoch == epoch)
+        else {
             return false;
-        }
-        if !matches!(event, UiEvent::Model(values) if values.is_empty()) {
+        };
+        if !stays_dormant(entry.source.as_mut(), event) {
             self.invalidate(overlay, epoch);
         }
         true
