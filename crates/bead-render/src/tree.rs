@@ -2397,7 +2397,7 @@ impl TreeCache {
                 None
             } else {
                 let slot = (id.clone(), scale.to_bits());
-                if kind == "image"
+                if matches!(kind, "image" | "text")
                     && let Some(entry) = self.entries.get_mut(&slot)
                     && entry.raster.key != key
                     && entry
@@ -2434,7 +2434,7 @@ impl TreeCache {
                     let previous_raster = previous_frame_raster
                         .clone()
                         .or_else(|| self.entries.get(&slot).map(|entry| entry.raster.clone()));
-                    let cached_variant = (kind == "image")
+                    let cached_variant = matches!(kind, "image" | "text")
                         .then(|| {
                             previous_frame_slot
                                 .as_ref()
@@ -2581,7 +2581,7 @@ impl TreeCache {
                         base_key,
                         changed,
                     });
-                    let previous = if kind == "image" {
+                    let previous = if matches!(kind, "image" | "text") {
                         self.entries
                             .remove(&slot)
                             .map(|entry| entry.raster)
@@ -7602,6 +7602,37 @@ mod tests {
             Some(first.key)
         );
         assert_eq!(after.items[1].raster.as_ref().unwrap().base_key, None);
+    }
+
+    #[test]
+    fn text_flip_back_reuses_the_previous_raster() {
+        let mut view = scene();
+        view.layers.clear();
+        view.font_files = vec![
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../bead-test/fonts/IBMPlexSans.ttf"),
+        ];
+        view.primitives = vec![Primitive::Text {
+            rect: Rect::new(0., 0., 64., 24.),
+            text: "a".into(),
+            family: "IBM Plex Sans".into(),
+            size: 14.,
+            color: [255, 255, 255, 255],
+            weight: 400,
+            align: None,
+            shadow: None,
+            features: Vec::new(),
+        }];
+        let mut cache = TreeCache::default();
+        for (text, builds) in [("a", 1), ("b", 2), ("a", 2)] {
+            if let Primitive::Text { text: t, .. } = &mut view.primitives[0] {
+                *t = text.into();
+            }
+            cache.prepare(&view, 1.).unwrap();
+            assert_eq!(cache.builds, builds, "after {text}");
+        }
+        cache.trim_idle();
+        assert!(cache.entries.values().all(|entry| entry.previous.is_none()));
     }
 
     fn layer(cx: f32, cy: f32, rx: f32, ry: f32, from: [u8; 4], to: [u8; 4]) -> crate::RadialLayer {
