@@ -1067,7 +1067,11 @@ impl App {
                 self.ui_serial += 1;
                 if self.processing_panel {
                     self.panel_ui_serial = self.ui_serial;
-                    if let Some(open) = &mut self.panel_open {
+                    if let Some(open) = &mut self.panel_open
+                        && !open.content
+                    {
+                        // B0415: the wait for fresh content, apart from drawing and presenting it.
+                        open.resume_ms = open.requested.elapsed().as_secs_f64() * 1000.;
                         open.content = true;
                     }
                 } else {

@@ -585,6 +585,8 @@ pub(super) struct PanelOpen {
     /// A fresh worker scene has been committed since the request; the fallback and a retained
     /// snapshot are committed before it.
     pub(super) content: bool,
+    /// B0415: ms from the request to that first fresh scene (0 until then).
+    pub(super) resume_ms: f64,
     pub(super) first_frame_seen: bool,
 }
 impl PanelOpen {
@@ -604,6 +606,7 @@ mod panel_open_latency_tests {
             cold: true,
             name: "p".into(),
             content: false,
+            resume_ms: 0.,
             first_frame_seen: false,
         })
     }
@@ -685,10 +688,11 @@ impl Dispatch<WpPresentationFeedback, PresentationData> for App {
                 PanelOpen::take_first_content(&mut state.panel_open, data.visibility, data.content)
             {
                 bead_core::profile::eline(format_args!(
-                    "PANEL_OPEN_LATENCY name={} cold={} ms_to_first_content_frame={:.3} monotonic_ns={}",
+                    "PANEL_OPEN_LATENCY name={} cold={} ms_to_first_content_frame={:.3} resume_ms={:.3} monotonic_ns={}",
                     open.name,
                     open.cold,
                     open.requested.elapsed().as_secs_f64() * 1000.,
+                    open.resume_ms,
                     super::monotonic_ns()
                 ));
             }

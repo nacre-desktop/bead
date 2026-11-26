@@ -817,6 +817,7 @@ impl App {
             cold: self.panel_runtime.is_none() && warm.is_none(),
             name: self.panel_name.clone().unwrap_or_else(|| "-".into()),
             content: false,
+            resume_ms: 0.,
             first_frame_seen: false,
         });
         if open {
