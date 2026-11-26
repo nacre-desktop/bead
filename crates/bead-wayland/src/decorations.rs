@@ -19,6 +19,13 @@ struct PanelKey {
     origin: (i32, i32),
     bounds: (u32, u32),
 }
+fn shape(panel: DecorationPanel<'_>) -> PanelKey {
+    let bounds = panel.scene.bounds;
+    PanelKey {
+        origin: panel.origin,
+        bounds: (bounds.w.to_bits(), bounds.h.to_bits()),
+    }
+}
 #[derive(Clone, Copy, PartialEq, Eq)]
 struct Key {
     viewport: (u32, u32),
@@ -75,6 +82,8 @@ pub(super) struct RasterCache {
     sets: Vec<(Key, Vec<Raster>)>,
     queue: Jobs,
     sender: Option<calloop::channel::Sender<Reply>>,
+    /// B0417: the palette settled (B0416's debounce); the next background sync takes it.
+    settled: bool,
 }
 const RASTER_SETS: usize = 6;
 impl RasterCache {
@@ -88,11 +97,61 @@ impl RasterCache {
             self.sets.remove(0);
         }
     }
+    /// B0417: once settled (a tween's per-step syncs get none), the uncached keys in `variant`.
+    fn stale(&mut self, variant: u64) -> Vec<Key> {
+        let (mut keys, settled) = (Vec::new(), std::mem::take(&mut self.settled));
+        for (key, _) in &self.sets {
+            let key = Key { variant, ..*key };
+            if settled && !keys.contains(&key) && !self.sets.iter().any(|(k, _)| *k == key) {
+                keys.push(key);
+            }
+        }
+        keys
+    }
 }
 /// `posed`: the progress the scene was last drawn at (1 in a scene not posed yet); `clock`: the
 /// reveal's, held at its first pose until a frame showing that pose is committed.
 fn reveal_drawn(posed: f32, clock: Option<(f32, bool)>) -> bool {
     posed > 0. && clock.is_some_and(|(progress, _)| progress > 0.)
+}
+/// Each tile's pixel size and the pool bytes they reserve; refuses invalid or oversized specs.
+fn tile_sizes(specs: &[Decoration], scale: f32) -> Result<(Vec<(u32, u32)>, usize), String> {
+    if specs.len() > 16 {
+        return Err("Too many static decorations".into());
+    }
+    let mut sizes = Vec::new();
+    let mut total = 0usize;
+    for spec in specs {
+        if ![spec.rect.x, spec.rect.y, spec.rect.w, spec.rect.h]
+            .iter()
+            .all(|n| n.is_finite())
+            || spec.rect.w <= 0.
+            || spec.rect.h <= 0.
+            || spec.svg.len() > 1_048_576
+        {
+            return Err("Invalid static decoration".into());
+        }
+        let w = (spec.rect.w * scale).ceil() as u32;
+        let h = (spec.rect.h * scale).ceil() as u32;
+        let bytes = (w as usize)
+            .checked_mul(h as usize)
+            .and_then(|n| n.checked_mul(4))
+            .ok_or("Static decoration overflow")?;
+        // SlotPool rounds each slot to64 bytes. Reserve that amount now;
+        // a tiny final-slot shortfall otherwise doubles the entire pool.
+        let reserved = bytes
+            .checked_add(63)
+            .map(|n| n & !63)
+            .ok_or("Static decoration overflow")?;
+        total = total
+            .checked_add(reserved)
+            .ok_or("Static decoration overflow")?;
+        if total > 2 * 1024 * 1024 {
+            return Err("Static decoration SHM budget exceeded".into());
+        }
+        sizes.push((w, h));
+    }
+    Ok((sizes, total))
 }
 /// Raster every tile into owned pixels; also runs on the background thread.
 fn raster_tiles(
@@ -140,11 +199,49 @@ impl App {
         let synced =
             (0..self.surfaces.len()).try_for_each(|i| self.sync_decorations_in(i, background));
         let started = if background {
-            self.start_decoration_job()
+            let warmed = self.request_stale_decorations();
+            self.start_decoration_job().and(warmed)
         } else {
             Ok(())
         };
         synced.and(started)
+    }
+    /// B0417: a settled palette (B0416's debounce, not each tween step) re-rasters every cached
+    /// shape it can rebuild (not another panel's: its scene is gone) on the background job.
+    pub(super) fn warm_decorations(&mut self) -> Result<(), String> {
+        self.decoration_cache.settled = true;
+        self.sync_all_decorations_in(true)
+    }
+    fn request_stale_decorations(&mut self) -> Result<(), String> {
+        let Some(factory) = self.options.decorations.clone() else {
+            return Ok(());
+        };
+        for key in self.decoration_cache.stale(self.decoration_variant) {
+            let (w, h) = key.viewport;
+            let panel = key.panel.and(self.decoration_panel((w as i32, h as i32)));
+            if key.panel != panel.map(shape) {
+                continue;
+            }
+            let specs = factory(key.viewport, key.engaged, panel)?;
+            let scale = key.scale120 as f32 / 120.;
+            let (sizes, _) = tile_sizes(&specs, scale)?;
+            self.decoration_cache
+                .queue
+                .request((key, specs, sizes, scale));
+        }
+        Ok(())
+    }
+    /// The companion panel at its final origin on an output of this logical size.
+    fn decoration_panel(&self, viewport: (i32, i32)) -> Option<DecorationPanel<'_>> {
+        let ((scene, _, _), spec) = self
+            .companion
+            .as_ref()
+            .zip(self.options.panel_spec.as_ref())?;
+        let position = spec.position.as_ref()?;
+        Some(DecorationPanel {
+            scene,
+            origin: position(scene, self.panel_center, viewport),
+        })
     }
     pub(super) fn sync_decorations(&mut self, index: usize) -> Result<(), String> {
         self.sync_decorations_in(index, false)
@@ -209,22 +306,11 @@ impl App {
                 .as_ref()
                 .is_some_and(|s| s.engages_decorations);
         let panel = if joined {
-            self.companion
-                .as_ref()
-                .zip(self.options.panel_spec.as_ref())
-                .and_then(|((scene, _, _), spec)| {
-                    spec.position.as_ref().map(|position| DecorationPanel {
-                        scene,
-                        origin: position(scene, self.panel_center, (width, height)),
-                    })
-                })
+            self.decoration_panel((width, height))
         } else {
             None
         };
-        let shape = panel.map(|p| PanelKey {
-            origin: p.origin,
-            bounds: (p.scene.bounds.w.to_bits(), p.scene.bounds.h.to_bits()),
-        });
+        let shape = panel.map(shape);
         let key = Key {
             viewport: (width as u32, height as u32),
             scale120: surface.scale120,
@@ -244,14 +330,15 @@ impl App {
             .viewporter
             .as_ref()
             .ok_or("Static decorations need wp_viewporter")?;
+        // The panel borrows the companion until the factory call, so the hit leaves the cache later.
         let cached = self
             .decoration_cache
             .sets
             .iter()
-            .position(|(k, _)| *k == key)
-            .map(|i| self.decoration_cache.sets.remove(i).1);
-        let specs: Vec<Decoration> = match &cached {
-            Some(rasters) => rasters
+            .position(|(k, _)| *k == key);
+        let specs: Vec<Decoration> = match cached {
+            Some(i) => self.decoration_cache.sets[i]
+                .1
                 .iter()
                 .map(|(rect, _, _, _)| Decoration {
                     rect: *rect,
@@ -260,44 +347,10 @@ impl App {
                 .collect(),
             None => factory((width as u32, height as u32), engaged, panel)?,
         };
-        if specs.len() > 16 {
-            return Err("Too many static decorations".into());
-        }
         let scale = key.scale120 as f32 / 120.;
-        let mut sizes = Vec::new();
-        let mut total = 0usize;
-        for spec in &specs {
-            if ![spec.rect.x, spec.rect.y, spec.rect.w, spec.rect.h]
-                .iter()
-                .all(|n| n.is_finite())
-                || spec.rect.w <= 0.
-                || spec.rect.h <= 0.
-                || spec.svg.len() > 1_048_576
-            {
-                return Err("Invalid static decoration".into());
-            }
-            let w = (spec.rect.w * scale).ceil() as u32;
-            let h = (spec.rect.h * scale).ceil() as u32;
-            let bytes = (w as usize)
-                .checked_mul(h as usize)
-                .and_then(|n| n.checked_mul(4))
-                .ok_or("Static decoration overflow")?;
-            // SlotPool rounds each slot to64 bytes. Reserve that amount now;
-            // a tiny final-slot shortfall otherwise doubles the entire pool.
-            let reserved = bytes
-                .checked_add(63)
-                .map(|n| n & !63)
-                .ok_or("Static decoration overflow")?;
-            total = total
-                .checked_add(reserved)
-                .ok_or("Static decoration overflow")?;
-            if total > 2 * 1024 * 1024 {
-                return Err("Static decoration SHM budget exceeded".into());
-            }
-            sizes.push((w, h));
-        }
+        let (sizes, total) = tile_sizes(&specs, scale)?;
         let rasters = match cached {
-            Some(rasters) => rasters,
+            Some(i) => self.decoration_cache.sets.remove(i).1,
             None if background => {
                 self.decoration_cache
                     .queue
@@ -554,6 +607,114 @@ mod tests {
         // Reopened mid-close: the body is on screen, so the join comes back at once.
         clock.open_to("panel", true, 2.1, 0.2, Curve::EaseOut);
         assert!(joins(true, &scene, &clock, 2.1), "reopened mid-close");
+    }
+    /// B0417: a palette change requests the cached shapes in the new palette on the same
+    /// background job (the sync's request first), within `RASTER_SETS`, so a later sync of the
+    /// panel's shape hits the cache.
+    #[test]
+    fn a_new_palette_rerasters_the_cached_shapes_on_the_background_job() {
+        let joined = |variant| Key {
+            engaged: true,
+            panel: Some(PanelKey {
+                origin: (20, 0),
+                bounds: (64, 32),
+            }),
+            ..key(variant)
+        };
+        let work = |key| {
+            let (specs, sizes) = specs("#993366");
+            (key, specs, sizes, 1.)
+        };
+        let mut cache = RasterCache::default();
+        for variant in 10..14 {
+            cache.insert(key(variant), Vec::new());
+        }
+        cache.insert(joined(1), Vec::new());
+        cache.insert(key(1), Vec::new());
+        // Palette 2 with the frame idle: the sync requests the idle set, the warm-up the rest.
+        cache.queue.begin();
+        cache.queue.request(work(key(2)));
+        cache.settled = true;
+        for stale in cache.stale(2) {
+            cache.queue.request(work(stale));
+        }
+        let (generation, jobs) = cache.queue.start().unwrap();
+        let keys: Vec<Key> = jobs.iter().map(|(key, ..)| *key).collect();
+        assert!(keys == [key(2), joined(2)], "one job, each shape once");
+        assert!(cache.queue.finish(generation));
+        for (key, specs, sizes, scale) in jobs {
+            cache.insert(key, raster_tiles(&specs, &sizes, scale).unwrap());
+        }
+        // The old palettes' sets made room: the cache stays at its bound.
+        assert_eq!(cache.sets.len(), RASTER_SETS);
+        cache.settled = true;
+        assert!(cache.stale(2).is_empty());
+        // The panel's next open in palette 2 finds its set, in palette 2's pixels.
+        let (specs, sizes) = specs("#993366");
+        let hit = cache.sets.iter().find(|(k, _)| *k == joined(2)).unwrap();
+        assert_eq!(hit.1, raster_tiles(&specs, &sizes, 1.).unwrap());
+    }
+    /// B0417: a 10-step palette tween runs a background sync per step and arms B0416's trailing
+    /// debounce each time; only the sync after the palette settled warms: one warm-up, not ten.
+    #[test]
+    fn a_palette_tween_warms_the_cache_once_it_settles() {
+        use std::time::{Duration, Instant};
+        struct Host(crate::warm::Cache, RasterCache, usize);
+        /// A background sync's queue side, as `sync_all_decorations_in(true)` does it: a new
+        /// generation, the surface's miss, then `request_stale_decorations`' shapes.
+        fn sync(host: &mut Host) {
+            let work = |key| {
+                let (specs, sizes) = specs("#993366");
+                (key, specs, sizes, 1.)
+            };
+            host.1.queue.begin();
+            host.1.queue.request(work(key(2)));
+            let stale = host.1.stale(2);
+            host.2 += usize::from(!stale.is_empty());
+            for key in stale {
+                host.1.queue.request(work(key));
+            }
+        }
+        fn run_until(
+            event_loop: &mut calloop::EventLoop<'static, Host>,
+            host: &mut Host,
+            start: Instant,
+            at: Duration,
+        ) {
+            while let Some(wait) = at.checked_sub(start.elapsed()) {
+                event_loop.dispatch(wait, host).unwrap();
+            }
+        }
+        let mut host = Host(Default::default(), RasterCache::default(), 0);
+        host.1.insert(key(1), Vec::new());
+        let mut event_loop = calloop::EventLoop::<Host>::try_new().unwrap();
+        let handle = event_loop.handle();
+        let start = Instant::now();
+        for step in 0..10u64 {
+            // The step's palette commit: its background sync, and the debounce the runtime arms,
+            // whose fire is `warm_decorations` for the newest commit.
+            sync(&mut host);
+            host.0
+                .debounce_palette(&handle, |host: &mut Host, generation| {
+                    if host.0.dormant_palette(generation, &Default::default()) {
+                        host.1.settled = true;
+                        sync(host);
+                    }
+                });
+            let next = Duration::from_millis(50 * (step + 1));
+            run_until(&mut event_loop, &mut host, start, next);
+            assert_eq!(host.2, 0, "step {step}: no warm-up mid-tween");
+        }
+        // The last step armed at 0.45 s: one warm-up 1 s later, with one request per shape.
+        run_until(
+            &mut event_loop,
+            &mut host,
+            start,
+            Duration::from_millis(1700),
+        );
+        assert_eq!(host.2, 1, "one warm-up, after the tween");
+        let (_, jobs) = host.1.queue.start().unwrap();
+        assert!(jobs.len() == 1 && jobs[0].0 == key(2));
     }
     #[test]
     fn the_cache_keeps_its_own_set_and_six_sets() {

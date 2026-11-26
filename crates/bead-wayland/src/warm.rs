@@ -164,11 +164,13 @@ impl Cache {
     }
     /// B0416: unless a newer commit armed since, each parked source takes `palette` in the
     /// background; `handle_event` acknowledges its packets. One that cannot stage it retires.
-    pub fn dormant_palette(&mut self, generation: u64, palette: &BTreeMap<String, [u8; 4]>) {
-        if generation == self.2 {
+    /// Whether the palette settled, that is `armed` is the newest generation (B0417).
+    pub fn dormant_palette(&mut self, armed: u64, palette: &BTreeMap<String, [u8; 4]>) -> bool {
+        if armed == self.2 {
             self.0
                 .retain_mut(|entry| entry.source.dormant_palette(palette.clone()).is_ok());
         }
+        armed == self.2
     }
     /// A closing source not acknowledged in time retires as a cold one does.
     pub fn drop_closing(&mut self, overlay: bool, epoch: u64) {
