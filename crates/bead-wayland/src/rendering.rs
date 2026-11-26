@@ -242,9 +242,16 @@ fn missed_callback_delay(damage_px: u64, in_progress: bool, refresh: u32) -> Opt
     (damage_px == 0 && in_progress).then(|| Duration::from_nanos(ns.into()))
 }
 
+/// B0420b: niri ignores damage off its output, so per axis the surface centre clamped onto it.
+fn visible_feedback_point(origin: i32, size: u32, span: i32, buffer: i32) -> u32 {
+    let (lo, hi) = (origin.max(0), (origin + size as i32).min(span) - 1);
+    let point = i64::from((origin + size as i32 / 2).min(hi).max(lo) - origin);
+    (point * i64::from(buffer) / i64::from(size.max(1))).clamp(0, i64::from(buffer) - 1) as u32
+}
+
 #[cfg(test)]
 mod missed_callback_tests {
-    use super::{draw_waits_for_callback, missed_callback_delay};
+    use super::{draw_waits_for_callback, missed_callback_delay, visible_feedback_point};
     use std::time::Duration;
 
     const REFRESH: u32 = 16_666_667;
@@ -273,6 +280,27 @@ mod missed_callback_tests {
         assert_eq!(missed_callback_delay(0, false, REFRESH), None);
         assert_eq!(missed_callback_delay(1, true, REFRESH), None);
         assert_eq!(missed_callback_delay(1, false, REFRESH), None);
+    }
+
+    #[test]
+    fn feedback_damage_lands_on_the_output_part_of_a_surface_wider_than_its_output() {
+        // B0420b: a centred 1942 px panel surface on a 1920 px output starts at x = -11, so its
+        // buffer (0,0) is off the output and niri neither repaints nor calls that damage back.
+        let on_output = |origin: i32, x: u32, size: u32, buffer: i32, span: i32| {
+            let logical = origin + (i64::from(x) * i64::from(size) / i64::from(buffer)) as i32;
+            (0..span).contains(&logical)
+        };
+        // Scale 1 and 1.5.
+        for buffer in [1942, 2913] {
+            let x = visible_feedback_point(-11, 1942, 1920, buffer);
+            assert!(on_output(-11, x, 1942, buffer, 1920), "x={x} of {buffer}");
+        }
+        // Past the far edge it clamps onto the output; a surface fully on it gets its centre.
+        let x = visible_feedback_point(1500, 1000, 1920, 1000);
+        assert!(on_output(1500, x, 1000, 1000, 1920), "x={x}");
+        assert_eq!(visible_feedback_point(100, 600, 1920, 900), 450);
+        // No known output: still a point inside the buffer.
+        assert!(visible_feedback_point(0, 600, 0, 900) < 900);
     }
 }
 
@@ -3283,9 +3311,12 @@ impl App {
             // filtered rows). Request actual compositor feedback for that new
             // transaction too; a callback-only commit has no presentation event.
             if regions.is_empty() && s.presented_generation != Some(s.ui_serial) {
+                let output = self.output.info(&s.output).and_then(|i| i.logical_size);
+                let output = output.unwrap_or((0, 0));
+                let origin = s.layer.state().origin(render_size, output);
                 regions.push(Damage {
-                    x: 0,
-                    y: 0,
+                    x: visible_feedback_point(origin.0, render_size.0, output.0, w),
+                    y: visible_feedback_point(origin.1, render_size.1, output.1, h),
                     w: 1,
                     h: 1,
                 });
