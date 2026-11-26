@@ -236,6 +236,46 @@ fn draw_waits_for_callback(pending: bool, gpu: bool, compositor_owns_motion: boo
     pending && gpu && !compositor_owns_motion
 }
 
+/// B0420: how long a stand-in waits for the callback niri may never send a commit without damage.
+fn missed_callback_delay(damage_px: u64, in_progress: bool, refresh: u32) -> Option<Duration> {
+    let ns = if refresh > 0 { refresh } else { 16_000_000 };
+    (damage_px == 0 && in_progress).then(|| Duration::from_nanos(ns.into()))
+}
+
+#[cfg(test)]
+mod missed_callback_tests {
+    use super::{draw_waits_for_callback, missed_callback_delay};
+    use std::time::Duration;
+
+    const REFRESH: u32 = 16_666_667;
+
+    #[test]
+    fn a_motion_frame_without_damage_gets_its_next_pose_within_a_refresh_without_a_callback() {
+        // B0420: a pixel-identical pose on an already-presented generation commits with no damage,
+        // which niri may never call back. A stand-in still lets the next pose draw a refresh later.
+        let wait = missed_callback_delay(0, true, REFRESH).expect("no stand-in for the callback");
+        assert!(wait <= Duration::from_nanos(REFRESH.into()));
+        assert_eq!(
+            missed_callback_delay(0, true, 0),
+            Some(Duration::from_millis(16))
+        );
+        // It releases the owed callback (no compositor reply), so the waiting GPU draw goes ahead.
+        let mut callbacks = crate::policy::Callbacks::default();
+        callbacks.request();
+        assert!(draw_waits_for_callback(callbacks.pending, true, false));
+        callbacks.invalidate();
+        assert!(!draw_waits_for_callback(callbacks.pending, true, false));
+    }
+
+    #[test]
+    fn an_idle_or_damaged_frame_arms_no_stand_in() {
+        // Idle (no motion or open in progress): no timer, so no wakeup. Damaged: niri repaints it.
+        assert_eq!(missed_callback_delay(0, false, REFRESH), None);
+        assert_eq!(missed_callback_delay(1, true, REFRESH), None);
+        assert_eq!(missed_callback_delay(1, false, REFRESH), None);
+    }
+}
+
 fn layer_motion_handoff_eligible(
     opening: bool,
     sampled_progress: Option<f32>,
@@ -4159,6 +4199,25 @@ impl App {
                 .push(frame_started.elapsed().as_secs_f64() * 1000.);
         }
         let companion = self.surfaces[index].companion;
+        let s = &self.surfaces[index];
+        let in_progress = layer_motion_active || (companion && self.panel_open.is_some());
+        if result.is_ok()
+            && s.frames > previous_frames
+            && let Some(delay) = missed_callback_delay(damage_px, in_progress, s.refresh_ns)
+        {
+            let (identity, armed, kick) = (s.wl_surface().clone(), s.frames, qh.clone());
+            let wait = Timer::from_duration(delay);
+            let _ = self.loop_handle.insert_source(wait, move |_, _, app| {
+                if let Some(s) = app.surfaces.get_mut(index)
+                    && s.wl_surface() == &identity
+                    && (s.frames, s.callbacks.pending, s.redraw) == (armed, true, true)
+                {
+                    s.callbacks.invalidate();
+                    app.draw(index, &kick);
+                }
+                TimeoutAction::Drop
+            });
+        }
         let arm_transient = if companion {
             self.companion
                 .as_mut()
