@@ -59,6 +59,16 @@ Closing mid-grow is the existing reveal reversal from its sampled pose. A joined
 `join * radius` behind `join_edge` and is clipped there (shadow included), so the two anchored
 corners are square and flush with the bar; `join -> 0` rounds them (detach), `-> 1` docks.
 
+B0421: the frame decorations join a revealing panel (engaged, merged with its final shape) only
+once the panel has drawn part of its body: the scene's last drawn progress and the reveal clock
+(held at the first pose until a frame showing it is committed) are both above 0. Until then the
+frame keeps its plain tiles, so the held first pose, which shows nothing, leaves no rim opening or
+panel edge in the bar strips before the slide. During the reveal the panel's own art draws the
+join in its crop; at rest both agree, and an open panel stays joined. A close drops the join with
+the request, as before, while the panel's art still covers the strips; a reopen mid-close joins
+at once. The opt-in compositor reveal (`BEAD_LAYER_REVEAL=1`) never poses the client scene and
+keeps joining at once. Test: `the_frame_joins_a_revealing_panel_once_its_reveal_has_drawn`.
+
 Compositor reveal v2 cannot be the mechanism for a growing body: its atlas is baked pixels and a
 plane cannot change shape, so D5 motion runs on the client frame path. v2 stays right for a
 static-body open/close; making it the default needs the compositor side and is not decided here.

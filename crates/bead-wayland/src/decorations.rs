@@ -89,6 +89,11 @@ impl RasterCache {
         }
     }
 }
+/// `posed`: the progress the scene was last drawn at (1 in a scene not posed yet); `clock`: the
+/// reveal's, held at its first pose until a frame showing that pose is committed.
+fn reveal_drawn(posed: f32, clock: Option<(f32, bool)>) -> bool {
+    posed > 0. && clock.is_some_and(|(progress, _)| progress > 0.)
+}
 /// Raster every tile into owned pixels; also runs on the background thread.
 fn raster_tiles(
     specs: &[Decoration],
@@ -196,14 +201,14 @@ impl App {
         if self.panel_target && on_output && !self.panel_ready && !self.panel_fallback_ready {
             return Ok(());
         }
-        let engaged = self.panel_target
-            && on_output
+        let joined = self.panel_target && on_output && self.panel_reveal_drawn();
+        let engaged = joined
             && self
                 .options
                 .panel_spec
                 .as_ref()
                 .is_some_and(|s| s.engages_decorations);
-        let panel = if self.panel_target && on_output {
+        let panel = if joined {
             self.companion
                 .as_ref()
                 .zip(self.options.panel_spec.as_ref())
@@ -344,6 +349,24 @@ impl App {
         self.surfaces[index].commit();
         Ok(())
     }
+    /// B0421: whether the companion has drawn part of its body. A reveal's first pose shows
+    /// nothing, so a join made then shows the rim opening and the panel edge in the strips
+    /// before the slide. A compositor-drawn reveal (opt-in) never poses the scene: it joins at once.
+    fn panel_reveal_drawn(&self) -> bool {
+        let Some((scene, _, _)) = &self.companion else {
+            return true;
+        };
+        let now = self.started.elapsed().as_secs_f64();
+        crate::rendering::reveal_contour_capable(scene, self.layer_motion_manager.as_ref())
+            || scene.motion.as_ref().is_some_and(|m| {
+                // The companion's draw swaps the panel's clock into `animations`.
+                let clock = self.animations.value(&m.id, now);
+                reveal_drawn(
+                    m.progress,
+                    clock.or_else(|| self.panel_animations.value(&m.id, now)),
+                )
+            })
+    }
     /// Start the pending request on one thread; its answer comes back through the calloop channel.
     fn start_decoration_job(&mut self) -> Result<(), String> {
         let Some((generation, work)) = self.decoration_cache.queue.start() else {
@@ -449,6 +472,88 @@ mod tests {
         assert!(cache.sets.len() == 1 && cache.sets[0].0 == key(2));
         assert_eq!(cache.sets[0].1, raster(2));
         assert_ne!(cache.sets[0].1, raster(1));
+    }
+    /// B0421: the presenter's open sequence, from the request to rest, then a reopen mid-close.
+    /// `joins` is the frame's join decision (`panel_reveal_drawn` while the panel is targeted).
+    #[test]
+    fn the_frame_joins_a_revealing_panel_once_its_reveal_has_drawn() {
+        use bead_core::animation::{Animations, Curve};
+        let body = Rect {
+            x: 32.,
+            y: 0.,
+            w: 200.,
+            h: 120.,
+        };
+        let mut scene = Scene::empty(264., 152.);
+        scene.primitives.push(bead_render::Primitive::Rounded {
+            rect: body,
+            radius: 8.,
+            fill: [40, 40, 40, 255],
+            border: None,
+            radial: None,
+        });
+        // A fresh scene says progress 1 until the presenter poses it.
+        scene.motion = Some(bead_render::Motion {
+            id: "panel".into(),
+            open: true,
+            duration: 0.2,
+            return_duration: None,
+            return_curve: None,
+            auto_open: false,
+            spring: false,
+            curve: None,
+            edge: bead_core::Edge::Top,
+            slide_distance: None,
+            scale_from: None,
+            fade: false,
+            reveal: true,
+            progress: 1.,
+            parts: Vec::new(),
+            art: None,
+            body: Some(body),
+        });
+        let mut clock = Animations::default();
+        let joins = |target: bool, scene: &Scene, clock: &Animations, now| {
+            target
+                && reveal_drawn(
+                    scene.motion.as_ref().unwrap().progress,
+                    clock.value("panel", now),
+                )
+        };
+        let pose = |scene: &mut Scene, clock: &Animations, now, open| {
+            let (progress, _) = clock.value("panel", now).unwrap();
+            scene.panel_offset(progress, open);
+            progress
+        };
+        // The open request: the reveal holds its closed first pose.
+        clock.open_to("panel", true, 0., 0.2, Curve::EaseOut);
+        assert!(!joins(true, &scene, &clock, 0.), "fresh scene, held pose");
+        // The first frame shows nothing; its commit starts the clock.
+        assert_eq!(pose(&mut scene, &clock, 0., true), 0.);
+        clock.committed("panel", 0., 0.01);
+        // A bar redraw before the next panel frame: the clock moved, nothing is drawn yet.
+        assert!(
+            !joins(true, &scene, &clock, 0.02),
+            "before the first revealed frame"
+        );
+        // The first revealed frame draws part of the body: the frame joins it from then on.
+        assert!(pose(&mut scene, &clock, 0.03, true) > 0.);
+        assert!(
+            joins(true, &scene, &clock, 0.04),
+            "after the first revealed frame"
+        );
+        assert_eq!(pose(&mut scene, &clock, 1., true), 1.);
+        assert!(joins(true, &scene, &clock, 1.), "at rest");
+        // The close drops the join with the target, while the panel's own art still covers the
+        // strips (it shows nothing below a pixel of body, where the frame is plain again).
+        clock.open_to("panel", false, 2., 0.2, Curve::EmphasizedAccelerate);
+        assert!(!joins(false, &scene, &clock, 2.), "closing");
+        pose(&mut scene, &clock, 2., false);
+        clock.committed("panel", 2., 2.);
+        assert!(pose(&mut scene, &clock, 2.1, false) > 0.);
+        // Reopened mid-close: the body is on screen, so the join comes back at once.
+        clock.open_to("panel", true, 2.1, 0.2, Curve::EaseOut);
+        assert!(joins(true, &scene, &clock, 2.1), "reopened mid-close");
     }
     #[test]
     fn the_cache_keeps_its_own_set_and_six_sets() {
