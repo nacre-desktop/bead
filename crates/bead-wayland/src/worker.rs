@@ -431,6 +431,10 @@ fn enqueue(queue: &mut VecDeque<Job>, mut job: Job) -> bool {
             Some(Job::Stage(UiEvent::MotionAction { name: previous, .. }, _)),
             Job::Stage(UiEvent::MotionAction { name, .. }, _),
         ) => previous == name,
+        // A host wakeup carries no data: one staging after a burst reads the same live state.
+        (Some(Job::Stage(UiEvent::Model(old), _)), Job::Stage(UiEvent::Model(new), _)) => {
+            old.is_empty() && new.is_empty()
+        }
         _ => false,
     };
     if replace {
@@ -2702,6 +2706,38 @@ mod tests {
             queue.pop_front(),
             Some(Job::Stage(UiEvent::Release, _))
         ));
+    }
+    #[test]
+    fn adjacent_empty_models_merge_and_everything_else_is_a_barrier() {
+        let empty = || Job::Stage(UiEvent::Model(Default::default()), vec![1.]);
+        let full = || {
+            Job::Stage(
+                UiEvent::Model([("k".to_string(), bead_core::Value::Text("v".into()))].into()),
+                vec![1.],
+            )
+        };
+        let run = |jobs: Vec<Job>| {
+            let mut queue = VecDeque::new();
+            for job in jobs {
+                enqueue(&mut queue, job);
+            }
+            queue.len()
+        };
+        assert_eq!(run(vec![empty(), empty(), empty()]), 1);
+        assert_eq!(run(vec![empty(), full(), empty()]), 3);
+        let click = || Job::Stage(UiEvent::Click { x: 1., y: 1. }, vec![1.]);
+        assert_eq!(run(vec![empty(), click(), empty()]), 3);
+        let scroll = || {
+            Job::ContentScroll(
+                UiEvent::Scroll {
+                    x: 1.,
+                    y: 1.,
+                    delta: 1.,
+                },
+                vec![1.],
+            )
+        };
+        assert_eq!(run(vec![scroll(), empty(), scroll(), empty()]), 4);
     }
     #[test]
     fn budget_retirement_retries_once_and_shutdown_never_waits_for_ui_ack() {
