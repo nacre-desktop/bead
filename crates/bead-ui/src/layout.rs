@@ -130,6 +130,7 @@ pub const PROPERTIES: &[&str] = &[
     "edge_hover",
     "scroll",
     "scroll_steps",
+    "overscan",
     "scrollbar",
     "fill",
     "radial",
@@ -251,6 +252,8 @@ pub struct ViewSpec {
     /// A non-Scroll node's `scroll = ui.action(..)`; the action takes the wheel delta.
     pub scroll_action: Option<String>,
     pub scroll_steps: Option<bead_render::ScrollSteps>,
+    /// B0419: how many viewports past its clip a Scroll rasters while it moves.
+    pub overscan: f32,
     pub scrollbar: bool,
     pub fill: Option<Json>,
     /// The fill amount is an animation marker: draw the box even while it is transparent,
@@ -1222,6 +1225,13 @@ impl ViewSpec {
                 _ => None,
             };
             let scroll_steps = scroll_steps(p, scroll_action.is_some(), source)?;
+            if raw.kind != Widget::Scroll && p.contains_key("overscan") {
+                return Err(source.error("overscan needs a Scroll"));
+            }
+            let overscan = number(p, "overscan", 1., source)?;
+            if !(0. ..=3.).contains(&overscan) {
+                return Err(source.error("overscan must be 0..3"));
+            }
             // A graph's `on_activate` takes a node id from its canvas, not the generic action.
             let action = p
                 .get("on_activate")
@@ -1410,6 +1420,7 @@ impl ViewSpec {
                 scroll,
                 scroll_action,
                 scroll_steps,
+                overscan,
                 scrollbar: boolean(p, "scrollbar", true, source)?,
                 fill: p.get("fill").cloned(),
                 animated_fill: raw
@@ -1711,6 +1722,32 @@ fn intersect(a: Rect, b: Rect) -> Option<Rect> {
     let bottom = (a.y + a.h).min(b.y + b.h);
     (right > x && bottom > y).then(|| Rect::new(x, y, right - x, bottom - y))
 }
+/// B0419: a Scroll's plane at `offset`. While it moves, its interest reaches `overscan`
+/// viewports past the clip, within the content; `ready` is the content span inside it.
+pub(crate) fn plane(
+    r: Rect,
+    clip: Rect,
+    (offset, limit): (f32, f32),
+    overscan: f32,
+    moving: bool,
+) -> bead_render::ScrollPlane {
+    let top = r.y - offset;
+    let mut interest = clip;
+    // shortcut: no per-plane raster budget; interest is ±overscan viewports, bounded only by the
+    // 68 MiB frame limit; add a nearest-first budget if the rig shows > 8 MiB per plane while moving.
+    if moving && overscan > 0. {
+        interest.y = (clip.y - overscan * r.h).max(top);
+        interest.h = (clip.y + clip.h + overscan * r.h).min(top + r.h + limit) - interest.y;
+    }
+    let ready = (interest.y - top, interest.y + interest.h - top);
+    bead_render::ScrollPlane {
+        offset,
+        limit,
+        clip,
+        interest,
+        ready,
+    }
+}
 #[cfg(feature = "test-counters")]
 std::thread_local! { static LAYOUT_PASSES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) }; }
 /// Thread-local actual Taffy passes; independent tests do not race on a global count.
@@ -1796,6 +1833,11 @@ pub fn layout(
             }
         })
         .unwrap_or_default();
+    // B0419: the plane `bead.scrolling` names is moving: its interest reaches past its clip.
+    let scrolling = match resolve("bead.scrolling") {
+        Ok(Value::Text(id)) => id,
+        _ => String::new(),
+    };
     #[allow(clippy::too_many_arguments)] // Recursive traversal shares one fixed render context.
     fn draw(
         view: &ViewSpec,
@@ -1809,7 +1851,7 @@ pub fn layout(
         scroll_limit: Option<f64>,
         resolve: &Resolve<'_>,
         palette: &Palette,
-        hover: &str,
+        (hover, scrolling): (&str, &str),
         out: &mut LaidOut,
     ) -> Result<(), Diagnostic> {
         if !view.visible {
@@ -2151,12 +2193,14 @@ pub fn layout(
             let Value::Number(offset) = resolve(store)? else {
                 return Err(source.error("scroll must bind a number"));
             };
-            children_pos.1 -= offset.clamp(0., scroll_limit.unwrap_or(f64::MAX)) as f32;
-            child_clip = Some(if let Some(c) = child_clip {
-                c.intersect(r)
-            } else {
-                r
-            });
+            let offset = offset.clamp(0., scroll_limit.unwrap_or(f64::MAX)) as f32;
+            children_pos.1 -= offset;
+            let clip = child_clip.map_or(r, |c| c.intersect(r));
+            child_clip = Some(clip);
+            let span = (offset, scroll_limit.unwrap_or(0.) as f32);
+            let moving = !scrolling.is_empty() && scrolling == view.id;
+            let plane = plane(r, clip, span, view.overscan, moving);
+            out.scene.layers[layer_index].scroll = Some(plane);
         }
         for child in &view.children {
             draw(
@@ -2171,7 +2215,7 @@ pub fn layout(
                 scroll_limit,
                 resolve,
                 palette,
-                hover,
+                (hover, scrolling),
                 out,
             )?;
         }
@@ -2190,7 +2234,7 @@ pub fn layout(
         None,
         resolve,
         palette,
-        &hover,
+        (&hover, &scrolling),
         &mut output,
     )?;
     if let Some(body) = &view.body {

@@ -810,6 +810,8 @@ impl Generation {
         for (id, value) in [
             ("bead.focused", Value::Text(String::new())),
             ("bead.hovered", Value::Text(String::new())),
+            // B0419: the id of the scroll plane that is moving, "" at rest.
+            ("bead.scrolling", Value::Text(String::new())),
             ("bead.focus_visible", Value::Bool(true)),
             // A bar-hosted lip's hover dwell fill and cue visibility, published by the compositor host.
             ("bead.edge.dwell", Value::Number(0.)),

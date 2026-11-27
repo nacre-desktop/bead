@@ -26,6 +26,8 @@ struct Scroll {
     layer: usize,
     binding: String,
     limit: f64,
+    /// B0419: the plane's `overscan`, so a patch can re-place it.
+    overscan: f32,
 }
 struct Floating {
     index: usize,
@@ -113,7 +115,12 @@ enum Slot {
     Border,
 }
 /// Reserved interaction stores the patch handles without a rebuild.
-const INTERACTION: [&str; 3] = ["bead.hovered", "bead.focused", "bead.focus_visible"];
+const INTERACTION: [&str; 4] = [
+    "bead.hovered",
+    "bead.focused",
+    "bead.focus_visible",
+    "bead.scrolling",
+];
 pub(super) struct Cached {
     /// When the scene was built: a motion finished by then is already at its target.
     built_ns: u64,
@@ -227,6 +234,13 @@ impl Topology {
             }
             clips.push(if self.clips[index] {
                 let bounds = clip.map_or(layer.bounds, |c| c.intersect(layer.bounds));
+                // B0419: a plane's clip follows its layer; at rest its interest stays that clip.
+                if let Some(plane) = layer.scroll.as_mut().filter(|_| moved || map != IDENTITY) {
+                    if plane.interest == plane.clip {
+                        plane.interest = bounds;
+                    }
+                    plane.clip = bounds;
+                }
                 (Some(bounds), moved || map != IDENTITY)
             } else {
                 (clip, moved)
@@ -625,6 +639,7 @@ impl Cached {
                     layer,
                     binding: binding.clone(),
                     limit: node.scroll_limit.unwrap_or(0.),
+                    overscan: view.overscan,
                 });
             }
             for child in &view.children {
@@ -1049,6 +1064,25 @@ impl Cached {
         } else {
             vec![]
         };
+        // B0419: each plane follows its offset and `bead.scrolling`, with no Luau. shortcut: under
+        // a scale track the offset stays in layout px, so interest and ready are approximate there;
+        // scale the span by the layer's map if a scaled plane ever moves.
+        let scrolling = changed
+            .get("bead.scrolling")
+            .or(self.values.get("bead.scrolling"));
+        for scroll in &self.scroll {
+            let layer = &mut scene.layers[scroll.layer];
+            let offset = changed
+                .get(&scroll.binding)
+                .or(self.values.get(&scroll.binding));
+            if let (Some(plane), Some(Value::Number(offset))) = (layer.scroll, offset) {
+                let moving =
+                    matches!(scrolling, Some(Value::Text(id)) if !id.is_empty() && *id == layer.id);
+                let span = (offset.clamp(0., scroll.limit) as f32, plane.limit);
+                let plane = layout::plane(layer.bounds, plane.clip, span, scroll.overscan, moving);
+                layer.scroll = Some(plane);
+            }
+        }
         follow_body(&mut scene, self.body_layer);
         if let (Some(node), Some(ring)) = (focus_target, self.floating.first()) {
             let node = &nodes[node];

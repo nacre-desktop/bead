@@ -1944,3 +1944,207 @@ return ui.Column{id='root',width=2400,height=900,fill='surface',
         times[36]
     );
 }
+
+/// B0419: a 200 px Scroll over 1000 px of content at offset 100; its text sits 150 px below the clip.
+const PLANE_VIEW: &str = r#"local ui=require('bead.ui')
+return ui.Column{id='root',width=200,height=300,fill='surface',
+ ui.Scroll{id='list',scroll=ui.bind('scroll'),width=180,height=200,
+  ui.Column{id='rows',width=180,height=1000,shrink=0,
+   ui.Box{id='gap',width=180,height=450,shrink=0},
+   ui.Text{id='far',text='Far row',width=180,height=20,shrink=0}}}}"#;
+const PLANE_BEHAVIOR: &str = "return {stores={scroll=100},actions={},computed={}}";
+fn plane_of(scene: &Scene) -> (String, bead_render::ScrollPlane) {
+    let layer = scene.layers.iter().find(|l| l.scroll.is_some());
+    let layer = layer.expect("a scroll plane");
+    (layer.id.clone(), layer.scroll.unwrap())
+}
+fn scrolling(id: &str) -> BTreeMap<String, Value> {
+    BTreeMap::from([("bead.scrolling".into(), Value::Text(id.into()))])
+}
+
+#[test]
+fn scroll_plane_geometry_at_rest_and_while_moving() {
+    let (_fixture, mut session) = interaction_fixture(PLANE_VIEW, PLANE_BEHAVIOR);
+    let (id, rest) = plane_of(&session.current);
+    let clip = Rect::new(0., 0., 180., 200.);
+    assert_eq!(
+        (
+            rest.offset,
+            rest.limit,
+            rest.clip,
+            rest.interest,
+            rest.ready
+        ),
+        (100., 800., clip, clip, (100., 300.)),
+        "at rest the interest is the clip and ready its content span"
+    );
+    let moving = session.update(scrolling(&id)).unwrap().unwrap();
+    let (_, plane) = plane_of(&moving);
+    // One viewport of overscan each way, clamped to the content's top (at -100).
+    assert_eq!(
+        (plane.offset, plane.clip, plane.interest, plane.ready),
+        (100., clip, Rect::new(0., -100., 180., 500.), (0., 500.))
+    );
+    // `overscan` is a Scroll prop within 0..3.
+    for (view, message) in [
+        (
+            PLANE_VIEW.replace("height=200,", "height=200,overscan=4,"),
+            "overscan must be 0..3",
+        ),
+        (
+            PLANE_VIEW.replace("id='gap',", "id='gap',overscan=1,"),
+            "overscan needs a Scroll",
+        ),
+    ] {
+        let fixture = Fixture::new();
+        fs::create_dir_all(fixture.0.join("ui")).unwrap();
+        fs::write(fixture.0.join("ui/behavior.luau"), PLANE_BEHAVIOR).unwrap();
+        fs::write(fixture.0.join("ui/main.luau"), view).unwrap();
+        let mut session = fixture.session();
+        session.entry = "ui/main.luau".into();
+        let error = session.reload().err().expect("a markup error");
+        assert!(error.message.contains(message), "{}", error.message);
+    }
+}
+
+#[test]
+fn scroll_plane_rasters_the_text_below_its_clip_only_while_moving() {
+    use bead_render::tree::TreeCache;
+    let (_fixture, mut session) = interaction_fixture(PLANE_VIEW, PLANE_BEHAVIOR);
+    let far = |scene: &Scene| {
+        let text = |p: &Primitive| matches!(p, Primitive::Text { text, .. } if text == "Far row");
+        let far = scene.primitives.iter().position(text);
+        far.expect("the far text is in the scene")
+    };
+    let rasters = |cache: &mut TreeCache, scene: &Scene| {
+        cache.prepare(scene, 1.).unwrap();
+        cache.frame.as_ref().unwrap().items[far(scene)]
+            .raster
+            .is_some()
+    };
+    let rest = session.current.clone();
+    assert_eq!(
+        crate::rect(&rest.primitives[far(&rest)]).y,
+        350.,
+        "150 px below the clip"
+    );
+    let mut cache = TreeCache::default();
+    assert!(!rasters(&mut cache, &rest), "at rest only the clip rasters");
+    let (id, _) = plane_of(&rest);
+    let moving = session.update(scrolling(&id)).unwrap().unwrap();
+    session.commit(moving.clone());
+    assert_eq!(moving.primitives.len(), rest.primitives.len());
+    assert!(
+        rasters(&mut cache, &moving),
+        "while bead.scrolling names the plane, its overscan text rasters"
+    );
+    let settled = session.update(scrolling("")).unwrap().unwrap();
+    assert!(!rasters(&mut cache, &settled), "the settle drops it again");
+}
+
+#[test]
+fn scroll_plane_follows_a_scroll_patch_with_no_luau() {
+    let (_fixture, mut session) = interaction_fixture(PLANE_VIEW, PLANE_BEHAVIOR);
+    let (_reference_fixture, mut reference) = interaction_fixture(PLANE_VIEW, PLANE_BEHAVIOR);
+    let (id, _) = plane_of(&session.current);
+    let moving = session.update(scrolling(&id)).unwrap().unwrap();
+    session.commit(moving);
+    frontend::reset_eval_calls();
+    let hits = patch_hits();
+    let step = BTreeMap::from([("scroll".into(), Value::Number(300.))]);
+    let patched = session.update(step.clone()).unwrap().unwrap();
+    assert_eq!(patch_hits(), hits + 1, "the scroll step is a patch");
+    assert_eq!(frontend::eval_calls(), 0, "and runs no Luau");
+    let (_, plane) = plane_of(&patched);
+    assert_eq!(
+        (plane.offset, plane.interest, plane.ready),
+        (300., Rect::new(0., -200., 180., 600.), (100., 700.))
+    );
+    let mut stores = step;
+    stores.extend(scrolling(&id));
+    assert_eq!(
+        plane_of(&rebuilt(&mut reference, stores)).1,
+        plane,
+        "a full layout of the same stores places the same plane"
+    );
+}
+
+#[test]
+fn scroll_plane_at_rest_adds_no_primitive_or_raster() {
+    use bead_render::tree::TreeCache;
+    let (_fixture, mut session) = interaction_fixture(PLANE_VIEW, PLANE_BEHAVIOR);
+    let (_reference_fixture, mut reference) = interaction_fixture(PLANE_VIEW, PLANE_BEHAVIOR);
+    let (id, _) = plane_of(&session.current);
+    for changes in [scrolling(&id), scrolling("")] {
+        let scene = session.update(changes).unwrap().unwrap();
+        session.commit(scene);
+    }
+    let rest = session.current.clone();
+    let (_, plane) = plane_of(&rest);
+    assert_eq!(plane.interest, plane.clip);
+    // Today's scene is the same layout without planes.
+    let mut today = rest.clone();
+    for layer in &mut today.layers {
+        layer.scroll = None;
+    }
+    let rasters = |scene: &Scene| {
+        let mut cache = TreeCache::default();
+        cache.prepare(scene, 1.).unwrap();
+        let items = &cache.frame.as_ref().unwrap().items;
+        items
+            .iter()
+            .map(|item| {
+                let raster = item.raster.as_ref();
+                let raster = raster.map(|r| (r.key, r.pixels.data().len()));
+                (item.id.clone(), item.clip, raster)
+            })
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(rasters(&rest), rasters(&today));
+    let full = rebuilt(&mut reference, BTreeMap::new());
+    assert_eq!(
+        painted(&rest, session.view_nodes()),
+        painted(&full, reference.view_nodes()),
+        "a settled plane paints exactly like a fresh layout"
+    );
+}
+
+#[test]
+fn scroll_plane_patch_follows_an_ancestor_mid_animation() {
+    let view = format!(
+        "{TRACK}{}",
+        r#"local ui=require('bead.ui')
+return ui.Column{id='root',width=300,height=400,fill='surface',
+ ui.Box{id='slide',width=200,height=300,clip_children=true,translate_y=track({0,1},{0,40}),
+  ui.Scroll{id='list',scroll=ui.bind('scroll'),width=180,height=200,
+   ui.Column{id='rows',width=180,height=1000,shrink=0,
+    ui.Text{id='row',text='Row',width=180,height=20,shrink=0}}}}}"#
+    );
+    pin(0.);
+    let behavior = "return {stores={scroll=0},actions={},computed={}}";
+    let (_fixture, mut session) = interaction_fixture(&view, behavior);
+    let (id, _) = plane_of(&session.current);
+    let stores = |offset: f64| {
+        let mut stores = scrolling(&id);
+        stores.insert("scroll".into(), Value::Number(offset));
+        stores
+    };
+    let json = |p: bead_render::ScrollPlane| {
+        serde_json::to_value((p.offset, p.limit, p.clip, p.interest, p.ready)).unwrap()
+    };
+    for t in [0.25, 0.5, 1.] {
+        pin(0.);
+        rebuilt(&mut session, stores(0.));
+        pin(t);
+        let hits = patch_hits();
+        let patched = session.update(stores(50.)).unwrap().unwrap();
+        assert_eq!(patch_hits(), hits + 1, "t={t}: the frame is a patch");
+        session.commit(patched.clone());
+        let (_, plane) = plane_of(&patched);
+        let y = 40. * t as f32;
+        assert!((plane.clip.y - y).abs() < 1e-3, "t={t}: {plane:?}");
+        let full = rebuilt(&mut session, stores(50.));
+        assert_close(&json(plane), &json(plane_of(&full).1), &format!("t={t}"));
+    }
+    crate::layout::PINNED_CLOCK.set(None);
+}

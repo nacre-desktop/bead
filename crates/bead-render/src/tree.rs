@@ -88,13 +88,29 @@ fn validate_frame_rasters(items: &[Item]) -> Result<()> {
     Ok(())
 }
 
+/// B0419: each moving scroll plane (interest wider than its clip): its content range and interest.
+fn moving_planes(scene: &Scene) -> Vec<(std::ops::Range<usize>, Rect)> {
+    let moving = scene.layers.iter().filter_map(|layer| {
+        let plane = layer.scroll.filter(|p| p.interest != p.clip)?;
+        Some((layer.own.end..layer.subtree_end, plane.interest))
+    });
+    moving.collect()
+}
+
 /// Only immutable image/text rasters wholly outside a persistent clip are omitted.
 /// Reveal-window clips are animated poses and must never decide raster lifetime.
-fn raster_hidden_by_own_clip(scene: &Scene, index: usize, primitive: &Primitive) -> bool {
+/// B0419: the content of a moving plane (the innermost) is held to its interest area instead.
+fn raster_hidden_by_own_clip(
+    scene: &Scene,
+    index: usize,
+    primitive: &Primitive,
+    planes: &[(std::ops::Range<usize>, Rect)],
+) -> bool {
     if !matches!(primitive, Primitive::Image { .. } | Primitive::Text { .. }) {
         return false;
     }
-    let Some(clip) = scene.clips.get(&index) else {
+    let plane = planes.iter().rev().find(|p| p.0.contains(&index));
+    let Some(clip) = plane.map(|p| &p.1).or(scene.clips.get(&index)) else {
         return false;
     };
     let offset = scene.content_offset(index);
@@ -110,6 +126,7 @@ fn prepared_rasters_match_visibility(scene: &Scene, frame: &Frame) -> bool {
     // Imported frames can intentionally have a different item vector than
     // the source scene. Preserve that existing path; visibility correspondence
     // is only defined for the generated one-item-per-primitive frame.
+    let planes = moving_planes(scene);
     frame.items.len() != scene.primitives.len()
         || scene
             .primitives
@@ -117,7 +134,8 @@ fn prepared_rasters_match_visibility(scene: &Scene, frame: &Frame) -> bool {
             .enumerate()
             .all(|(index, primitive)| {
                 if matches!(primitive, Primitive::Image { .. } | Primitive::Text { .. }) {
-                    let should_have_raster = !raster_hidden_by_own_clip(scene, index, primitive);
+                    let should_have_raster =
+                        !raster_hidden_by_own_clip(scene, index, primitive, &planes);
                     let has =
                         frame.items[index].raster.is_some() || frame.items[index].image.is_some();
                     // B0377: a zero-opacity image may come without one (its payload prefetches).
@@ -1881,6 +1899,7 @@ impl TreeCache {
             }
         }
         let mut asset_keys = self.seeded_asset_hashes(scene);
+        let planes = moving_planes(scene);
         for (index, primitive) in scene.primitives[..start].iter().enumerate() {
             let item = &previous.items[index];
             // An unowned primitive's id is `primitive-{index}/{kind}/0`.
@@ -1898,6 +1917,10 @@ impl TreeCache {
                     && item.raster.as_ref().is_some_and(|raster| {
                         raster.key != signature(scene, primitive, scale, &mut asset_keys)
                     }))
+                // B0419: a plane that starts or stops moving needs other rasters.
+                || (matches!(primitive, Primitive::Image { .. } | Primitive::Text { .. })
+                    && item.raster.is_none()
+                        != raster_hidden_by_own_clip(scene, index, primitive, &planes))
             {
                 return Ok(false);
             }
@@ -2213,6 +2236,7 @@ impl TreeCache {
         // B0318: rasters kept for this frame only, because admission refused them.
         let mut transient = (0usize, Vec::new());
         let mut prefetch = Vec::new();
+        let planes = moving_planes(scene);
         for (index, primitive) in scene.primitives.iter().enumerate() {
             if index == tail_start {
                 tail_hash = Some(frame_hash.clone());
@@ -2241,7 +2265,7 @@ impl TreeCache {
                     value.to_bits().hash(&mut frame_hash);
                 }
             }
-            let raster_hidden = raster_hidden_by_own_clip(scene, index, primitive);
+            let raster_hidden = raster_hidden_by_own_clip(scene, index, primitive, &planes);
             // Reshaped reveal artwork uses the existing exact growing-edge path.
             let reshaped_reveal = scene.motion.as_ref().is_some_and(|motion| {
                 motion.reveal && motion.parts.iter().any(|(part, _)| *part == index)
@@ -7784,6 +7808,93 @@ mod tests {
         assert_ne!(a2.key, b2.key);
         assert!(!Arc::ptr_eq(&a2.pixels, &b2.pixels));
         assert_eq!(a2.key, a.key);
+    }
+    #[test]
+    fn scroll_plane_settle_drops_overscan_rasters_on_the_thumb_path() {
+        // B0419: a plane with a text in its clip and one below it, then a scrollbar thumb.
+        let plane = |moving: bool, thumb: u8| {
+            let mut scene = scene();
+            scene.bounds = Rect::new(0., 0., 24., 40.);
+            scene.font_files = vec![
+                std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                    .join("../bead-test/fonts/IBMPlexSans.ttf"),
+            ];
+            let text = |y: f32, text: &str| Primitive::Text {
+                rect: Rect::new(2., y, 16., 6.),
+                text: text.into(),
+                family: "IBM Plex Sans".into(),
+                size: 5.,
+                color: [255, 255, 255, 255],
+                weight: 400,
+                align: None,
+                shadow: None,
+                features: Vec::new(),
+            };
+            let clip = Rect::new(0., 0., 24., 20.);
+            let thumb_rect = Rect::new(20., 2., 3., 9.);
+            scene.primitives = vec![
+                text(2., "Near"),
+                text(30., "Far"),
+                Primitive::Rounded {
+                    rect: thumb_rect,
+                    radius: 1.5,
+                    fill: [200, 200, 200, thumb],
+                    border: None,
+                    radial: None,
+                },
+            ];
+            scene.clips = (0..3).map(|index| (index, clip)).collect();
+            let interest = if moving {
+                Rect::new(0., 0., 24., 40.)
+            } else {
+                clip
+            };
+            let layer = |id: &str, parent: Option<&str>, own, subtree_end, bounds, scroll| {
+                crate::SceneLayer {
+                    id: id.into(),
+                    parent: parent.map(Into::into),
+                    own,
+                    subtree_end,
+                    bounds,
+                    scroll,
+                }
+            };
+            let scroll = crate::ScrollPlane {
+                offset: 0.,
+                limit: 20.,
+                clip,
+                interest,
+                ready: (0., interest.h),
+            };
+            scene.layers = vec![
+                layer("list", None, 0..0, 2, clip, Some(scroll)),
+                layer(
+                    "rows",
+                    Some("list"),
+                    0..2,
+                    2,
+                    Rect::new(2., 2., 16., 34.),
+                    None,
+                ),
+                layer("@scrollbar:list", None, 2..3, 3, thumb_rect, None),
+            ];
+            scene
+        };
+        let far = |cache: &TreeCache| cache.frame.as_ref().unwrap().items[1].raster.is_some();
+        let mut cache = TreeCache::default();
+        cache.prepare(&plane(true, 200), 1.).unwrap();
+        assert!(far(&cache), "moving: the text below the clip rasters");
+        let hits = FILL_TAIL_HITS.get();
+        cache.prepare(&plane(false, 200), 1.).unwrap();
+        assert_eq!(FILL_TAIL_HITS.get(), hits, "the settle is a full prepare");
+        assert!(!far(&cache), "at rest its raster is gone");
+        cache.prepare(&plane(false, 120), 1.).unwrap();
+        assert_eq!(
+            FILL_TAIL_HITS.get(),
+            hits + 1,
+            "a thumb fade at rest still reuses the content"
+        );
+        assert!(!far(&cache));
     }
     #[test]
     fn scroll_thumb_frames_reuse_the_content_and_equal_a_full_prepare() {
