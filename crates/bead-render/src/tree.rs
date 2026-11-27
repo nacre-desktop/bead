@@ -1451,10 +1451,18 @@ impl TreeCache {
         let ghost_progress = ((EDGE_MIN_REVEALED + 24.) / length).clamp(0.5, 0.9);
         let ghost_body = Scene::revealed(body, edge, ghost_progress);
         let ghost = lead_of(ghost_body);
+        // The artwork may reach past its body (a joined fillet): the band covers all of it.
+        let outside = match kind {
+            EdgeKind::Art(_) if far => {
+                EDGE_OUTSIDE.max(origin + extent as f32 / scale - lead_of(body))
+            }
+            EdgeKind::Art(_) => EDGE_OUTSIDE.max(lead_of(body) - origin),
+            EdgeKind::Shadow { .. } => EDGE_OUTSIDE,
+        };
         let (low, high) = if far {
-            (ghost - inside, ghost + EDGE_OUTSIDE)
+            (ghost - inside, ghost + outside)
         } else {
-            (ghost - EDGE_OUTSIDE, ghost + inside)
+            (ghost - outside, ghost + inside)
         };
         let first = (((low - origin) * scale).floor() as i64).max(0);
         let last = (((high - origin) * scale).ceil() as i64).min(extent as i64);
@@ -6304,6 +6312,139 @@ mod tests {
                 "progress {progress}: {} pixels differ, worst {worst:?}",
                 bad.len()
             );
+        }
+    }
+    #[test]
+    fn a_revealing_edge_band_draws_the_art_past_the_body_whole() {
+        // The art reaches 32 px past the body's growing (left) edge, like a joined fillet.
+        let body = Rect::new(300., 40., 600., 300.);
+        let draw: Arc<dyn Fn(Rect, Option<Rect>) -> crate::RevealFrame + Send + Sync> = Arc::new(
+            |rev, crop| {
+                let r = crop.unwrap_or(Rect::new(rev.x - 32., rev.y, rev.w + 32., rev.h));
+                let text = format!(
+                    "<svg xmlns='http://www.w3.org/2000/svg' width='{}' height='{}' viewBox='{} {} {} {}'>\
+                     <rect x='{}' y='{}' width='{}' height='{}' fill='#1e1e28'/>\
+                     <rect x='{}' y='{}' width='32' height='24' fill='#c83232'/></svg>",
+                    r.w,
+                    r.h,
+                    r.x,
+                    r.y,
+                    r.w,
+                    r.h,
+                    rev.x,
+                    rev.y,
+                    rev.w,
+                    rev.h,
+                    rev.x - 32.,
+                    rev.y
+                );
+                (r, Arc::from(text.into_bytes()))
+            },
+        );
+        let (open_rect, open_svg) = draw(body, None);
+        let mut scene = Scene {
+            opacity: 1.,
+            motion: None,
+            resource_revision: 1,
+            asset_data: BTreeMap::from([("open.svg".into(), open_svg)]),
+            clips: BTreeMap::new(),
+            layers: vec![],
+            prepared: Default::default(),
+            font_files: vec![],
+            width: 1000.,
+            slide: None,
+            primitives: vec![Primitive::image(open_rect, "open.svg")],
+            offset: (0., 0.),
+            bounds: Rect::new(0., 0., 1000., 400.),
+            input_islands: None,
+            key_repeat: None,
+            palette_at_rest: false,
+        };
+        let primitive = scene.primitives[0].clone();
+        scene.motion = Some(crate::Motion {
+            id: "edge-art-test".into(),
+            open: true,
+            duration: 0.2,
+            return_duration: None,
+            return_curve: None,
+            auto_open: false,
+            spring: false,
+            curve: None,
+            edge: bead_core::Edge::Right,
+            slide_distance: None,
+            scale_from: None,
+            fade: false,
+            reveal: true,
+            progress: 1.,
+            parts: vec![(0, primitive)],
+            art: Some(crate::RevealArt {
+                body,
+                index: 0,
+                contour: None,
+                draw,
+            }),
+            body: Some(body),
+        });
+        scene.reveal(1.);
+        let mut worker = TreeCache::default();
+        worker.prepare(&scene, 1.5).unwrap();
+        scene
+            .prepared
+            .insert(1.5f32.to_bits(), worker.frame.clone().unwrap());
+        let (w, h) = (1500u32, 600u32);
+        let compose = |scene: &Scene| {
+            let mut cache = TreeCache::default();
+            cache.prepare(scene, 1.5).unwrap();
+            let mut bytes = vec![0u8; (w * h * 4) as usize];
+            paint(
+                cache.frame.as_ref().unwrap(),
+                scene.offset,
+                ShmTarget {
+                    bytes: &mut bytes,
+                    width: w,
+                    height: h,
+                    scale: 1.5,
+                    format: PixelFormat::Rgba,
+                },
+                Damage::full(w, h),
+            )
+            .unwrap();
+            (bytes, cache.frame.unwrap())
+        };
+        // The columns where two composed frames differ by more than 2 in a channel.
+        let columns = |a: &[u8], b: &[u8]| {
+            let mut bad: Vec<usize> = (0..a.len())
+                .filter(|i| a[*i].abs_diff(b[*i]) > 2)
+                .map(|i| i / 4 % w as usize)
+                .collect();
+            bad.dedup();
+            bad
+        };
+        let mut at_rest = vec![];
+        for progress in [0.5, 0.9, 0.99, 0.999, 0.9999, 1.] {
+            scene.reveal(progress);
+            let (band, frame) = compose(&scene);
+            if progress < 0.9999 {
+                assert!(
+                    frame.items.iter().any(|item| item.id.ends_with("/edge")),
+                    "progress {progress} draws the art the slow way"
+                );
+            }
+            let mut direct = scene.clone();
+            direct.prepared.clear();
+            let direct = compose(&direct).0;
+            let bad = columns(&band, &direct);
+            // Within a pixel of rest the band's whole-pixel slide may leave one seam column.
+            assert!(
+                bad.is_empty() || (progress == 0.999 && bad.first() == bad.last()),
+                "progress {progress}: {} columns differ from a direct paint",
+                bad.len()
+            );
+            if progress == 0.9999 {
+                at_rest = band;
+            } else if progress == 1. {
+                assert!(columns(&at_rest, &band).is_empty(), "0.9999 steps to rest");
+            }
         }
     }
     #[test]
