@@ -1189,6 +1189,12 @@ pub trait Renderer {
 
     /// Per-surface presentation hint, not global activity on another surface.
     fn presentation_motion(&mut self, _active: bool) {}
+    /// B0419: scroll planes (item range, clip, shift = baked - live, logical px) this surface
+    /// paints moved instead of re-rastering. True when applied; the default takes the worker
+    /// path for any non-empty set.
+    fn scroll_shifts(&mut self, shifts: &[(std::ops::Range<usize>, Rect, (f32, f32))]) -> bool {
+        shifts.is_empty()
+    }
     fn prepared_frame(&self) -> Option<std::sync::Arc<tree::Frame>> {
         None
     }
@@ -3273,6 +3279,14 @@ fn boundary_x(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_renderer_without_an_override_takes_the_worker_path() {
+        use super::{CpuRenderer, Rect, Renderer};
+        let mut renderer = CpuRenderer::default();
+        assert!(Renderer::scroll_shifts(&mut renderer, &[]));
+        let plane = (0..2, Rect::new(0., 0., 10., 10.), (0., -3.));
+        assert!(!Renderer::scroll_shifts(&mut renderer, &[plane]));
+    }
     #[test]
     fn resource_pruning_remaps_retained_layers_clips_and_reveal_parts() {
         let mut scene = font_pool_scene();

@@ -52,3 +52,24 @@ validation, the text 150 px below the clip rasters only while `bead.scrolling` n
 a scroll patch with no Luau equals a full layout, at rest equals today's scene and rasters, a
 patch under a translating ancestor); bead-render `tree.rs`
 `scroll_plane_settle_drops_overscan_rasters_on_the_thumb_path`.
+
+## U2a: GL composite of scroll shifts
+
+`Renderer::scroll_shifts(&[(item range, clip, shift)]) -> bool` is a per-surface hint like
+`presentation_motion`; the default returns true only for an empty set, so every renderer without
+an override means "take the worker path". `GlRenderer` stores the latest set (an empty set clears
+it) and `paint` applies it per item with the pure fns `shift_for` and `placement`:
+- shift = the sum over every plane whose range contains the item (nested planes compose), added to
+  the paint offset, so the device-px rounding of images and text is unchanged;
+- scissor = the innermost plane's clip (unshifted) when the item's own clip is that clip or absent;
+  an inner clip moves with the shift and is cut by the plane clip;
+- cull: an item whose shifted bounds miss the plane clip is skipped. Nothing re-uploads.
+
+Nothing calls it with a non-empty set until U2b, so an empty set paints exactly as before.
+Known limit: an inner clip already cut by the viewport at bake time is shifted as cut (see the
+`shortcut:` comment in gl.rs).
+
+Tests (no GL context): gl.rs `shift_tests` (`nested_planes_compose_their_shifts`,
+`items_outside_the_plane_clip_are_culled_and_partial_ones_are_cut`,
+`the_viewport_clip_stays_and_an_inner_clip_moves`); lib.rs
+`a_renderer_without_an_override_takes_the_worker_path`.

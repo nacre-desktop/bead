@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 //! Shared native EGL context, retained subtree rasters and direct vector primitives.
-use crate::{Damage, RenderTarget, Renderer, Result, Scene, ShmTarget};
+use crate::{Damage, Rect, RenderTarget, Renderer, Result, Scene, ShmTarget};
 use glutin::{
     config::{Config, ConfigTemplateBuilder},
     context::{
@@ -1431,6 +1431,46 @@ pub struct GlRenderer {
     texture_budget: Option<bead_core::cache::Budget>,
     texture_peak: usize,
     gpu: GpuTimer,
+    /// B0419: the scroll planes' shifts the next paints apply (empty: paint as baked).
+    shifts: Vec<Shift>,
+}
+/// A scroll plane: its item range, its clip (the viewport) and the shift (baked - live).
+type Shift = (std::ops::Range<usize>, Rect, (f32, f32));
+/// The sum of the shifts of every plane containing item `index` (nested planes compose).
+fn shift_for(index: usize, shifts: &[Shift]) -> (f32, f32) {
+    shifts
+        .iter()
+        .filter(|(range, ..)| range.contains(&index))
+        .fold((0., 0.), |sum, (.., s)| (sum.0 + s.0, sum.1 + s.1))
+}
+/// The shift and scissor for item `index` (`None`: culled). The innermost plane's clip stays put;
+/// an inner clip moves with the shift.
+fn placement(
+    index: usize,
+    own: Option<Rect>,
+    bounds: Rect,
+    shifts: &[Shift],
+) -> Option<((f32, f32), Option<Rect>)> {
+    let Some((_, plane, _)) = shifts
+        .iter()
+        .filter(|(range, ..)| range.contains(&index))
+        .min_by_key(|(range, ..)| range.len())
+    else {
+        return Some(((0., 0.), own));
+    };
+    let shift = shift_for(index, shifts);
+    let moved = bounds.translated(shift.0, shift.1);
+    let sees =
+        |a: Rect, b: Rect| a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+    if !sees(moved, *plane) {
+        return None;
+    }
+    // shortcut: an inner clip already cut by the viewport at bake time is shifted as cut, so content entering through it can be trimmed until the next sync; carry uncut inner clips (design `inner`) if that shows.
+    let clip = match own {
+        Some(c) if c != *plane => c.translated(shift.0, shift.1).intersect(*plane),
+        _ => *plane,
+    };
+    Some((shift, Some(clip)))
 }
 /// B0338: one `native-gl-images` budget per renderer: its textures live and die with its canvas.
 const TEXTURE_LIMIT: usize = 64 * bead_core::cache::MIB;
@@ -1756,10 +1796,17 @@ impl GlRenderer {
         frame: &crate::tree::Frame,
         images: &std::collections::BTreeMap<Slot, Texture>,
         offset: (f32, f32),
+        shifts: &[Shift],
     ) -> Result<()> {
-        for item in &frame.items {
+        for (index, item) in frame.items.iter().enumerate() {
+            let Some((shift, clip)) =
+                placement(index, item.clip, crate::tree::rect(&item.primitive), shifts)
+            else {
+                continue;
+            };
+            let offset = (offset.0 + shift.0, offset.1 + shift.1);
             canvas.reset_scissor();
-            if let Some(clip) = item.clip {
+            if let Some(clip) = clip {
                 canvas.scissor(
                     (clip.x + offset.0) * frame.scale,
                     (clip.y + offset.1) * frame.scale,
@@ -1961,6 +2008,10 @@ impl GlRenderer {
 }
 
 impl Renderer for GlRenderer {
+    fn scroll_shifts(&mut self, shifts: &[(std::ops::Range<usize>, Rect, (f32, f32))]) -> bool {
+        self.shifts = shifts.to_vec();
+        true
+    }
     /// Release GL image allocations while the renderer's EGL context is current.
     /// `TreeCache` is deliberately retained so the CPU rasterized layers can be
     /// uploaded again without rerasterizing them, and the canvas (its compiled
@@ -2092,7 +2143,7 @@ impl Renderer for GlRenderer {
         let (build_group, composite_group) = group_use(scene.opacity, fade, opening, group_current);
         if !build_group && !composite_group {
             if scene.opacity >= 1. {
-                Self::paint(canvas, frame, &self.images, scene.offset)?;
+                Self::paint(canvas, frame, &self.images, scene.offset, &self.shifts)?;
             }
         } else {
             let (w, h) = group_size(scene, frame);
@@ -2130,6 +2181,7 @@ impl Renderer for GlRenderer {
                     frame,
                     &self.images,
                     (-scene.bounds.x, -scene.bounds.y),
+                    &self.shifts,
                 )?;
                 *key = frame.key;
             }
@@ -2599,5 +2651,46 @@ mod gpu_ring_tests {
         assert_eq!(ring.push(101), Some(1));
         assert_eq!((ring.items.len(), ring.dropped), (GPU_RING, 2));
         assert_eq!(ring.take_ready(|_| true), Some(2));
+    }
+}
+#[cfg(test)]
+mod shift_tests {
+    use super::{Rect, placement, shift_for};
+
+    #[test]
+    fn nested_planes_compose_their_shifts() {
+        let v = Rect::new(0., 0., 100., 100.);
+        let shifts = [(0..10, v, (0., -20.)), (4..6, v, (0., -5.))];
+        assert_eq!(shift_for(5, &shifts), (0., -25.));
+        assert_eq!(shift_for(2, &shifts), (0., -20.));
+        assert_eq!(shift_for(12, &shifts), (0., 0.));
+    }
+
+    #[test]
+    fn items_outside_the_plane_clip_are_culled_and_partial_ones_are_cut() {
+        let v = Rect::new(0., 0., 100., 100.);
+        let shifts = [(0..10, v, (0., -20.))];
+        assert!(placement(1, None, Rect::new(0., 0., 50., 10.), &shifts).is_none());
+        let (shift, clip) = placement(1, None, Rect::new(0., 15., 50., 10.), &shifts).unwrap();
+        assert_eq!((shift, clip), ((0., -20.), Some(v)));
+        assert_eq!(
+            placement(11, None, Rect::new(0., 0., 5., 5.), &shifts)
+                .unwrap()
+                .1,
+            None
+        );
+    }
+
+    #[test]
+    fn the_viewport_clip_stays_and_an_inner_clip_moves() {
+        let v = Rect::new(0., 0., 100., 100.);
+        let shifts = [(0..10, v, (0., -20.))];
+        let b = Rect::new(0., 40., 50., 10.);
+        assert_eq!(placement(1, Some(v), b, &shifts).unwrap().1, Some(v));
+        let inner = Rect::new(10., 50., 40., 40.);
+        assert_eq!(
+            placement(1, Some(inner), b, &shifts).unwrap().1,
+            Some(Rect::new(10., 30., 40., 40.))
+        );
     }
 }
