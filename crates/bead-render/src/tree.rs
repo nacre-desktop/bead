@@ -2880,23 +2880,24 @@ pub(crate) fn placement(
 }
 /// B0419 U3b: the one shifted plane's content signature (content coordinates, so a re-bake that
 /// main's shift compensates keeps it), its presented scroll position in device px and its
-/// overlays' columns; None unless one solid opaque fill is the last item under the clip.
+/// overlays' columns. Unless one solid opaque fill covering the clip is the last item under it,
+/// Err names what is (B0441), or is "" for any other reason.
 fn plane_copy_plan(
     scene: &Scene,
     items: &[Item],
     shifts: &[Shift],
     clip: Damage,
     (width, height, scale, format): (u32, u32, f32, PixelFormat),
-) -> Option<(u64, f32, Vec<Damage>)> {
+) -> std::result::Result<(u64, f32, Vec<Damage>), &'static str> {
     let [(range, plane, shift)] = shifts else {
-        return None;
+        return Err("");
     };
-    let p = scene
+    let layer = scene
         .layers
         .iter()
-        .find(|l| (l.own.end..l.subtree_end) == *range)?
-        .scroll?;
-    let content = items.get(range.clone())?;
+        .find(|l| (l.own.end..l.subtree_end) == *range);
+    let p = layer.and_then(|l| l.scroll).ok_or("")?;
+    let content = items.get(range.clone()).ok_or("")?;
     let at = scene.offset;
     let px = |r: Rect| intersection(clip, r.translated(at.0, at.1).pixels(scale, width, height));
     let reaches = |item: &Item, pad: f32| {
@@ -2906,11 +2907,19 @@ fn plane_copy_plan(
     };
     let under = &items[..range.start]
         .iter()
-        .rfind(|item| reaches(item, 0.))?
+        .rfind(|item| reaches(item, 0.))
+        .ok_or("none")?
         .primitive;
-    let solid = matches!(under, Primitive::Rounded { fill, radial: None, .. } if fill[3] == 255);
-    if !solid || !fill_covers(under, at, scale, clip) || shift.0 != 0. {
-        return None;
+    let kind = match under {
+        Primitive::Rounded { radial, .. } if radial.is_some() => "rounded_radial",
+        Primitive::Rounded { fill, .. } if fill[3] < 255 => "rounded_alpha",
+        Primitive::Rounded { .. } if fill_covers(under, at, scale, clip) => "",
+        Primitive::Rounded { .. } => "rounded_partial",
+        Primitive::Image { .. } => "image",
+        _ => "other",
+    };
+    if !kind.is_empty() || shift.0 != 0. {
+        return Err(kind);
     }
     let mut hash = std::collections::hash_map::DefaultHasher::new();
     let bits = [at.0, at.1, scale].map(f32::to_bits);
@@ -2936,7 +2945,7 @@ fn plane_copy_plan(
         .filter(|item| reaches(item, 4.))
         .map(column)
         .collect();
-    Some((hash.finish(), (p.offset - shift.1) * scale, overlays))
+    Ok((hash.finish(), (p.offset - shift.1) * scale, overlays))
 }
 fn opaque_start(
     items: &[Item],
@@ -4018,8 +4027,23 @@ pub struct TreeCpuRenderer {
     composites: bool,
     /// B0419 U3b: the shifted plane's clip as last painted; only while a plane is shifted.
     plane_copy: Option<PlaneCopy>,
-    /// Steps that moved the plane copy and painted only the band (a test hook).
-    pub plane_band_steps: usize,
+    plane_steps: PlaneSteps,
+}
+/// B0441: clip steps by path: band, then fallbacks background, fraction, damage, content, other.
+#[derive(Default)]
+struct PlaneSteps {
+    at: (u32, u32, f32),
+    counts: [u32; 6],
+    under: &'static str,
+}
+impl PlaneSteps {
+    /// The always-on line of an ended sequence; None for one of no steps.
+    fn line(&self) -> Option<String> {
+        let [band, background, fraction, damage, content, other] = self.counts;
+        let fallback = background + fraction + damage + content + other;
+        let ((w, h, scale), under, steps) = (self.at, self.under, band + fallback);
+        (steps > 0).then(|| format!("CPU_PLANE_STEPS clip={w}x{h} scale={scale} steps={steps} band={band} fallback={fallback} fb_background={background} fb_fraction={fraction} fb_damage={damage} fb_content={content} fb_other={other} under={under}"))
+    }
 }
 /// B0419 U3b: a shifted plane's clip in target bytes, with the content signature, presented
 /// position (device px) and overlay columns it was painted with.
@@ -4642,6 +4666,13 @@ impl TreeCpuRenderer {
         }
         Ok(())
     }
+    /// B0441: a shifted sequence ended: drop the plane copy and log the steps (the line logged).
+    fn end_plane_steps(&mut self) -> Option<String> {
+        self.plane_copy = None;
+        let line = std::mem::take(&mut self.plane_steps).line()?;
+        bead_core::profile::eline(format_args!("{line}"));
+        Some(line)
+    }
     /// B0419 U3b: a plane clip repaint moves last step's clip by the delta and paints only the
     /// exposed band and the overlays' columns. One it cannot prove (another signature, a
     /// fractional delta, damage beyond the clip) paints the clip in full and keeps it.
@@ -4670,8 +4701,15 @@ impl TreeCpuRenderer {
         let clip = clip.pixels(scale, width, height);
         let dims = (width, height, scale, format);
         let plan = plane_copy_plan(scene, &frame.items, shifts, clip, dims);
-        let proven = plan.is_some();
-        let Some((key, top, overlays)) = plan.filter(|_| intersection(damage, clip) == clip) else {
+        let (proven, whole) = (plan.is_ok(), intersection(damage, clip) == clip);
+        self.plane_steps.at = (clip.w, clip.h, scale);
+        if let (Err(kind), true) = (&plan, whole) {
+            self.plane_steps.counts[if kind.is_empty() { 5 } else { 1 }] += 1;
+            if !kind.is_empty() {
+                self.plane_steps.under = *kind;
+            }
+        }
+        let Some((key, top, overlays)) = plan.ok().filter(|_| whole) else {
             // Another region keeps the copy (it still shows its step); an unproven plane drops it.
             self.plane_copy = copy.filter(|_| proven);
             return paint(bytes, damage, &mut self.repair_scratch);
@@ -4679,10 +4717,17 @@ impl TreeCpuRenderer {
         let row =
             |y: u32| (y * width + clip.x) as usize * 4..(y * width + clip.x + clip.w) as usize * 4;
         let (mut repaint, mut pixels) = (vec![damage], Vec::new());
-        if let Some(copy) = copy.filter(|copy| copy.key == key && copy.clip == clip) {
-            let dy = copy.top - top;
-            if damage == clip && (dy - dy.round()).abs() < 1e-3 && dy.abs() < clip.h as f32 {
-                let (dy, stride) = (dy.round() as i64, clip.w as usize * 4);
+        let path = match &copy {
+            Some(copy) if copy.key != key || copy.clip != clip => 4,
+            Some(_) if damage != clip => 3,
+            Some(c) if (c.top - top - (c.top - top).round()).abs() >= 1e-3 => 2,
+            Some(c) if (c.top - top).abs() < clip.h as f32 => 0,
+            _ => 5,
+        };
+        self.plane_steps.counts[path] += 1;
+        if let Some(copy) = copy {
+            if path == 0 {
+                let (dy, stride) = ((copy.top - top).round() as i64, clip.w as usize * 4);
                 for y in clip.y..clip.y + clip.h {
                     let from = i64::from(y - clip.y) - dy;
                     if (0..i64::from(clip.h)).contains(&from) {
@@ -4698,7 +4743,6 @@ impl TreeCpuRenderer {
                     .chain(copy.overlays)
                     .chain(overlays.iter().copied())
                     .collect();
-                self.plane_band_steps += 1;
             }
             pixels = copy.pixels;
         }
@@ -4802,7 +4846,7 @@ impl Renderer for TreeCpuRenderer {
         self.shifts = shifts.to_vec();
         self.shifts_key = self.cache.frame.as_ref().map_or(0, |frame| frame.key);
         if shifts.is_empty() {
-            self.plane_copy = None;
+            self.end_plane_steps();
         }
         shifts.is_empty() || self.composites
     }
@@ -4816,7 +4860,7 @@ impl Renderer for TreeCpuRenderer {
     fn trim_transient_idle(&mut self) -> Option<std::time::Duration> {
         let scratch = self.repair_scratch.trim_idle(std::time::Instant::now());
         if scratch.is_none() {
-            self.plane_copy = None;
+            self.end_plane_steps();
         }
         // The settled paint serves the frames that still owe the opening's last damage (one
         // per buffer), then goes once the surface is quiet.
@@ -5117,6 +5161,7 @@ impl Renderer for TreeCpuRenderer {
             if shifted {
                 return self.paint_shifted(scene, &frame, target, damage, copy);
             }
+            self.end_plane_steps();
             return paint_items(
                 &frame.items,
                 scene.offset,
@@ -8890,7 +8935,7 @@ mod tests {
                 );
             }
             assert_eq!(
-                renderer.plane_band_steps,
+                renderer.plane_steps.counts[0] as usize,
                 steps.len() - 1,
                 "scale {scale}: every step after the first moved the copy"
             );
@@ -8930,7 +8975,7 @@ mod tests {
                 painted == clip_step(fresh, second, shift, scale, whole),
                 "{case}"
             );
-            assert_eq!(renderer.plane_band_steps, 0, "{case}: no band step");
+            assert_eq!(renderer.plane_steps.counts[0], 0, "{case}: no band step");
             assert_eq!(
                 renderer.plane_copy.is_some(),
                 !std::ptr::eq(first, &translucent),
@@ -8957,6 +9002,30 @@ mod tests {
             renderer.plane_copy.is_none(),
             "a render without shifts drops it"
         );
+    }
+    #[test]
+    fn a_shifted_sequence_logs_its_steps_by_path_once_when_it_ends() {
+        let scene = thumbed_list(100., 20.);
+        let mut renderer = TreeCpuRenderer::default();
+        // The first step builds the copy (other), three band steps, then a fractional delta.
+        for shift in [-10., -14., -18., -22., -22.5] {
+            clip_step(&mut renderer, &scene, shift, 1., false);
+        }
+        assert_eq!(
+            renderer.end_plane_steps().as_deref(),
+            Some(
+                "CPU_PLANE_STEPS clip=60x80 scale=1 steps=5 band=3 fallback=2 fb_background=0 fb_fraction=1 fb_damage=0 fb_content=0 fb_other=1 under="
+            )
+        );
+        assert!(renderer.plane_copy.is_none());
+        assert_eq!(
+            renderer.end_plane_steps(),
+            None,
+            "a sequence of no steps logs nothing"
+        );
+        clip_step(&mut renderer, &scene, -10., 1., false);
+        assert!(renderer.scroll_shifts(&[]));
+        assert_eq!(renderer.plane_steps.line(), None, "the empty set ended it");
     }
     /// B0419 U3: a list plane at `clip` on a 1920x1080 surface: 88 rows (a rounded card, an icon,
     /// a title and a body line, pitch 64) from content y 0 at `clip.y - offset`, moving (one
@@ -9103,7 +9172,7 @@ mod tests {
                 );
             }
             assert_eq!(
-                renderer.plane_band_steps, 119,
+                renderer.plane_steps.counts[0], 119,
                 "every band step after the first"
             );
         }

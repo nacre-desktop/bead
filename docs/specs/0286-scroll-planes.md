@@ -275,6 +275,12 @@ frame was a worker round trip (`plane=- main_steps=0`).
     scratch after 500 ms quiet. Damage outside the clip keeps it.
   - The copy's allocation may stay resident until malloc trims: glibc can keep a freed block of
     this size in its arena. Allocator trims are the POSTUSE design pass's, so U3b adds none.
+- Telemetry (B0441): each shifted sequence logs one always-on line when it ends (an empty set,
+  a non-shifted direct render, or the idle trim): `CPU_PLANE_STEPS clip=WxH scale= steps= band=
+  fallback= fb_background= fb_fraction= fb_damage= fb_content= fb_other= under=`. The first step
+  (no copy yet) and a delta of a clip or more count as other. `under` is what lay under the clip
+  at the last background fallback (`rounded_radial`, `rounded_alpha`, `rounded_partial`,
+  `image`, `other`, `none`), empty without one. A sequence of no steps logs nothing.
 - GL fix: gl.rs `paint` added the shift to the offset before placing the scissor, so the plane
   clip moved with the content and an inner clip moved twice. The scissor now uses the unshifted
   offset (one line moved).
