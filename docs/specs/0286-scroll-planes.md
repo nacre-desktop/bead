@@ -253,25 +253,42 @@ frame was a worker round trip (`plane=- main_steps=0`).
   moves or was last shifted. The SHM path tracks it per buffer, so every retained buffer
   repaints the clip, and a main-only step (same frame, no item damage) repaints exactly the
   clip.
-- No band copy: every step repaints the whole plane clip. The SHM buffers are two or three deep
-  and the renderer does not know which shift a buffer shows, so moving last frame's pixels by
-  the delta needs per-buffer shift bookkeeping in `rendering.rs`. That is the follow-up if the
-  rig misses 4 ms.
+- Plane copy (U3b): while one plane is shifted, the renderer keeps its clip as last painted
+  (target bytes, clip px × 4: 2.1 MB at 560x960, 4.8 MB at 840x1440), with the content
+  signature and presented scroll position (device px) it shows. A repaint whose damage is exactly
+  the clip, with the same signature and an integral device-px delta smaller than the clip, copies
+  those rows moved by the delta, then paints only the exposed band and every overlay's column
+  (items drawn above the plane that reach the clip, such as the scrollbar thumb or a focus ring,
+  over the clip's full height, at their last and current x). So neither their old place nor
+  their new one ghosts. Then the clip is copied back. The copy is independent of which SHM
+  buffer is painted, so buffer rotation needs nothing.
+  - Proof it needs, else the whole clip is painted (and the copy kept, freshly painted): one
+    plane and no x shift; one solid opaque fill (no radial) covering the clip as the last item
+    under it; the same signature; an integral delta; damage that is exactly the clip.
+  - The signature hashes the clip, scale, format, panel offset, the fill under the clip, and the
+    plane's items in content coordinates (y + the plane offset; inner clips the same way). A
+    worker re-bake at the new offset that main's shift compensates keeps it, a changed row or
+    a new row in the plane does not, and overlays are not in it.
+  - Without that proof (more than one plane, no solid fill), and on any render that is not a
+    shifted direct paint (an empty set or the settle, a fade, a slide, a frozen snapshot, a
+    close's atlas with a newer frame), the copy is dropped. It also goes with the repair
+    scratch after 500 ms quiet. Damage outside the clip keeps it.
+  - The copy's allocation may stay resident until malloc trims: glibc can keep a freed block of
+    this size in its arena. Allocator trims are the POSTUSE design pass's, so U3b adds none.
 - GL fix: gl.rs `paint` added the shift to the offset before placing the scissor, so the plane
   clip moved with the content and an inner clip moved twice. The scissor now uses the unshifted
   offset (one line moved).
 
 Cost (laptop, `cargo test --release` with LTO off, BGRA, a list of rounded cards with an icon and
-two text lines, 120 steps of 4 px; the job runs at idle CPU weight, so p95 is inflated):
-- a 560x960 list clip on 1920x1080 at scale 1: p50 2.2 ms, p95 8.0 ms, max 9.0 ms;
-- the same list at scale 1.5 (840x1440 device px on 2880x1620): p50 9.6 ms, p95 16.3 ms;
-- a full 1920x1080 clip at scale 1: p50 11.0 ms, p95 18.4 ms.
-
-The step costs what today's main-side repaint of the clip already costs, and the worker round
-trip is gone. Most of the time goes to the tiny-skia antialiased fill of each rounded card that
-the damage does not cover. At the laptop's scale a large list misses the 4 ms target, so the
-band copy above, or a faster rounded fill (an opaque interior run plus corners), is the
-follow-up the Platform rig decides.
+two text lines, 120 steps of 4 px; the job runs at idle CPU weight, so p95 is inflated), U3a's
+whole-clip step (the U3b fallback):
+- a 560x960 list clip on 1920x1080 at scale 1: p50 2.1 ms, p95 7.9 ms;
+- the same list at scale 1.5 (840x1440 device px on 2880x1620): p50 9.1 ms, p95 12.9 ms;
+- a full 1920x1080 clip at scale 1: p50 10.6 ms, p95 16.1 ms.
+U3b band steps on the same cases (same run as its fallback; p95 is noisy at idle CPU weight):
+- 560x960 at scale 1: band p50 0.21 ms, p95 5.2 ms (fallback p50 2.4 ms, p95 7.6 ms);
+- 840x1440 at scale 1.5: band p50 0.51 ms, p95 5.6 ms (fallback p50 9.8 ms, p95 13.6 ms);
+- full 1920x1080: band p50 0.97 ms, p95 6.2 ms (fallback p50 11.8 ms, p95 19.5 ms).
 
 Tests: tree.rs `a_plane_baked_at_100_drawn_shifted_up_50_equals_it_baked_at_150` (scales 1 and
 1.5; red with `scroll_shifts` returning `shifts.is_empty()`),
@@ -279,4 +296,8 @@ Tests: tree.rs `a_plane_baked_at_100_drawn_shifted_up_50_equals_it_baked_at_150`
 `the_probe_composites_only_after_a_direct_paint_of_one_item_per_primitive`,
 `a_shift_change_repaints_the_plane_clip_only_and_leaves_no_stale_rows` (sentinel outside the
 damage; a band where an unshifted `opaque_start` would leave stale pixels); timing, ignored and
-run in release by the lead's checks: `cpu_plane_step_paint_time_at_1920x1080`.
+run in release by the lead's checks: `cpu_plane_step_paint_time_at_1920x1080` (band and fallback).
+U3b: `plane_band_steps_equal_a_full_clip_paint_in_both_directions_with_a_thumb` (scales 1 and
+1.5, down, a compensated re-bake, a thumb move, up; red with the band path forced off),
+`plane_copy_fallbacks_paint_the_whole_clip` (non-solid background, fractional delta, damage
+beyond the clip, content change), `the_plane_copy_is_dropped_on_an_empty_set_and_a_render_without_shifts`.

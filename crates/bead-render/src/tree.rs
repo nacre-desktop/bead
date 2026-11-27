@@ -2878,6 +2878,66 @@ pub(crate) fn placement(
     };
     Some((shift, Some(clip)))
 }
+/// B0419 U3b: the one shifted plane's content signature (content coordinates, so a re-bake that
+/// main's shift compensates keeps it), its presented scroll position in device px and its
+/// overlays' columns; None unless one solid opaque fill is the last item under the clip.
+fn plane_copy_plan(
+    scene: &Scene,
+    items: &[Item],
+    shifts: &[Shift],
+    clip: Damage,
+    (width, height, scale, format): (u32, u32, f32, PixelFormat),
+) -> Option<(u64, f32, Vec<Damage>)> {
+    let [(range, plane, shift)] = shifts else {
+        return None;
+    };
+    let p = scene
+        .layers
+        .iter()
+        .find(|l| (l.own.end..l.subtree_end) == *range)?
+        .scroll?;
+    let content = items.get(range.clone())?;
+    let at = scene.offset;
+    let px = |r: Rect| intersection(clip, r.translated(at.0, at.1).pixels(scale, width, height));
+    let reaches = |item: &Item, pad: f32| {
+        let r = rect(&item.primitive);
+        let r = Rect::new(r.x - pad, r.y - pad, r.w + 2. * pad, r.h + 2. * pad);
+        px(r).w > 0 && px(r).h > 0
+    };
+    let under = &items[..range.start]
+        .iter()
+        .rfind(|item| reaches(item, 0.))?
+        .primitive;
+    let solid = matches!(under, Primitive::Rounded { fill, radial: None, .. } if fill[3] == 255);
+    if !solid || !fill_covers(under, at, scale, clip) || shift.0 != 0. {
+        return None;
+    }
+    let mut hash = std::collections::hash_map::DefaultHasher::new();
+    let bits = [at.0, at.1, scale].map(f32::to_bits);
+    (clip, format == PixelFormat::Bgra, bits).hash(&mut hash);
+    hash_primitive(under, false, &mut hash);
+    for item in content {
+        hash_primitive(&item.primitive, true, &mut hash);
+        let (r, inner) = (rect(&item.primitive), item.clip.filter(|c| c != plane));
+        let inner = inner.map(|c| [c.x, c.y + p.offset, c.w, c.h].map(f32::to_bits));
+        ([r.x, r.y + p.offset].map(f32::to_bits), inner).hash(&mut hash);
+    }
+    // An overlay repaints its column over the clip's height: neither old nor new place ghosts.
+    let column = |item: &Item| {
+        let r = rect(&item.primitive);
+        Damage {
+            y: clip.y,
+            h: clip.h,
+            ..px(Rect::new(r.x - 4., r.y, r.w + 8., r.h))
+        }
+    };
+    let overlays = items[range.end..]
+        .iter()
+        .filter(|item| reaches(item, 4.))
+        .map(column)
+        .collect();
+    Some((hash.finish(), (p.offset - shift.1) * scale, overlays))
+}
 fn opaque_start(
     items: &[Item],
     offset: (f32, f32),
@@ -3956,6 +4016,19 @@ pub struct TreeCpuRenderer {
     shifts: Vec<Shift>,
     shifts_key: u64,
     composites: bool,
+    /// B0419 U3b: the shifted plane's clip as last painted; only while a plane is shifted.
+    plane_copy: Option<PlaneCopy>,
+    /// Steps that moved the plane copy and painted only the band (a test hook).
+    pub plane_band_steps: usize,
+}
+/// B0419 U3b: a shifted plane's clip in target bytes, with the content signature, presented
+/// position (device px) and overlay columns it was painted with.
+struct PlaneCopy {
+    key: u64,
+    clip: Damage,
+    top: f32,
+    overlays: Vec<Damage>,
+    pixels: Vec<u8>,
 }
 /// B0205: an opening ends on the worker-prepared frame at the slide's offset, painted directly
 /// over the whole surface (the window no longer clips any content), which avoids doing a full
@@ -4569,6 +4642,82 @@ impl TreeCpuRenderer {
         }
         Ok(())
     }
+    /// B0419 U3b: a plane clip repaint moves last step's clip by the delta and paints only the
+    /// exposed band and the overlays' columns. One it cannot prove (another signature, a
+    /// fractional delta, damage beyond the clip) paints the clip in full and keeps it.
+    fn paint_shifted(
+        &mut self,
+        scene: &Scene,
+        frame: &Frame,
+        target: ShmTarget<'_>,
+        damage: Damage,
+        copy: Option<PlaneCopy>,
+    ) -> Result<()> {
+        let (width, height, scale, format) =
+            (target.width, target.height, target.scale, target.format);
+        let (bytes, shifts) = (target.bytes, &self.shifts[..]);
+        let paint = |bytes: &mut [u8], region, scratch: &mut RepairScratch| {
+            let target = ShmTarget {
+                bytes,
+                width,
+                height,
+                scale,
+                format,
+            };
+            paint_items(&frame.items, scene.offset, target, region, scratch, shifts)
+        };
+        let clip = shifts[0].1.translated(scene.offset.0, scene.offset.1);
+        let clip = clip.pixels(scale, width, height);
+        let dims = (width, height, scale, format);
+        let plan = plane_copy_plan(scene, &frame.items, shifts, clip, dims);
+        let proven = plan.is_some();
+        let Some((key, top, overlays)) = plan.filter(|_| intersection(damage, clip) == clip) else {
+            // Another region keeps the copy (it still shows its step); an unproven plane drops it.
+            self.plane_copy = copy.filter(|_| proven);
+            return paint(bytes, damage, &mut self.repair_scratch);
+        };
+        let row =
+            |y: u32| (y * width + clip.x) as usize * 4..(y * width + clip.x + clip.w) as usize * 4;
+        let (mut repaint, mut pixels) = (vec![damage], Vec::new());
+        if let Some(copy) = copy.filter(|copy| copy.key == key && copy.clip == clip) {
+            let dy = copy.top - top;
+            if damage == clip && (dy - dy.round()).abs() < 1e-3 && dy.abs() < clip.h as f32 {
+                let (dy, stride) = (dy.round() as i64, clip.w as usize * 4);
+                for y in clip.y..clip.y + clip.h {
+                    let from = i64::from(y - clip.y) - dy;
+                    if (0..i64::from(clip.h)).contains(&from) {
+                        bytes[row(y)]
+                            .copy_from_slice(&copy.pixels[from as usize * stride..][..stride]);
+                    }
+                }
+                let h = dy.unsigned_abs() as u32;
+                let y = if dy > 0 { clip.y } else { clip.y + clip.h - h };
+                let band = Damage { y, h, ..clip };
+                repaint = [band]
+                    .into_iter()
+                    .chain(copy.overlays)
+                    .chain(overlays.iter().copied())
+                    .collect();
+                self.plane_band_steps += 1;
+            }
+            pixels = copy.pixels;
+        }
+        for region in repaint {
+            paint(&mut *bytes, region, &mut self.repair_scratch)?;
+        }
+        pixels.clear();
+        for y in clip.y..clip.y + clip.h {
+            pixels.extend_from_slice(&bytes[row(y)]);
+        }
+        self.plane_copy = Some(PlaneCopy {
+            key,
+            clip,
+            top,
+            overlays,
+            pixels,
+        });
+        Ok(())
+    }
     /// B0185: one slide frame: the body below the content as primitives, then the content layer
     /// (flattened on the first frame of the slide) at its pose, inside the reveal window.
     fn paint_slide(
@@ -4652,6 +4801,9 @@ impl Renderer for TreeCpuRenderer {
     fn scroll_shifts(&mut self, shifts: &[Shift]) -> bool {
         self.shifts = shifts.to_vec();
         self.shifts_key = self.cache.frame.as_ref().map_or(0, |frame| frame.key);
+        if shifts.is_empty() {
+            self.plane_copy = None;
+        }
         shifts.is_empty() || self.composites
     }
     fn take_transient_timer(&mut self) -> bool {
@@ -4663,6 +4815,9 @@ impl Renderer for TreeCpuRenderer {
     }
     fn trim_transient_idle(&mut self) -> Option<std::time::Duration> {
         let scratch = self.repair_scratch.trim_idle(std::time::Instant::now());
+        if scratch.is_none() {
+            self.plane_copy = None;
+        }
         // The settled paint serves the frames that still owe the opening's last damage (one
         // per buffer), then goes once the surface is quiet.
         if self.settled.as_ref().is_some_and(|settled| {
@@ -4914,6 +5069,8 @@ impl Renderer for TreeCpuRenderer {
             return Err("damage outside SHM".into());
         }
         self.composites = false;
+        // Every path but a shifted direct paint drops the plane copy.
+        let copy = self.plane_copy.take();
         let frozen_snapshot = self.snapshot_fingerprint.is_some();
         let frame = if frozen_snapshot {
             None
@@ -4957,13 +5114,16 @@ impl Renderer for TreeCpuRenderer {
             {
                 return Ok(());
             }
+            if shifted {
+                return self.paint_shifted(scene, &frame, target, damage, copy);
+            }
             return paint_items(
                 &frame.items,
                 scene.offset,
                 target,
                 damage,
                 &mut self.repair_scratch,
-                if shifted { &self.shifts[..] } else { &[] },
+                &[],
             );
         }
         self.slide_layer = None;
@@ -8654,6 +8814,150 @@ mod tests {
             }
         }
     }
+    /// B0419 U3b: `shifted_list` with a scrollbar thumb drawn over the clip (its own layer).
+    fn thumbed_list(offset: f32, thumb: f32) -> Scene {
+        let mut scene = shifted_list(offset);
+        let at = scene.primitives.len();
+        scene.primitives.push(Primitive::Rounded {
+            rect: Rect::new(54., thumb, 4., 16.),
+            radius: 2.,
+            fill: [200, 200, 200, 255],
+            border: None,
+            radial: None,
+        });
+        scene.layers.push(crate::SceneLayer {
+            id: "@scrollbar:list".into(),
+            parent: None,
+            own: at..at + 1,
+            subtree_end: at + 1,
+            bounds: Rect::new(54., thumb, 4., 16.),
+            scroll: None,
+        });
+        scene
+    }
+    /// B0419 U3b: `scene` drawn with the plane `shift` onto a sentinel BGRA buffer, the plane clip
+    /// only (or the whole surface).
+    fn clip_step(
+        renderer: &mut TreeCpuRenderer,
+        scene: &Scene,
+        shift: f32,
+        scale: f32,
+        whole: bool,
+    ) -> Vec<u8> {
+        let (w, h) = ((60. * scale) as u32, (100. * scale) as u32);
+        renderer.prepare(scene, scale).unwrap();
+        renderer.scroll_shifts(&[(2..62, list_clip(), (0., shift))]);
+        let mut bytes = [17_u8, 29, 41, 233].repeat(w as usize * h as usize);
+        let damage = if whole {
+            Damage::full(w, h)
+        } else {
+            list_clip().pixels(scale, w, h)
+        };
+        let target = ShmTarget {
+            bytes: &mut bytes,
+            width: w,
+            height: h,
+            scale,
+            format: PixelFormat::Bgra,
+        };
+        renderer.render(scene, target, damage).unwrap();
+        bytes
+    }
+    #[test]
+    fn plane_band_steps_equal_a_full_clip_paint_in_both_directions_with_a_thumb() {
+        // (bake offset, thumb y, shift): down, a re-bake at the new offset that main's shift
+        // compensates (no move), the thumb moving, then up.
+        let steps = [
+            (100., 20., -10.),
+            (100., 20., -24.),
+            (100., 20., -40.),
+            (130., 30., -10.),
+            (130., 30., -2.),
+            (130., 30., 8.),
+            (130., 24., 20.),
+            (130., 24., 6.),
+        ];
+        for scale in [1_f32, 1.5] {
+            let mut renderer = TreeCpuRenderer::default();
+            for (n, (offset, thumb, shift)) in steps.into_iter().enumerate() {
+                let scene = thumbed_list(offset, thumb);
+                let band = clip_step(&mut renderer, &scene, shift, scale, false);
+                let fresh = &mut TreeCpuRenderer::default();
+                let full = clip_step(fresh, &scene, shift, scale, false);
+                assert!(
+                    band == full,
+                    "scale {scale} step {n}: the band path differs"
+                );
+            }
+            assert_eq!(
+                renderer.plane_band_steps,
+                steps.len() - 1,
+                "scale {scale}: every step after the first moved the copy"
+            );
+        }
+    }
+    #[test]
+    fn plane_copy_fallbacks_paint_the_whole_clip() {
+        let scale = 1.5;
+        let base = thumbed_list(100., 20.);
+        let mut translucent = base.clone();
+        if let Primitive::Rounded { fill, .. } = &mut translucent.primitives[0] {
+            fill[3] = 200;
+        }
+        let mut changed = base.clone();
+        if let Primitive::Rounded { fill, .. } = &mut changed.primitives[2 + 2 * 6] {
+            fill[0] = 1;
+        }
+        // (case, first step, second step, its shift, whole-surface damage)
+        let cases = [
+            (
+                "non-solid background",
+                &translucent,
+                &translucent,
+                -20.,
+                false,
+            ),
+            ("fractional delta", &base, &base, -10.5, false),
+            ("damage beyond the clip", &base, &base, -20., true),
+            ("content change in the clip", &base, &changed, -20., false),
+        ];
+        for (case, first, second, shift, whole) in cases {
+            let mut renderer = TreeCpuRenderer::default();
+            clip_step(&mut renderer, first, -10., scale, false);
+            let painted = clip_step(&mut renderer, second, shift, scale, whole);
+            let fresh = &mut TreeCpuRenderer::default();
+            assert!(
+                painted == clip_step(fresh, second, shift, scale, whole),
+                "{case}"
+            );
+            assert_eq!(renderer.plane_band_steps, 0, "{case}: no band step");
+            assert_eq!(
+                renderer.plane_copy.is_some(),
+                !std::ptr::eq(first, &translucent),
+                "{case}"
+            );
+        }
+    }
+    #[test]
+    fn the_plane_copy_is_dropped_on_an_empty_set_and_a_render_without_shifts() {
+        let scene = thumbed_list(100., 20.);
+        let mut renderer = TreeCpuRenderer::default();
+        clip_step(&mut renderer, &scene, -10., 1., false);
+        assert!(
+            renderer.plane_copy.is_some(),
+            "a shifted clip keeps its copy"
+        );
+        assert!(renderer.scroll_shifts(&[]));
+        assert!(renderer.plane_copy.is_none(), "an empty set drops it");
+        clip_step(&mut renderer, &scene, -10., 1., false);
+        // A newer frame than the shifts were placed against paints as baked and drops it.
+        let moved = thumbed_list(100., 40.);
+        render_cpu_frame(&mut renderer, &moved, 1., PixelFormat::Bgra);
+        assert!(
+            renderer.plane_copy.is_none(),
+            "a render without shifts drops it"
+        );
+    }
     /// B0419 U3: a list plane at `clip` on a 1920x1080 surface: 88 rows (a rounded card, an icon,
     /// a title and a body line, pitch 64) from content y 0 at `clip.y - offset`, moving (one
     /// viewport of interest past each side of the clip).
@@ -8760,36 +9064,47 @@ mod tests {
                 )
                 .unwrap();
             let damage = clip.pixels(scale, w, h);
-            let mut times = Vec::new();
-            for step in 1..=120_u16 {
-                let shift = [(1..scene.primitives.len(), clip, (0., -4. * f32::from(step)))];
-                assert!(renderer.scroll_shifts(&shift));
-                let started = std::time::Instant::now();
-                renderer
-                    .render(
-                        &scene,
-                        ShmTarget {
-                            bytes: &mut bytes,
-                            width: w,
-                            height: h,
-                            scale,
-                            format: PixelFormat::Bgra,
-                        },
-                        damage,
-                    )
-                    .unwrap();
-                times.push(started.elapsed().as_secs_f64() * 1000.);
+            // The band path (the first step builds the copy), then the whole-clip fallback.
+            for fallback in [false, true] {
+                let mut times = Vec::new();
+                for step in 1..=120_u16 {
+                    let shift = [(1..scene.primitives.len(), clip, (0., -4. * f32::from(step)))];
+                    assert!(renderer.scroll_shifts(&shift));
+                    if fallback {
+                        renderer.plane_copy = None;
+                    }
+                    let started = std::time::Instant::now();
+                    renderer
+                        .render(
+                            &scene,
+                            ShmTarget {
+                                bytes: &mut bytes,
+                                width: w,
+                                height: h,
+                                scale,
+                                format: PixelFormat::Bgra,
+                            },
+                            damage,
+                        )
+                        .unwrap();
+                    times.push(started.elapsed().as_secs_f64() * 1000.);
+                }
+                times.sort_by(f64::total_cmp);
+                let at = |q: usize| times[(times.len() * q / 100).min(times.len() - 1)];
+                println!(
+                    "CPU_PLANE_STEP surface={w}x{h} scale={scale} clip={}x{} path={} steps={} p50_ms={:.3} p95_ms={:.3} max_ms={:.3}",
+                    damage.w,
+                    damage.h,
+                    if fallback { "fallback" } else { "band" },
+                    times.len(),
+                    at(50),
+                    at(95),
+                    at(100)
+                );
             }
-            times.sort_by(f64::total_cmp);
-            let at = |q: usize| times[(times.len() * q / 100).min(times.len() - 1)];
-            println!(
-                "CPU_PLANE_STEP surface={w}x{h} scale={scale} clip={}x{} steps={} p50_ms={:.3} p95_ms={:.3} max_ms={:.3}",
-                damage.w,
-                damage.h,
-                times.len(),
-                at(50),
-                at(95),
-                at(100)
+            assert_eq!(
+                renderer.plane_band_steps, 119,
+                "every band step after the first"
             );
         }
     }

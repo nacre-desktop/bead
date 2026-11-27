@@ -127,7 +127,7 @@ impl Rect {
         }
     }
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Damage {
     pub x: u32,
     pub y: u32,
