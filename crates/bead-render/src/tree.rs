@@ -7699,14 +7699,18 @@ mod tests {
         scene.asset_data.clear();
         scene.width = 2000.;
         scene.bounds = Rect::new(0., 0., 2000., 2000.);
-        // A raster box (B0331): a CPU shadow this size is one small template (B0428).
-        scene.primitives = vec![Primitive::Rounded {
-            rect: Rect::new(0., 0., 2000., 2000.),
-            radius: 35.,
-            fill: [30, 40, 50, 200],
-            border: None,
-            radial: Some(Arc::from(Vec::new())),
-        }];
+        // A raster box (B0331): a CPU shadow this size is one small template (B0428). The plain
+        // box after it keeps it out of the fill-tail path, which rebuilds trailing boxes as fills.
+        scene.primitives = vec![
+            Primitive::Rounded {
+                rect: Rect::new(0., 0., 2000., 2000.),
+                radius: 35.,
+                fill: [30, 40, 50, 200],
+                border: None,
+                radial: Some(Arc::from(Vec::new())),
+            },
+            Primitive::rounded(Rect::new(0., 0., 1., 1.), 0., [0; 4]),
+        ];
         scene.layers = vec![crate::SceneLayer {
             id: "large-shadow".into(),
             parent: None,
