@@ -419,6 +419,41 @@ mod tests {
     }
 
     #[test]
+    fn burst_lines_report_gaps_and_skip_single_steps() {
+        let t0 = Instant::now();
+        let at = |ms| t0 + Duration::from_millis(ms);
+        let (y, x) = ((Target::Panel(1), false), (Target::Panel(1), true));
+        let mut state = State::default();
+        for ms in [0, 8, 16, 33] {
+            state.record(&y, at(ms));
+        }
+        state.record(&x, at(5));
+        let tick = Duration::from_nanos(8_333_333);
+        let panel = |key: &(Target, bool)| {
+            let (target, horizontal) = key;
+            state.bursts[key].line(&surface_label(target), *horizontal, tick)
+        };
+        assert_eq!(
+            panel(&y).as_deref(),
+            Some(
+                "SCROLL_FRAMES surface=panel axis=y frames=4 duration_ms=33.000 \
+                 interval_mean=11.000 p95=17.000 max=17.000 tick_ms=8.333 worker_frames=4"
+            )
+        );
+        assert_eq!(panel(&x), None);
+        state.end_idle();
+        assert!(state.bursts.is_empty());
+    }
+
+    #[test]
+    fn p95_is_nearest_rank() {
+        let v: Vec<f64> = (1..=20).map(f64::from).collect();
+        assert_eq!(p95(&v), 19.);
+        assert_eq!(p95(&[1., 2., 4.]), 4.);
+        assert_eq!(p95(&[]), 0.);
+    }
+
+    #[test]
     fn retarget_uses_callback_pose_and_preserves_total_wheel_travel() {
         let start = Instant::now();
         let target = Target::Overlay(2);
@@ -470,6 +505,48 @@ pub(super) struct State {
     pixels: std::collections::BTreeMap<(Target, bool), Pixels>,
     flings: std::collections::BTreeMap<(Target, bool), Fling>,
     steps: std::collections::BTreeMap<(Target, String), Steps>,
+    bursts: std::collections::BTreeMap<(Target, bool), Burst>,
+}
+/// One motion burst of a (target, axis): its moved steps, for the SCROLL_FRAMES journal line.
+struct Burst {
+    last: Instant,
+    gaps: Vec<f64>,
+    worker: u32,
+}
+/// Nearest-rank 95th percentile of a sorted slice (0 when empty).
+fn p95(sorted: &[f64]) -> f64 {
+    (sorted.len() * 95)
+        .div_ceil(100)
+        .checked_sub(1)
+        .map_or(0., |i| sorted[i])
+}
+impl Burst {
+    fn line(&self, surface: &str, horizontal: bool, tick: Duration) -> Option<String> {
+        let mut gaps = self.gaps.clone();
+        gaps.sort_by(f64::total_cmp);
+        let duration: f64 = gaps.iter().sum();
+        Some(format!(
+            "SCROLL_FRAMES surface={surface} axis={} frames={} duration_ms={duration:.3} \
+             interval_mean={:.3} p95={:.3} max={:.3} tick_ms={:.3} worker_frames={}",
+            if horizontal { 'x' } else { 'y' },
+            gaps.len() + 1,
+            duration / gaps.len() as f64,
+            p95(&gaps),
+            gaps.last()?,
+            tick.as_secs_f64() * 1000.,
+            self.worker,
+        ))
+    }
+}
+fn surface_label(target: &Target) -> String {
+    match target {
+        Target::Canvas(e) => format!("canvas:{e}"),
+        Target::Window(e) => format!("window:{e}"),
+        Target::Overlay(e) => format!("overlay:{e}"),
+        Target::Panel(_) => "panel".into(),
+        Target::Primary(None) => "primary".into(),
+        Target::Primary(Some((_, name))) => format!("primary:{name}"),
+    }
 }
 /// Per-node state of a `scroll_steps` node (B0329): finger travel per axis, and the last step.
 #[derive(Default)]
@@ -517,6 +594,35 @@ impl State {
         self.motions.retain(|(t, _), _| t != target);
         self.flings.retain(|(t, _), _| t != target);
         self.pixels.retain(|(t, _), _| t != target);
+        self.end_idle();
+    }
+    /// One delivered step that moved content: it starts the key's burst or extends it.
+    fn record(&mut self, key: &(Target, bool), now: Instant) {
+        let burst = self.bursts.entry(key.clone()).or_insert(Burst {
+            last: now,
+            gaps: Vec::new(),
+            worker: 0,
+        });
+        if burst.worker > 0 {
+            burst
+                .gaps
+                .push(now.duration_since(burst.last).as_secs_f64() * 1000.);
+        }
+        burst.last = now;
+        burst.worker += 1;
+    }
+    /// Log and drop every burst whose motion, fling and finger state is gone.
+    fn end_idle(&mut self) {
+        let (motions, flings, pixels) = (&self.motions, &self.flings, &self.pixels);
+        self.bursts.retain(|key, burst| {
+            if motions.contains_key(key) || flings.contains_key(key) || pixels.contains_key(key) {
+                return true;
+            }
+            if let Some(line) = burst.line(&surface_label(&key.0), key.1, tick()) {
+                bead_core::profile::eline(format_args!("{line}"));
+            }
+            false
+        });
     }
     fn animating(&self, target: &Target) -> bool {
         self.motions.keys().any(|(t, _)| t == target)
@@ -735,8 +841,12 @@ impl App {
         for horizontal in [false, true] {
             if let Some((delta, point)) = self.scrolls.step(target, horizontal, now) {
                 self.deliver_scroll(target, horizontal, point, delta);
+                if delta != 0. {
+                    self.scrolls.record(&(target.clone(), horizontal), now);
+                }
             }
         }
+        self.scrolls.end_idle();
         // Scrolling already advances view-local animation and decoration state.
         // Only request a second source update if its deadline is still pending.
         if self
@@ -1016,6 +1126,7 @@ impl App {
             if let Some(step) = step {
                 self.deliver_scroll(&target, horizontal, point, step);
             }
+            self.scrolls.end_idle();
             return;
         }
         let content = regions.is_some_and(|regions| regions.iter().any(inside));
@@ -1024,6 +1135,7 @@ impl App {
         if delta == 0. {
             if axis.stop {
                 self.release_pixels(&key);
+                self.scrolls.end_idle();
             }
             return;
         }
@@ -1031,6 +1143,9 @@ impl App {
         self.scrolls.flings.remove(&key);
         if !wheel || bead_core::animation::reduced_motion() {
             self.deliver_scroll(&target, horizontal, point, delta);
+            if content {
+                self.scrolls.record(&key, Instant::now());
+            }
             if content
                 && source == Some(AxisSource::Finger)
                 && !bead_core::animation::reduced_motion()
@@ -1042,6 +1157,7 @@ impl App {
             } else {
                 self.scrolls.pixels.remove(&key);
             }
+            self.scrolls.end_idle();
             return;
         }
         self.scrolls.pixels.remove(&key);
