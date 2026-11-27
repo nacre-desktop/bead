@@ -2,8 +2,8 @@
 
 Composited scrolling: every `ui.Scroll` becomes a plane whose content main can move as one, with
 text rastered ahead of the viewport while it moves. Status: U1 (planes in the scene), U2a (GL
-shifts), U4 (kits), U2b1 and U2b2 (main stepping and its switch-on), U5a1 (`axis="x"`) and U5a2 (`on_settle`)
-landed; later units (U2b3 thumb and windows, U3 CPU fallback, U5a3 snap and motion, U5b
+shifts), U4 (kits), U2b1 and U2b2 (main stepping and its switch-on), U5a1 (`axis="x"`), U5a2 (`on_settle`) and U5a3a
+(`snap`) landed; later units (U2b3 thumb and windows, U3 CPU fallback, U5a3b `motion`, U5b
 `ui.scrolled`) append their contracts here.
 
 ## U1 contract: planes in the scene
@@ -301,3 +301,30 @@ U3b: `plane_band_steps_equal_a_full_clip_paint_in_both_directions_with_a_thumb` 
 1.5, down, a compensated re-bake, a thumb move, up; red with the band path forced off),
 `plane_copy_fallbacks_paint_the_whole_clip` (non-solid background, fractional delta, damage
 beyond the clip, content change), `the_plane_copy_is_dropped_on_an_empty_set_and_a_render_without_shifts`.
+
+## U5a3a: `snap` and the vertical wheel on x strips
+
+- `ui.Scroll{snap=<pitch px>}` (>= 0, 0 = none; Scroll only, a markup error otherwise).
+  `ScrollViewport` carries `snap` and the viewport's `limit`.
+- Main (`scroll.rs`, pure fns `feel`, `snapped`, `wheel_motion`, `release`), on every path:
+  - A wheel detent over a `snap` viewport moves exactly one pitch (the 100 px detent scaled to
+    the pitch). The wheel motion runs to the multiple nearest its aim, never behind its start in
+    its direction. Its aim continues from the previous motion's aim when that lies the same way, so
+    hi-res partial detents add up: half a detent reaches the next multiple.
+  - The motion's start is the record's offset at rest, or where the previous motion has got to
+    (its start plus what it delivered), never the lagging mirror mid-burst.
+  - A finger release: main tracks the offset through the gesture. A fling ends on the multiple
+    nearest its natural end, ahead in its direction; its velocity is re-aimed so Chromium's curve
+    ends there. A slow release glides to the nearest multiple, which can be back toward the start,
+    so a small nudge does not page.
+  - The vertical-wheel rule (wheel only): a vertical wheel that no y viewport under the point can
+    take (none, or all at their ends that way) moves the innermost x Scroll with `snap` under it,
+    as an x scroll (`HorizontalScroll`). Finger gestures keep their axis, so a touchpad's stop and
+    fling stay on one axis.
+- Known limits: a content end that is not a multiple stays a valid rest (the worker clamps). A
+  detent over a `snap` viewport at its end passes on to the parent scaled to the child's pitch.
+- Tests: bead-wayland `plane_tests` `a_detent_on_a_snap_viewport_moves_exactly_one_pitch`,
+  `a_fling_on_a_snap_viewport_ends_on_a_multiple_in_its_direction`,
+  `a_slow_release_settles_on_the_nearest_multiple`,
+  `a_vertical_wheel_moves_an_x_snap_strip_unless_a_y_parent_can_scroll`; bead-ui
+  `snap_reaches_the_scroll_viewport_and_is_validated`.

@@ -2106,6 +2106,35 @@ fn scroll_settled_clears_the_named_plane_with_no_luau_and_ignores_another() {
     );
 }
 
+/// B0419 U5a3: `snap` reaches the viewport record (with the limit); it is >= 0, on a Scroll only.
+#[test]
+fn snap_reaches_the_scroll_viewport_and_is_validated() {
+    let view = PLANE_VIEW.replace("height=200,", "height=200,snap=72,");
+    let (_fixture, session) = interaction_fixture(&view, PLANE_BEHAVIOR);
+    let viewports = session.scroll_viewports();
+    let v = &viewports[0];
+    assert_eq!((v.snap, v.limit, v.offset), (72., 800., 100.));
+    for (view, message) in [
+        (
+            PLANE_VIEW.replace("height=200,", "height=200,snap=-1,"),
+            "snap must be >= 0",
+        ),
+        (
+            PLANE_VIEW.replace("id='gap',", "id='gap',snap=72,"),
+            "snap needs a Scroll",
+        ),
+    ] {
+        let fixture = Fixture::new();
+        fs::create_dir_all(fixture.0.join("ui")).unwrap();
+        fs::write(fixture.0.join("ui/behavior.luau"), PLANE_BEHAVIOR).unwrap();
+        fs::write(fixture.0.join("ui/main.luau"), view).unwrap();
+        let mut session = fixture.session();
+        session.entry = "ui/main.luau".into();
+        let error = session.reload().err().expect("a markup error");
+        assert!(error.message.contains(message), "{}", error.message);
+    }
+}
+
 /// B0419 U5a2: `on_settle` runs once per settle of a viewport that moved, with the final offset.
 #[test]
 fn on_settle_runs_once_with_the_final_offset_after_a_burst() {

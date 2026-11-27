@@ -159,6 +159,7 @@ mod tests {
             distance: 1200.,
             delivered: 100.,
             point: (4., 5.),
+            snap: None,
         };
         assert_eq!(remaining_distance(Some(&previous), (4., 5.), -1.), 0.);
         assert_eq!(remaining_distance(Some(&previous), (4., 5.), 1.), 1100.);
@@ -276,6 +277,7 @@ mod tests {
                     distance: WHEEL_STEP,
                     delivered: 0.,
                     point: (4., 5.),
+                    snap: None,
                 },
             );
             let mut frames = 0;
@@ -353,6 +355,7 @@ mod tests {
                 distance: 100.,
                 delivered: 0.,
                 point: (40.5, 70.25),
+                snap: None,
             },
         );
         assert!(
@@ -467,6 +470,7 @@ mod tests {
                 distance: 100.,
                 delivered: 0.,
                 point: (1., 2.),
+                snap: None,
             },
         );
         let now = start + Duration::from_millis(50);
@@ -479,6 +483,7 @@ mod tests {
             distance: pending + 100.,
             delivered: 0.,
             point: (1., 2.),
+            snap: None,
         };
         let (rest, _) = state
             .step(&target, false, now + Duration::from_millis(125))
@@ -623,6 +628,7 @@ mod plane_tests {
                 distance: 300.,
                 delivered: 40.,
                 point: AT,
+                snap: None,
             },
         );
         step(&mut state, &layers(300., true), 40., t0);
@@ -642,6 +648,7 @@ mod plane_tests {
                 distance: 300.,
                 delivered: 0.,
                 point: AT,
+                snap: None,
             },
         );
         for delta in [10., 20., 30.] {
@@ -735,8 +742,118 @@ mod plane_tests {
             rect: Rect::new(0., 0., 100., 200.),
             horizontal: false,
             offset: 300.,
+            limit: 800.,
             settle,
+            snap: 0.,
         }]
+    }
+
+    /// B0419 U5a3: a viewport at `offset` of `limit` with pitch `snap`, under `AT` unless moved.
+    fn snap_view(horizontal: bool, offset: f32, limit: f32, snap: f32) -> Viewport {
+        let (mut v, rect) = (viewport(false).remove(0), Rect::new(0., 0., 100., 200.));
+        (v.horizontal, v.rect, v.offset, v.limit, v.snap) = (horizontal, rect, offset, limit, snap);
+        v
+    }
+
+    #[test]
+    fn a_detent_on_a_snap_viewport_moves_exactly_one_pitch() {
+        let t0 = Instant::now();
+        let list = [snap_view(false, 144., 800., 72.)];
+        let (horizontal, v, delta) = feel(&list, false, true, AT, 100.);
+        assert_eq!((horizontal, delta), (false, 72.), "one detent is one pitch");
+        let mut first = wheel_motion(None, v, AT, delta, t0);
+        assert_eq!(first.distance, 72.);
+        // A second detent while the first is under way aims one more pitch.
+        first.delivered = 30.;
+        let second = wheel_motion(Some(&first), v, AT, delta, t0);
+        assert_eq!(144. + 30. + second.distance, 288.);
+        // Eighth detents add up: the fourth reaches half a pitch and moves on to the next.
+        let mut motion: Option<Motion> = None;
+        let moved: Vec<f64> = (0..4)
+            .map(|_| {
+                let (_, v, delta) = feel(&list, false, true, AT, 12.5);
+                let next = wheel_motion(motion.as_ref(), v, AT, delta, t0);
+                let distance = next.distance;
+                motion = Some(next);
+                distance
+            })
+            .collect();
+        assert_eq!(moved, [0., 0., 0., 72.]);
+    }
+
+    #[test]
+    fn a_fling_on_a_snap_viewport_ends_on_a_multiple_in_its_direction() {
+        let pixels = |at, velocity| Pixels {
+            last: Instant::now(),
+            velocity,
+            samples: 3,
+            point: AT,
+            at,
+        };
+        for (at, velocity) in [(30., 1500.), (102., -1500.), (500., 4000.)] {
+            let natural = fling_position(velocity, 10., 1080.).0;
+            let (v, viewport) = release(&pixels(at, velocity), true, 1080., 72.).unwrap();
+            let end = at + fling_position(v, 10., viewport).0;
+            let pitches = end / 72.;
+            assert!(
+                (pitches - pitches.round()).abs() < 1e-9,
+                "{at} {velocity}: {end}"
+            );
+            assert!((end - at) * velocity > 0. && (end - at - natural).abs() <= 72.);
+        }
+        // Without a pitch a release flings as before; a slow one does not.
+        assert_eq!(
+            release(&pixels(30., 1500.), true, 1080., 0.),
+            Some((1500., 1080.))
+        );
+        assert_eq!(release(&pixels(30., 50.), false, 1080., 0.), None);
+    }
+
+    #[test]
+    fn a_slow_release_settles_on_the_nearest_multiple() {
+        let glide = |at: f64| {
+            let p = Pixels {
+                last: Instant::now(),
+                velocity: 50.,
+                samples: 3,
+                point: AT,
+                at,
+            };
+            let (v, viewport) = release(&p, false, 1080., 72.).unwrap();
+            at + fling_position(v, 10., viewport).0
+        };
+        assert!(
+            (glide(72. + 30.) - 72.).abs() < 1e-9,
+            "under half a pitch: back"
+        );
+        assert!((glide(72. + 40.) - 144.).abs() < 1e-9, "past half: on");
+        assert_eq!(glide(144.), 144., "on a multiple: no glide");
+    }
+
+    #[test]
+    fn a_vertical_wheel_moves_an_x_snap_strip_unless_a_y_parent_can_scroll() {
+        let strip = snap_view(true, 0., 800., 72.);
+        let page = |offset| snap_view(false, offset, 400., 0.);
+        fn axis(views: &[Viewport], wheel: bool) -> (bool, Option<bool>, f64) {
+            let (horizontal, v, delta) = feel(views, false, wheel, AT, 100.);
+            (horizontal, v.map(|v| v.horizontal), delta)
+        }
+        assert_eq!(
+            axis(&[page(0.), strip.clone()], true),
+            (false, Some(false), 100.)
+        );
+        assert_eq!(
+            axis(&[page(400.), strip.clone()], true),
+            (true, Some(true), 72.)
+        );
+        let alone = std::slice::from_ref(&strip);
+        assert_eq!(axis(alone, true), (true, Some(true), 72.));
+        assert!(!axis(alone, false).0, "a finger keeps its axis");
+        let plain = snap_view(true, 0., 800., 0.);
+        assert!(
+            !axis(&[plain], true).0,
+            "an x Scroll without snap takes only x"
+        );
     }
 
     #[test]
@@ -744,14 +861,14 @@ mod plane_tests {
         let (mut state, t0) = (State::default(), Instant::now());
         // Worker path (the renderer does not composite): today's steps, then one settle.
         for delta in [40., 40., -15.] {
-            state.note_settles(&KEY, viewport(true), AT);
+            state.note_settles(&KEY, &viewport(true), AT);
             assert_eq!(state.content_step(&KEY, None, AT, delta, t0), Some(delta));
         }
         let settled = [r#"ScrollSettled { id: "list" }"#];
         assert_eq!(kinds(&state.settle(&KEY.0, t0)), settled);
         assert!(state.settle(&KEY.0, t0).is_empty(), "once per burst");
         // Compositing path: the named plane settles once, after the final sync.
-        state.note_settles(&KEY, viewport(true), AT);
+        state.note_settles(&KEY, &viewport(true), AT);
         step(&mut state, &layers(300., true), 40., t0);
         let out = kinds(&state.settle(&KEY.0, t0));
         assert_eq!(out.len(), 2);
@@ -765,7 +882,7 @@ mod plane_tests {
         let (mut x, mut away) = (viewport(true), viewport(true));
         (x[0].horizontal, away[0].rect.x) = (true, 500.);
         for viewports in [viewport(false), x, away] {
-            state.note_settles(&KEY, viewports, AT);
+            state.note_settles(&KEY, &viewports, AT);
         }
         for delta in [40., 40., -15.] {
             assert_eq!(state.content_step(&KEY, None, AT, delta, t0), Some(delta));
@@ -1000,17 +1117,10 @@ impl State {
         hit.map_or(Some(delta), |(_, worker, _)| worker)
     }
     /// B0419 U5a2: a content burst over an `on_settle` viewport ends with its ScrollSettled.
-    fn note_settles(
-        &mut self,
-        key: &(Target, bool),
-        viewports: Vec<bead_render::ScrollViewport>,
-        (x, y): (f32, f32),
-    ) {
+    fn note_settles(&mut self, key: &(Target, bool), viewports: &[Viewport], at: (f32, f32)) {
         for v in viewports {
-            let r = v.rect;
-            let inside = x >= r.x && y >= r.y && x < r.x + r.w && y < r.y + r.h;
-            if v.settle && v.horizontal == key.1 && inside {
-                self.settles.insert((key.0.clone(), v.id));
+            if v.settle && v.horizontal == key.1 && contains(v.rect, at) {
+                self.settles.insert((key.0.clone(), v.id.clone()));
             }
         }
     }
@@ -1332,12 +1442,103 @@ struct Pixels {
     velocity: f64,
     samples: u32,
     point: (f32, f32),
+    /// B0419 U5a3: the viewport's offset after this sample, for a `snap` release.
+    at: f64,
 }
 struct Motion {
     started: Instant,
     distance: f64,
     delivered: f64,
     point: (f32, f32),
+    /// B0419 U5a3: on a `snap` viewport, (the offset this motion starts from, its unsnapped aim).
+    snap: Option<(f64, f64)>,
+}
+type Viewport = bead_render::ScrollViewport;
+fn contains(r: Rect, (x, y): (f32, f32)) -> bool {
+    x >= r.x && y >= r.y && x < r.x + r.w && y < r.y + r.h
+}
+/// B0419 U5a3: the axis, the innermost viewport along it and the distance of a content scroll at
+/// `at`. A wheel no y viewport can take moves an x `snap` Scroll; a detent there is one pitch.
+fn feel(
+    viewports: &[Viewport],
+    horizontal: bool,
+    wheel: bool,
+    at: (f32, f32),
+    delta: f64,
+) -> (bool, Option<&Viewport>, f64) {
+    let under = move |h: bool| {
+        let all = viewports.iter().rev();
+        all.filter(move |v| v.horizontal == h && contains(v.rect, at))
+    };
+    let takes = |v: &Viewport| {
+        let o = f64::from(v.offset);
+        (o + delta).clamp(0., v.limit.into()) != o
+    };
+    let horizontal =
+        horizontal || (wheel && !under(false).any(takes) && under(true).any(|v| v.snap > 0.));
+    let v = under(horizontal).next();
+    let delta = match v {
+        Some(v) if wheel && v.snap > 0. => delta / WHEEL_STEP * f64::from(v.snap),
+        _ => delta,
+    };
+    (horizontal, v, delta)
+}
+/// The multiple of `pitch` nearest `aim`, never behind `from` in the direction `sign`.
+fn snapped(aim: f64, from: f64, sign: f64, pitch: f64) -> f64 {
+    let s = (aim / pitch).round() * pitch;
+    if (s - from) * sign < 0. {
+        s + sign * pitch
+    } else {
+        s
+    }
+}
+/// A wheel motion, retargeted from the previous one. On a `snap` viewport it runs from where the
+/// previous one got to, past its aim when that lies this way (partial detents add up), to the
+/// nearest multiple ahead of the aim.
+fn wheel_motion(
+    previous: Option<&Motion>,
+    v: Option<&Viewport>,
+    point: (f32, f32),
+    delta: f64,
+    now: Instant,
+) -> Motion {
+    let remaining = remaining_distance(previous, point, delta);
+    let (mut distance, mut snap) = (remaining + delta, None);
+    if let Some(v) = v.filter(|v| v.snap > 0.) {
+        let prev = previous.filter(|m| m.point == point);
+        let prev = prev.and_then(|m| Some((m.snap?, m.delivered)));
+        let at = prev.map_or(v.offset.into(), |((origin, _), delivered)| {
+            origin + delivered
+        });
+        let aim = prev.map(|((_, aim), _)| aim);
+        let aim = aim.filter(|aim| (aim - at) * delta >= 0.).unwrap_or(at) + delta;
+        distance = snapped(aim, at, delta.signum(), v.snap.into()) - at;
+        snap = Some((at, aim));
+    }
+    Motion {
+        started: now,
+        distance,
+        delivered: 0.,
+        point,
+        snap,
+    }
+}
+/// A finger release: a fast one flings. On a `snap` viewport (`pitch` > 0) a fling ends on the
+/// nearest multiple ahead and a slow release glides to the nearest one. Some((velocity, viewport)).
+fn release(p: &Pixels, flung: bool, viewport: f64, pitch: f64) -> Option<(f64, f64)> {
+    if pitch <= 0. {
+        return flung.then_some((p.velocity, viewport));
+    }
+    let want = if flung {
+        let travel = fling_position(p.velocity, 10., viewport).0;
+        snapped(p.at + travel, p.at, p.velocity.signum(), pitch) - p.at
+    } else {
+        (p.at / pitch).round() * pitch - p.at
+    };
+    Some((
+        (2. * FLING_DECELERATION * want.abs()).sqrt().copysign(want),
+        want.abs(),
+    ))
 }
 /// Retarget from the current pose; reversing discards all undelivered travel.
 fn remaining_distance(previous: Option<&Motion>, point: (f32, f32), delta: f64) -> f64 {
@@ -1846,17 +2047,18 @@ impl App {
         }
         let content = regions.is_some_and(|regions| regions.iter().any(inside));
         let (delta, wheel) = movement(axis, content, source);
+        let viewports = if content { viewports } else { Vec::new() };
+        let (horizontal, v, delta) = feel(&viewports, horizontal, wheel, point, delta);
+        let pitch = v.map_or(0., |v| f64::from(v.snap));
         let key = (target.clone(), horizontal);
         if delta == 0. {
             if axis.stop {
-                self.release_pixels(&key);
+                self.release_pixels(&key, pitch);
                 self.end_motion(&target, Instant::now());
             }
             return;
         }
-        if content {
-            self.scrolls.note_settles(&key, viewports, point);
-        }
+        self.scrolls.note_settles(&key, &viewports, point);
         let previous = self.scrolls.motions.remove(&key);
         self.scrolls.flings.remove(&key);
         if !wheel || bead_core::animation::reduced_motion() {
@@ -1869,9 +2071,9 @@ impl App {
                 && source == Some(AxisSource::Finger)
                 && !bead_core::animation::reduced_motion()
             {
-                self.track_pixels(key.clone(), point, delta);
+                self.track_pixels(key.clone(), point, delta, v.map_or(0., |v| v.offset.into()));
                 if axis.stop {
-                    self.release_pixels(&key);
+                    self.release_pixels(&key, pitch);
                 }
             } else {
                 self.scrolls.pixels.remove(&key);
@@ -1880,26 +2082,24 @@ impl App {
             return;
         }
         self.scrolls.pixels.remove(&key);
-        let remaining = remaining_distance(previous.as_ref(), point, delta);
-        self.scrolls.motions.insert(
-            key,
-            Motion {
-                started: Instant::now(),
-                distance: remaining + delta,
-                delivered: 0.,
-                point,
-            },
-        );
+        let motion = wheel_motion(previous.as_ref(), v, point, delta, Instant::now());
+        self.scrolls.motions.insert(key, motion);
         self.request_scroll_frame(&target);
     }
     /// Estimate release speed only; finger positions are delivered without interpolation.
-    fn track_pixels(&mut self, key: (Target, bool), point: (f32, f32), delta: f64) {
+    fn track_pixels(&mut self, key: (Target, bool), point: (f32, f32), delta: f64, offset: f64) {
         let now = Instant::now();
         // A disappearing focus target may never receive axis_stop.
         self.scrolls
             .pixels
             .retain(|_, pixels| now.duration_since(pixels.last) <= Duration::from_millis(120));
-        let pixels = self.scrolls.pixels.remove(&key).filter(|p| {
+        let previous = self.scrolls.pixels.remove(&key);
+        let at = previous
+            .as_ref()
+            .filter(|p| p.point == point)
+            .map_or(offset, |p| p.at)
+            + delta;
+        let pixels = previous.filter(|p| {
             p.point == point
                 && now.duration_since(p.last) <= Duration::from_millis(120)
                 && p.velocity * delta >= 0.
@@ -1920,21 +2120,21 @@ impl App {
                 velocity,
                 samples,
                 point,
+                at,
             },
         );
     }
-    fn release_pixels(&mut self, key: &(Target, bool)) {
+    fn release_pixels(&mut self, key: &(Target, bool), pitch: f64) {
         let Some(pixels) = self.scrolls.pixels.remove(key) else {
             return;
         };
-        if pixels.last.elapsed() > Duration::from_millis(120)
-            || pixels.samples < 2
-            || pixels.velocity.abs() <= FLING_MIN_VELOCITY
-        {
-            return;
-        }
-        let velocity = pixels.velocity;
+        let flung = pixels.last.elapsed() <= Duration::from_millis(120)
+            && pixels.samples >= 2
+            && pixels.velocity.abs() > FLING_MIN_VELOCITY;
         let viewport = self.fling_viewport(&key.0, key.1);
+        let Some((velocity, viewport)) = release(&pixels, flung, viewport, pitch) else {
+            return;
+        };
         if !velocity.is_finite() || viewport <= 0. {
             return;
         }

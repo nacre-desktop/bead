@@ -373,7 +373,9 @@ impl Session {
                 rect: node.clip.map_or(bounds, |clip| bounds.intersect(clip)),
                 horizontal: node.scroll_horizontal,
                 offset: *offset as f32,
+                limit: node.scroll_limit.unwrap_or(0.) as f32,
                 settle: node.on_settle.is_some(),
+                snap: node.snap,
             })
         };
         let nodes = self.current_nodes.iter().filter(|node| node.scrollable);

@@ -668,8 +668,11 @@ pub struct ScrollViewport {
     pub rect: Rect,
     pub horizontal: bool,
     pub offset: f32,
+    pub limit: f32,
     /// It has `on_settle`: a burst over it ends with `ScrollSettled { id }` on every path.
     pub settle: bool,
+    /// U5a3: `snap` pitch in px (0: none).
+    pub snap: f32,
 }
 impl Scene {
     /// A fully opaque scene of this size with nothing in it.

@@ -134,6 +134,7 @@ pub const PROPERTIES: &[&str] = &[
     "ready",
     "axis",
     "on_settle",
+    "snap",
     "scrollbar",
     "fill",
     "radial",
@@ -262,6 +263,7 @@ pub struct ViewSpec {
     /// B0419 U5a: `axis="x"`: the Scroll moves its content along x.
     pub horizontal: bool,
     pub on_settle: Option<String>,
+    pub snap: f32,
     pub scrollbar: bool,
     pub fill: Option<Json>,
     /// The fill amount is an animation marker: draw the box even while it is transparent,
@@ -1314,10 +1316,17 @@ impl ViewSpec {
                         })
                         .transpose()
                 };
-            if raw.kind != Widget::Scroll && p.contains_key("on_settle") {
-                return Err(source.error("on_settle needs a Scroll"));
+            let scroll_only = ["on_settle", "snap"]
+                .into_iter()
+                .find(|k| p.contains_key(k));
+            if let Some(k) = scroll_only.filter(|_| raw.kind != Widget::Scroll) {
+                return Err(source.error(format!("{k} needs a Scroll")));
             }
             let on_settle = parse_action("on_settle")?.map(|(name, _)| name);
+            let snap = number(p, "snap", 0., source)?;
+            if snap < 0. {
+                return Err(source.error("snap must be >= 0"));
+            }
             let graph = if raw.kind == Widget::Graph {
                 Some(std::sync::Arc::new(crate::graph::GraphData::parse(
                     &|name| p.get(name),
@@ -1463,6 +1472,7 @@ impl ViewSpec {
                 ready,
                 horizontal,
                 on_settle,
+                snap,
                 scrollbar: boolean(p, "scrollbar", true, source)?,
                 fill: p.get("fill").cloned(),
                 animated_fill: raw
@@ -2216,6 +2226,7 @@ pub fn layout(
                 scroll_limit,
                 scroll_horizontal: scroll_x,
                 on_settle: view.on_settle.clone(),
+                snap: view.snap,
                 focusable: view.action.is_some() || view.input.is_some() || view.graph.is_some(),
                 multiline: view.multiline && view.input.is_some(),
                 masked: view.masked && view.input.is_some(),

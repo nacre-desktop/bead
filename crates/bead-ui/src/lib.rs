@@ -130,6 +130,9 @@ pub struct Node {
     /// B0419 U5a2: a viewport's `on_settle` action.
     #[serde(skip)]
     pub on_settle: Option<String>,
+    /// B0419 U5a3: a viewport's `snap` pitch (0: none).
+    #[serde(skip)]
+    pub snap: f32,
     #[serde(default)]
     pub focusable: bool,
     #[serde(default)]
