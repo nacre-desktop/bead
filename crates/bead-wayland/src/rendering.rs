@@ -162,6 +162,16 @@ mod retained_gl_open_tests {
         assert_eq!(super::KEPT_GL_GRACE, std::time::Duration::from_secs(120));
     }
 
+    #[cfg(feature = "native-gl")]
+    #[test]
+    fn the_grace_end_retires_an_idle_retained_panel_and_leaves_others_alone() {
+        use super::kept_gl_end_retires;
+        assert!(kept_gl_end_retires(true, false, false));
+        assert!(!kept_gl_end_retires(false, false, false), "not retained");
+        assert!(!kept_gl_end_retires(true, true, false), "dock in flight");
+        assert!(!kept_gl_end_retires(true, false, true), "pearl in flight");
+    }
+
     #[test]
     fn after_the_grace_the_transport_goes_unless_warm_mode_or_another_owner_holds_it() {
         // The grace makes the companion CPU, then asks transport_releasable(warm, other GL, CPU host).
@@ -442,6 +452,12 @@ const KEPT_GL_GRACE: Duration = Duration::from_secs(120);
 #[cfg(feature = "native-gl")]
 fn kept_gl_grace_due(open: bool, same_close: bool, kept: bool) -> bool {
     !open && same_close && kept
+}
+/// B0435: at the grace end a retained panel (not a warm-parked one: those are never retained)
+/// that is idle (no dock transition, no pearl) retires its view instead of keeping a snapshot.
+#[cfg(feature = "native-gl")]
+fn kept_gl_end_retires(retained: bool, dock_transition: bool, pearl: bool) -> bool {
+    retained && !dock_transition && !pearl
 }
 
 /// B0318/B0334/B0337: a GL failure, or a budget refusal on any draw of a GL companion, takes the
@@ -1721,9 +1737,27 @@ impl App {
                         && keeps_gl_closed(app.companion.as_ref().map(|(_, _, kind)| *kind));
                     let same_close =
                         app.panel_epoch == epoch && app.panel_close_epoch == close_epoch;
-                    if kept_gl_grace_due(app.panel_target, same_close, kept)
-                        && let Err(error) = app.end_kept_gl()
-                    {
+                    if !kept_gl_grace_due(app.panel_target, same_close, kept) {
+                        return TimeoutAction::Drop;
+                    }
+                    let retained = app
+                        .options
+                        .panel_spec
+                        .as_ref()
+                        .is_some_and(|spec| spec.retain_when_closed);
+                    if kept_gl_end_retires(
+                        retained,
+                        app.panel_dock_transition.is_some(),
+                        app.pearl.is_some(),
+                    ) {
+                        // B0435: no warm park (the handoff variant skips it): this view is done.
+                        app.release_panel_for_handoff();
+                        app.stop_app_if_idle();
+                        let qh = app.qh.clone();
+                        for i in 0..app.surfaces.len() {
+                            app.draw(i, &qh);
+                        }
+                    } else if let Err(error) = app.end_kept_gl() {
                         app.fail(error);
                     }
                     TimeoutAction::Drop
