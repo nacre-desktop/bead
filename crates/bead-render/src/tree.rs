@@ -2111,8 +2111,11 @@ impl TreeCache {
             .get(&scale.to_bits())
             .filter(|frame| prepared_rasters_match_visibility(scene, frame))
             .filter(|frame| {
-                self.image_policy != ImagePolicy::Dense
-                    || frame.items.iter().all(|item| item.image.is_none())
+                // B0428: GL draws rasters 1:1, so it re-prepares a frame with stretched ones.
+                frame.items.iter().all(|item| match self.image_policy {
+                    ImagePolicy::Dense => item.image.is_none(),
+                    _ => item.raster.iter().all(|raster| raster.stretch.is_none()),
+                })
             })
         {
             if let Some(motion) = scene.motion.as_ref().filter(|m| m.reveal) {
@@ -9024,6 +9027,39 @@ mod tests {
             assert_eq!(at(&wide, x), want, "x {x} y {y}");
         }
         assert_eq!(cache.builds, 1);
+    }
+    #[test]
+    fn an_upload_cache_never_draws_a_dense_frame_with_a_stretched_shadow() {
+        // B0428: GL draws rasters 1:1, and a Dense frame can reach it (a B0336 CPU-to-GL handoff).
+        let (scale, mut scene) = (1.5, island_shadow(200., 58., false));
+        let stretched = |frame: &Frame| frame.items[0].raster.as_ref().unwrap().stretch.is_some();
+        let mut cache = TreeCache::default();
+        cache.prepare(&scene, scale).unwrap();
+        let dense = cache.frame.clone().unwrap();
+        assert!(stretched(&dense));
+        // The worker's cache back on its upload policy re-keys to the per-size raster.
+        cache.set_image_policy(ImagePolicy::UploadOnly);
+        cache.prepare(&scene, scale).unwrap();
+        let own = cache.frame.clone().unwrap();
+        let raster = own.items[0].raster.as_ref().unwrap();
+        let shape = (
+            raster.pixels.width(),
+            raster.pixels.height(),
+            raster.stretch,
+        );
+        assert_eq!(shape, (300, 87, None));
+        // A GL presenter's cache handed the Dense frame prepares its own instead.
+        scene.prepared.insert(scale.to_bits(), dense.clone());
+        let mut gl = TreeCache::default().with_image_policy(ImagePolicy::DeferredUpload);
+        gl.prepare(&scene, scale).unwrap();
+        let drawn = gl.frame.clone().unwrap();
+        assert!(!Arc::ptr_eq(&drawn, &dense) && !stretched(&drawn));
+        scene.prepared.insert(scale.to_bits(), own.clone());
+        gl.prepare(&scene, scale).unwrap();
+        assert!(
+            Arc::ptr_eq(gl.frame.as_ref().unwrap(), &own),
+            "a per-size frame is adopted"
+        );
     }
     #[test]
     fn a_stretched_raster_damages_its_drawn_extent() {
