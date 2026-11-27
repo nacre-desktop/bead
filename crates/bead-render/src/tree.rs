@@ -4028,6 +4028,66 @@ pub struct TreeCpuRenderer {
     /// B0419 U3b: the shifted plane's clip as last painted; only while a plane is shifted.
     plane_copy: Option<PlaneCopy>,
     plane_steps: PlaneSteps,
+    /// B0442: a slide's composite where its layer lies over one flat colour, as last painted.
+    slide_copy: Option<SlideCopy>,
+    /// B0442: slide paints by path: copy, full, unproven (CPU_SLIDE_STEPS; a test hook).
+    slide_steps: [u32; 3],
+    /// B0442: the body raster (key, region) last checked for one flat colour, and the colour.
+    flat_under: Option<((u64, Damage), Option<Flat>)>,
+}
+/// B0442: one flat opaque colour, and whether it is a raster texel (else a fill).
+type Flat = (bool, [u8; 4]);
+/// B0442: a slide's composite in `rect` (device px), painted with the layer at `at`; `key` is
+/// the layer's and the flat colour under it (a raster texel or a fill).
+struct SlideCopy {
+    key: (u64, Flat),
+    at: (i64, i64),
+    rect: Damage,
+    pixels: Vec<u8>,
+}
+/// B0442: the `w`×`h` rectangle at (x, y), cut to `within`.
+fn placed((x, y): (i64, i64), (w, h): (u32, u32), within: Damage) -> Damage {
+    let cut = |at: i64, len: u32, from: u32, to: u32| {
+        let (lo, to) = (at.clamp(i64::from(from), i64::from(to)), i64::from(to));
+        (lo as u32, ((at + i64::from(len)).clamp(lo, to) - lo) as u32)
+    };
+    let (x, w) = cut(x, w, within.x, within.x + within.w);
+    let (y, h) = cut(y, h, within.y, within.y + within.h);
+    Damage { x, y, w, h }
+}
+/// Where a raster item's texels start, in device px, at scene offset `at`.
+fn raster_at(p: Rect, raster: &Raster, at: (f32, f32), scale: f32) -> (i64, i64) {
+    let px = |v: f32, origin: u32| (v * scale).round() as i64 + i64::from(origin);
+    (
+        px(p.x + at.0, raster.origin.0),
+        px(p.y + at.1, raster.origin.1),
+    )
+}
+/// B0442: the one opaque colour `item` paints over all of `region` (device px, its clip aside):
+/// a solid opaque fill covering it, or a 1:1 opaque raster of one texel value there (a host's
+/// body art). Whether it is a texel, and the colour.
+fn flat_colour(item: &Item, r: Damage, at: (f32, f32), scale: f32) -> Option<Flat> {
+    match (&item.primitive, &item.raster) {
+        (Primitive::Rounded { fill, radial, .. }, None) => {
+            (fill[3] == 255 && radial.is_none() && fill_covers(&item.primitive, at, scale, r))
+                .then_some((false, *fill))
+        }
+        (p, Some(raster)) if raster.stretch.is_none() && p.opacity() >= 1. => {
+            let ((x, y), w) = (raster_at(rect(p), raster, at, scale), raster.pixels.width());
+            if r.w * r.h == 0 || placed((x, y), (w, raster.pixels.height()), r) != r {
+                return None;
+            }
+            let texels = raster.pixels.data().as_chunks::<4>().0;
+            let line = |row: u32| {
+                let at = (i64::from(row) - y) as usize * w as usize + (i64::from(r.x) - x) as usize;
+                &texels[at..at + r.w as usize]
+            };
+            let first = line(r.y)[0];
+            let flat = (r.y..r.y + r.h).all(|row| line(row).iter().all(|t| *t == first));
+            (first[3] == 255 && flat).then_some((true, first))
+        }
+        _ => None,
+    }
 }
 /// B0441: clip steps by path: band, then fallbacks background, fraction, damage, content, other.
 #[derive(Default)]
@@ -4666,6 +4726,17 @@ impl TreeCpuRenderer {
         }
         Ok(())
     }
+    /// B0442: a slide ended (its copy is already dropped): log its paints by path, if any.
+    fn end_slide_steps(&mut self) {
+        self.flat_under = None;
+        let [copy, full, unproven] = std::mem::take(&mut self.slide_steps);
+        let steps = copy + full + unproven;
+        if steps > 0 {
+            bead_core::profile::eline(format_args!(
+                "CPU_SLIDE_STEPS steps={steps} copy={copy} full={full} unproven={unproven}"
+            ));
+        }
+    }
     /// B0441: a shifted sequence ended: drop the plane copy and log the steps (the line logged).
     fn end_plane_steps(&mut self) -> Option<String> {
         self.plane_copy = None;
@@ -4771,6 +4842,7 @@ impl TreeCpuRenderer {
         slide: &SlideContent,
         target: ShmTarget<'_>,
         damage: Damage,
+        copy: Option<SlideCopy>,
     ) -> Result<()> {
         let ShmTarget {
             bytes,
@@ -4787,45 +4859,124 @@ impl TreeCpuRenderer {
             self.prepare_settled(settled, scene.offset, (width, height), scale, format);
         }
         self.ensure_slide_layer(scene, frame, slide, scale, format)?;
-        paint_items(
-            &frame.items[..slide.posed_start],
-            scene.offset,
-            ShmTarget {
+        let (key, layer) = self.slide_layer.as_ref().expect("slide layer built");
+        let x = ((scene.offset.0 + slide.offset.0 + scene.bounds.x) * scale).round() as i64;
+        let y = ((scene.offset.1 + slide.offset.1 + scene.bounds.y) * scale).round() as i64;
+        let window = slide
+            .window
+            .map(|c| c.translated(scene.offset.0, scene.offset.1));
+        let window = window.map_or(Damage::full(width, height), |c| {
+            c.pixels(scale, width, height)
+        });
+        let extent = (layer.pixels.width(), layer.pixels.height());
+        let over = placed((x, y), extent, window);
+        let body = &frame.items[..slide.posed_start];
+        let compose = |bytes: &mut [u8], region, scratch: &mut RepairScratch| -> Result<()> {
+            let target = ShmTarget {
                 bytes: &mut *bytes,
                 width,
                 height,
                 scale,
                 format,
-            },
-            damage,
-            &mut self.repair_scratch,
-            &[],
-        )?;
-        let (_, layer) = self.slide_layer.as_ref().expect("slide layer built");
-        let x = ((scene.offset.0 + slide.offset.0 + scene.bounds.x) * scale).round() as i64;
-        let y = ((scene.offset.1 + slide.offset.1 + scene.bounds.y) * scale).round() as i64;
-        let mut clip = intersection(damage, Damage::full(width, height));
-        if let Some(window) = slide.window {
-            clip = intersection(
-                clip,
-                window
-                    .translated(scene.offset.0, scene.offset.1)
-                    .pixels(scale, width, height),
-            );
-        }
-        let left = i64::from(clip.x).max(x);
-        let top = i64::from(clip.y).max(y);
-        let right = i64::from(clip.x + clip.w).min(x + i64::from(layer.pixels.width()));
-        let bottom = i64::from(clip.y + clip.h).min(y + i64::from(layer.pixels.height()));
-        if right > left && bottom > top {
-            let clip = Damage {
-                x: left as u32,
-                y: top as u32,
-                w: (right - left) as u32,
-                h: (bottom - top) as u32,
             };
-            let extent = (layer.pixels.width(), layer.pixels.height());
-            blend_over(bytes, width, 0, clip, layer, (x, y), 1., extent);
+            paint_items(body, scene.offset, target, region, scratch, &[])?;
+            let clip = intersection(region, over);
+            if clip.w > 0 && clip.h > 0 {
+                blend_over(bytes, width, 0, clip, layer, (x, y), 1., extent);
+            }
+            Ok(())
+        };
+        // B0442: where this frame is one flat colour ⊕ the layer: the posed body inset 48 px in
+        // `over`, if the last body item reaching it paints one opaque colour there (a raster is
+        // checked once over the open body's inset, cached by its key).
+        let at = scene.offset;
+        let px = |c: Rect| c.translated(at.0, at.1).pixels(scale, width, height);
+        // Past the growing edge's band (`EDGE_INSIDE`), which is not the flat body.
+        let m = EDGE_INSIDE + 4.;
+        let inset = |b: Rect| px(Rect::new(b.x + m, b.y + m, b.w - 2. * m, b.h - 2. * m));
+        let posed = scene.posed_body().map(|b| b.translated(-at.0, -at.1));
+        let r = intersection(over, posed.map_or(Damage::full(0, 0), inset));
+        let flat = (|| {
+            // As painted: a raster's texels, else the padded rect; `drawn` inside the item's clip.
+            let bounds = |item: &Item| {
+                let (p, full) = (rect(&item.primitive), Damage::full(width, height));
+                let Some(t) = &item.raster else {
+                    return px(Rect::new(p.x - 4., p.y - 4., p.w + 8., p.h + 8.));
+                };
+                placed(raster_at(p, t, at, scale), t.extent(p, scale), full)
+            };
+            let drawn = |i: &Item| i.clip.map_or(bounds(i), |c| intersection(bounds(i), px(c)));
+            let reaches = |i: &&Item| intersection(drawn(i), r).w * intersection(drawn(i), r).h > 0;
+            let item = body.iter().rfind(reaches)?;
+            if intersection(drawn(item), r) != r {
+                return None;
+            }
+            let Some(raster) = &item.raster else {
+                return flat_colour(item, r, at, scale).map(|colour| (r, colour));
+            };
+            let whole = intersection(inset(scene.reveal_body()?), bounds(item));
+            if self.flat_under.as_ref().map(|(key, _)| *key) != Some((raster.key, whole)) {
+                self.flat_under = Some(((raster.key, whole), flat_colour(item, whole, at, scale)));
+            }
+            let colour = self.flat_under.as_ref()?.1?;
+            (intersection(whole, r) == r).then_some((r, colour))
+        })();
+        // What the copy holds of this frame (its layer moved by the pose delta) is copied.
+        let reuse = copy.filter(|c| flat.is_some_and(|(_, under)| c.key == (*key, under)));
+        let mut moved = Damage::full(0, 0);
+        if let (Some(c), Some((r, _))) = (&reuse, flat) {
+            let (dx, dy) = (x - c.at.0, y - c.at.1);
+            let from = (i64::from(c.rect.x) + dx, i64::from(c.rect.y) + dy);
+            moved = placed(from, (c.rect.w, c.rect.h), intersection(r, damage));
+            let (stride, len) = (c.rect.w as usize * 4, moved.w as usize * 4);
+            // No rows when no columns: an empty cut keeps its rows and the offsets go negative.
+            for row in moved.y..moved.y + moved.h * u32::from(moved.w > 0) {
+                let from = (i64::from(row) - dy - i64::from(c.rect.y)) as usize * stride
+                    + (i64::from(moved.x) - dx - i64::from(c.rect.x)) as usize * 4;
+                let to = (row * width + moved.x) as usize * 4;
+                bytes[to..to + len].copy_from_slice(&c.pixels[from..from + len]);
+            }
+        }
+        let copied = moved.w > 0 && moved.h > 0;
+        // Copy, full (no copy matched or reached, or no flat region), or unproven.
+        let unproven = flat.is_none() && r.w * r.h > 0;
+        self.slide_steps[usize::from(!copied) + usize::from(unproven)] += 1;
+        // The damage around what was copied composes as before.
+        let (d, cut) = (damage, |x, y, w, h| Damage { x, y, w, h });
+        let m = if copied {
+            moved
+        } else {
+            cut(d.x, d.y + d.h, d.w, 0)
+        };
+        let rest = [
+            cut(d.x, d.y, d.w, m.y - d.y),
+            cut(d.x, m.y + m.h, d.w, d.y + d.h - m.y - m.h),
+            cut(d.x, m.y, m.x - d.x, m.h),
+            cut(m.x + m.w, m.y, d.x + d.w - m.x - m.w, m.h),
+        ];
+        for region in rest.into_iter().filter(|r| r.w > 0 && r.h > 0) {
+            compose(&mut *bytes, region, &mut self.repair_scratch)?;
+        }
+        let Some((r, under)) = flat else {
+            return Ok(());
+        };
+        // Saved where this call painted, so several damage rects per frame stay exact.
+        let s = intersection(r, damage);
+        if s.w == 0 || s.h == 0 {
+            self.slide_copy = reuse;
+        } else {
+            let mut pixels = reuse.map_or_else(Vec::new, |c| c.pixels);
+            pixels.clear();
+            for row in s.y..s.y + s.h {
+                let i = (row * width + s.x) as usize * 4;
+                pixels.extend_from_slice(&bytes[i..i + s.w as usize * 4]);
+            }
+            self.slide_copy = Some(SlideCopy {
+                key: (*key, under),
+                at: (x, y),
+                rect: s,
+                pixels,
+            });
         }
         Ok(())
     }
@@ -5113,13 +5264,13 @@ impl Renderer for TreeCpuRenderer {
             return Err("damage outside SHM".into());
         }
         self.composites = false;
-        // Every path but a shifted direct paint drops the plane copy.
-        let copy = self.plane_copy.take();
+        // Every path but a shifted direct paint drops the plane copy (B0442: a slide, the slide copy).
+        let (copy, slide_copy) = (self.plane_copy.take(), self.slide_copy.take());
         let frozen_snapshot = self.snapshot_fingerprint.is_some();
         let frame = if frozen_snapshot {
             None
         } else {
-            Some(self.cache.frame.as_ref().ok_or("unprepared layer tree")?)
+            Some(self.cache.frame.clone().ok_or("unprepared layer tree")?)
         };
         let cached_opaque = match self.opaque_composition {
             OpaqueComposition::Auto => false,
@@ -5130,11 +5281,12 @@ impl Renderer for TreeCpuRenderer {
             self.direct_composites += 1;
             self.flattened = None;
             self.group_charge = None;
-            let frame = frame.expect("non-snapshot frame checked").clone();
+            let frame = frame.expect("non-snapshot frame checked");
             if let Some(slide) = SlideContent::of(scene, &frame) {
                 self.close_due = None;
-                return self.paint_slide(scene, &frame, &slide, target, damage);
+                return self.paint_slide(scene, &frame, &slide, target, damage, slide_copy);
             }
+            self.end_slide_steps();
             self.slide_layer = None;
             self.slide_damage = None;
             self.close_due = None;
@@ -5171,6 +5323,7 @@ impl Renderer for TreeCpuRenderer {
                 &[],
             );
         }
+        self.end_slide_steps();
         self.slide_layer = None;
         self.slide_damage = None;
         self.close_due = None;
@@ -5178,7 +5331,7 @@ impl Renderer for TreeCpuRenderer {
             if !frozen_snapshot && scene.motion.as_ref().is_some_and(|m| m.fade && m.open) {
                 // The held first pose of an opening: flatten now so the first moving frame only blits.
                 self.cache_content(scene)?;
-            } else if let Some(frame) = frame.cloned()
+            } else if let Some(frame) = frame
                 && scene.motion.as_ref().is_some_and(|m| m.open && !m.fade)
                 && let Some(slide) = SlideContent::of(scene, &frame)
             {
@@ -7524,6 +7677,252 @@ mod tests {
         let pixels = draw_plain(&mut stale, &closing);
         assert_eq!(stale.background_layer_adoptions, 0);
         assert!(pixels == draw_plain(&mut TreeCpuRenderer::default(), &closing));
+    }
+    /// B0442: a panel whose body is a host's art (one flat colour inside, or a stripe across it),
+    /// its content (translucent cards, rings) sliding by its extent behind the reveal window.
+    fn art_slide(edge: bead_core::Edge, (w, h): (f32, f32), flat: bool, scale: f32) -> Scene {
+        let body = Rect::new(0., 0., w, h);
+        let stripe = (!flat).then(|| {
+            format!(
+                "<rect x='{}' width='24' height='{h}' fill='#283040'/>",
+                w / 2.
+            )
+        });
+        let stripe = stripe.unwrap_or_default();
+        let draw: Arc<dyn Fn(Rect, Option<Rect>) -> crate::RevealFrame + Send + Sync> = Arc::new(
+            move |rev, crop| {
+                let r = crop.unwrap_or(Rect::new(
+                    rev.x - 32.,
+                    rev.y - 32.,
+                    rev.w + 64.,
+                    rev.h + 64.,
+                ));
+                let svg = format!(
+                    "<svg xmlns='http://www.w3.org/2000/svg' width='{}' height='{}' viewBox='{} {} {} {}'>\
+                     <rect x='{}' y='{}' width='{}' height='{}' rx='12' fill='#1e1e28'/>{stripe}</svg>",
+                    r.w, r.h, r.x, r.y, r.w, r.h, rev.x, rev.y, rev.w, rev.h
+                );
+                (r, Arc::from(svg.into_bytes()))
+            },
+        );
+        let (open_rect, open_svg) = draw(body, None);
+        let mut primitives = vec![Primitive::image(open_rect, "open.svg")];
+        for (i, j) in
+            (0..(w / 180.) as u16).flat_map(|i| (0..(h / 140.) as u16).map(move |j| (i, j)))
+        {
+            let (x, y) = (24. + 180. * f32::from(i), 24. + 140. * f32::from(j));
+            primitives.push(Primitive::Rounded {
+                rect: Rect::new(x, y, 160., 120.),
+                radius: 10.,
+                fill: [255, 255, 255, 18],
+                border: Some(([255, 255, 255, 40], 1.)),
+                radial: None,
+            });
+            primitives.push(Primitive::Arc {
+                rect: Rect::new(x + 16., y + 16., 40., 40.),
+                start_angle: 0.,
+                sweep_angle: 270.,
+                stroke_width: 4.,
+                color: [120, 180, 240, 255],
+                round_caps: true,
+            });
+        }
+        let mut scene = Scene::empty(w + 64., h + 64.);
+        (scene.bounds, scene.offset) = (Rect::new(-32., -32., w + 64., h + 64.), (32., 32.));
+        scene.asset_data = BTreeMap::from([("open.svg".into(), open_svg)]);
+        scene.resource_revision = 1;
+        scene.primitives = primitives;
+        scene.motion = Some(crate::Motion {
+            id: "art-slide".into(),
+            open: true,
+            duration: 0.3,
+            return_duration: None,
+            return_curve: None,
+            auto_open: false,
+            spring: false,
+            curve: None,
+            edge,
+            slide_distance: Some(
+                if matches!(edge, bead_core::Edge::Left | bead_core::Edge::Right) {
+                    w
+                } else {
+                    h
+                },
+            ),
+            scale_from: None,
+            fade: false,
+            reveal: true,
+            progress: 1.,
+            parts: vec![(0, scene.primitives[0].clone())],
+            art: Some(crate::RevealArt {
+                body,
+                index: 0,
+                contour: None,
+                draw,
+            }),
+            body: Some(body),
+        });
+        scene.reveal(1.);
+        let mut worker = TreeCache::default();
+        worker.prepare(&scene, scale).unwrap();
+        scene
+            .prepared
+            .insert(scale.to_bits(), worker.frame.unwrap());
+        scene
+    }
+    /// B0442: `frames` slide frames drawn as presented (one buffer, semantic damage); `full`
+    /// composes each fully instead (no copy). The frames' pixels and per-frame compose times (ms).
+    fn draw_art_slide(
+        renderer: &mut TreeCpuRenderer,
+        base: &Scene,
+        (open, scale, frames): (bool, f32, u16),
+        full: bool,
+        mut edit: impl FnMut(u16, &mut Scene),
+    ) -> (Vec<Vec<u8>>, Vec<f64>) {
+        let (w, h) = (
+            (base.bounds.w * scale) as u32,
+            (base.bounds.h * scale) as u32,
+        );
+        let (mut bytes, mut damage) = (
+            vec![7u8; (w * h * 4) as usize],
+            crate::damage::FrameDamage::default(),
+        );
+        let (mut shown, mut times) = (Vec::new(), Vec::new());
+        for step in 1..=frames {
+            let p = f32::from(step) / f32::from(frames + 1);
+            let mut scene = base.clone();
+            edit(step, &mut scene);
+            scene.panel_offset(if open { p } else { 1. - p }, open);
+            renderer.prepare_on_ui(&scene, scale).unwrap();
+            let frame = renderer.prepared_frame().unwrap();
+            let started = std::time::Instant::now();
+            for region in damage.update(&frame, scene.offset, 1., w, h).unwrap() {
+                if full {
+                    renderer.slide_copy = None;
+                }
+                let target = ShmTarget {
+                    bytes: &mut bytes,
+                    width: w,
+                    height: h,
+                    scale,
+                    format: PixelFormat::Bgra,
+                };
+                renderer.render(&scene, target, region).unwrap();
+            }
+            times.push(started.elapsed().as_secs_f64() * 1000.);
+            shown.push(bytes.clone());
+        }
+        (shown, times)
+    }
+    #[test]
+    fn slide_frames_over_flat_art_copy_last_frame_and_equal_a_full_compose() {
+        let card = |scene: &mut Scene| {
+            if let Primitive::Rounded { fill, .. } = &mut scene.primitives[3] {
+                *fill = [90, 200, 120, 255];
+            }
+        };
+        for (edge, scale, open) in [
+            (bead_core::Edge::Bottom, 1., true),
+            (bead_core::Edge::Bottom, 1.5, false),
+            (bead_core::Edge::Right, 1.5, true),
+            (bead_core::Edge::Right, 1., false),
+        ] {
+            let base = art_slide(edge, (560., 300.), true, scale);
+            let case = (open, scale, 12);
+            let mut renderer = TreeCpuRenderer::default();
+            // A content edit from frame 7 on re-keys the layer: that frame composes fully. The
+            // first frames (the body under 2 × 48 px) have no flat region.
+            let edit = |step: u16, scene: &mut Scene| {
+                if step >= 7 {
+                    card(scene)
+                }
+            };
+            let (copied, _) = draw_art_slide(&mut renderer, &base, case, false, edit);
+            let (full, _) =
+                draw_art_slide(&mut TreeCpuRenderer::default(), &base, case, true, edit);
+            for (step, (a, b)) in copied.iter().zip(&full).enumerate() {
+                assert!(
+                    a == b,
+                    "{edge:?} s{scale} open={open} frame {}: differs from a full compose",
+                    step + 1
+                );
+            }
+            let [copy, whole, unproven] = renderer.slide_steps;
+            assert!(
+                copy >= 5 && unproven == 0,
+                "{edge:?} s{scale} open={open}: copy={copy} full={whole} unproven={unproven}"
+            );
+            // A close ends with the body too small for a flat region, which drops the copy.
+            assert!(!open || renderer.slide_copy.is_some() && renderer.flat_under.is_some());
+            // The slide ends: the copy, the flatness check and the counts go.
+            let mut rest = base.clone();
+            rest.panel_offset(1., true);
+            renderer.prepare_on_ui(&rest, scale).unwrap();
+            let (w, h) = (
+                (rest.bounds.w * scale) as u32,
+                (rest.bounds.h * scale) as u32,
+            );
+            let target = ShmTarget {
+                bytes: &mut vec![0; (w * h * 4) as usize],
+                width: w,
+                height: h,
+                scale,
+                format: PixelFormat::Bgra,
+            };
+            renderer.render(&rest, target, Damage::full(w, h)).unwrap();
+            assert!(renderer.slide_copy.is_none() && renderer.flat_under.is_none());
+            assert_eq!(renderer.slide_steps, [0; 3]);
+        }
+    }
+    #[test]
+    fn slide_frames_over_striped_art_compose_fully() {
+        for scale in [1., 1.5] {
+            let base = art_slide(bead_core::Edge::Bottom, (560., 300.), false, scale);
+            let mut renderer = TreeCpuRenderer::default();
+            let (copied, _) =
+                draw_art_slide(&mut renderer, &base, (true, scale, 8), false, |_, _| {});
+            let (full, _) = draw_art_slide(
+                &mut TreeCpuRenderer::default(),
+                &base,
+                (true, scale, 8),
+                true,
+                |_, _| {},
+            );
+            assert!(copied == full, "s{scale}");
+            assert_eq!(renderer.slide_steps[0], 0, "s{scale}: nothing is copied");
+            assert!(renderer.slide_steps[2] > 0, "s{scale}: the art is unproven");
+        }
+    }
+    #[test]
+    #[ignore = "timing, in release: the B0442 night checks print it"]
+    fn cpu_slide_step_paint_time() {
+        for (name, edge, size) in [
+            ("launcher", bead_core::Edge::Bottom, (1100., 590.)),
+            ("control", bead_core::Edge::Right, (440., 1016.)),
+        ] {
+            for scale in [1., 1.5] {
+                let base = art_slide(edge, size, true, scale);
+                for full in [false, true] {
+                    let mut renderer = TreeCpuRenderer::default();
+                    let (_, mut times) =
+                        draw_art_slide(&mut renderer, &base, (true, scale, 36), full, |_, _| {});
+                    times.remove(0);
+                    times.sort_by(f64::total_cmp);
+                    let at = |q: usize| times[(times.len() * q / 100).min(times.len() - 1)];
+                    let [copy, whole, unproven] = renderer.slide_steps;
+                    println!(
+                        "CPU_SLIDE_STEP case={name} scale={scale} surface={}x{} path={} frames={} p50_ms={:.3} p95_ms={:.3} max_ms={:.3} copy={copy} full={whole} unproven={unproven}",
+                        (base.bounds.w * scale) as u32,
+                        (base.bounds.h * scale) as u32,
+                        if full { "full" } else { "copy" },
+                        times.len(),
+                        at(50),
+                        at(95),
+                        at(100)
+                    );
+                }
+            }
+        }
     }
     #[test]
     fn a_scene_changing_mid_slide_repairs_only_its_changed_content_in_the_layer() {
