@@ -75,11 +75,8 @@ impl Overlay {
     pub(super) fn viewport_size(&self) -> (u32, u32) {
         self.size
     }
-    pub(super) fn scroll_regions(&self) -> Vec<Rect> {
-        self.source.scroll_regions()
-    }
-    pub(super) fn scroll_step_regions(&self) -> Vec<StepRegion> {
-        self.source.scroll_step_regions()
+    pub(super) fn source(&self) -> &dyn SceneSource {
+        &*self.source
     }
     pub(super) fn epoch(&self) -> u64 {
         self.epoch

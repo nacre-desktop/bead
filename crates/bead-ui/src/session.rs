@@ -47,6 +47,8 @@ pub struct Session {
     pub(super) scroll_feedback: crate::scroll_feedback::Feedback,
     pub(super) scrollbar_config: crate::scrollbar::Config,
     pub(super) keyboard_scroll: Option<crate::scroll_feedback::KeyboardMotion>,
+    /// B0419 U5a2: scroll stores `Session::scroll` moved since their viewport's last settle.
+    pub(super) unsettled: std::collections::BTreeSet<String>,
     pub(super) host_actions: std::collections::BTreeSet<String>,
     /// The last Luau action of this view failed: `reject` keeps the scene (B0394).
     pub(super) action_failed: std::cell::Cell<bool>,
@@ -229,6 +231,7 @@ impl Session {
             scroll_feedback: Default::default(),
             scrollbar_config: crate::theme::scrollbar_config(),
             keyboard_scroll: None,
+            unsettled: Default::default(),
             host_actions: Default::default(),
             action_failed: Default::default(),
             host_store_defaults: BTreeMap::new(),

@@ -728,9 +728,45 @@ mod plane_tests {
         );
     }
 
+    /// The plane's viewport as the source lists it; `settle`: it has `on_settle`.
+    fn viewport(settle: bool) -> Vec<bead_render::ScrollViewport> {
+        vec![bead_render::ScrollViewport {
+            id: "list".into(),
+            rect: Rect::new(0., 0., 100., 200.),
+            horizontal: false,
+            offset: 300.,
+            settle,
+        }]
+    }
+
+    #[test]
+    fn a_burst_over_on_settle_sends_one_scroll_settled_on_the_worker_and_the_compositing_path() {
+        let (mut state, t0) = (State::default(), Instant::now());
+        // Worker path (the renderer does not composite): today's steps, then one settle.
+        for delta in [40., 40., -15.] {
+            state.note_settles(&KEY, viewport(true), AT);
+            assert_eq!(state.content_step(&KEY, None, AT, delta, t0), Some(delta));
+        }
+        let settled = [r#"ScrollSettled { id: "list" }"#];
+        assert_eq!(kinds(&state.settle(&KEY.0, t0)), settled);
+        assert!(state.settle(&KEY.0, t0).is_empty(), "once per burst");
+        // Compositing path: the named plane settles once, after the final sync.
+        state.note_settles(&KEY, viewport(true), AT);
+        step(&mut state, &layers(300., true), 40., t0);
+        let out = kinds(&state.settle(&KEY.0, t0));
+        assert_eq!(out.len(), 2);
+        assert_eq!(out[1], settled[0]);
+    }
+
     #[test]
     fn a_renderer_that_cannot_composite_gets_todays_events() {
         let (mut state, t0) = (State::default(), Instant::now());
+        // U5a2: no settle over a viewport without `on_settle`, on the other axis, or elsewhere.
+        let (mut x, mut away) = (viewport(true), viewport(true));
+        (x[0].horizontal, away[0].rect.x) = (true, 500.);
+        for viewports in [viewport(false), x, away] {
+            state.note_settles(&KEY, viewports, AT);
+        }
         for delta in [40., 40., -15.] {
             assert_eq!(state.content_step(&KEY, None, AT, delta, t0), Some(delta));
         }
@@ -790,6 +826,8 @@ pub(super) struct State {
     planes: Planes,
     /// B0419: planes the worker was told are moving (`bead.scrolling`), until their settle.
     named: std::collections::BTreeSet<(Target, String)>,
+    /// U5a2: viewports with `on_settle` that a burst ran over, until its settle.
+    settles: std::collections::BTreeSet<(Target, String)>,
     /// Start signals to deliver before the step that caused them.
     starts: Vec<(Target, UiEvent)>,
 }
@@ -961,13 +999,34 @@ impl State {
         }
         hit.map_or(Some(delta), |(_, worker, _)| worker)
     }
+    /// B0419 U5a2: a content burst over an `on_settle` viewport ends with its ScrollSettled.
+    fn note_settles(
+        &mut self,
+        key: &(Target, bool),
+        viewports: Vec<bead_render::ScrollViewport>,
+        (x, y): (f32, f32),
+    ) {
+        for v in viewports {
+            let r = v.rect;
+            let inside = x >= r.x && y >= r.y && x < r.x + r.w && y < r.y + r.h;
+            if v.settle && v.horizontal == key.1 && inside {
+                self.settles.insert((key.0.clone(), v.id));
+            }
+        }
+    }
     /// B0419: the plane start signals to deliver before the step's own event.
     fn take_starts(&mut self) -> Vec<(Target, UiEvent)> {
         std::mem::take(&mut self.starts)
     }
-    /// B0419: the final syncs of `target`, then one settle per plane the worker was told moves.
+    /// B0419: the final syncs of `target`, then one settle per plane the worker was told moves
+    /// and (U5a2) per noted `on_settle` viewport.
     fn settle(&mut self, target: &Target, now: Instant) -> Vec<(Target, UiEvent)> {
         let mut out = self.syncs(Some(target), true, now);
+        let settles = std::mem::take(&mut self.settles).into_iter();
+        let (mine, rest): (std::collections::BTreeSet<_>, _) =
+            settles.partition(|(t, _)| t == target);
+        self.settles = rest;
+        self.named.extend(mine);
         let named = std::mem::take(&mut self.named);
         for (t, id) in named {
             if t == *target {
@@ -1739,35 +1798,24 @@ impl App {
         axis: AxisScroll,
         source: Option<AxisSource>,
     ) {
-        let regions = match &target {
+        let scene: Option<&dyn SceneSource> = match &target {
             Target::Canvas(epoch) => self
                 .canvases
                 .values()
                 .find(|c| c.epoch == *epoch && c.scroll_active())
-                .map(|c| (c.source.scroll_regions(), c.source.scroll_step_regions())),
-            Target::Window(_) => self
-                .window
-                .as_ref()
-                .map(|w| (w.scroll_regions(), w.scroll_step_regions())),
-            Target::Overlay(_) => self
-                .overlay
-                .as_ref()
-                .map(|o| (o.scroll_regions(), o.scroll_step_regions())),
-            Target::Panel(_) => self
-                .panel_runtime
-                .as_ref()
-                .map(|s| (s.scroll_regions(), s.scroll_step_regions())),
+                .map(|c| &*c.source),
+            Target::Window(_) => self.window.as_ref().map(|w| w.source()),
+            Target::Overlay(_) => self.overlay.as_ref().map(|o| o.source()),
+            Target::Panel(_) => self.panel_runtime.as_deref(),
             Target::Primary(Some((_, id))) => self
                 .output_sessions
                 .get(id)
-                .and_then(|s| s.source.as_ref())
-                .map(|s| (s.scroll_regions(), s.scroll_step_regions())),
-            Target::Primary(None) => self
-                .runtime
-                .as_ref()
-                .map(|s| (s.scroll_regions(), s.scroll_step_regions())),
+                .and_then(|s| s.source.as_deref()),
+            Target::Primary(None) => self.runtime.as_deref(),
         };
-        let (regions, steps) = regions.unzip();
+        let regions = scene.map(|s| s.scroll_regions());
+        let steps = scene.map(|s| s.scroll_step_regions());
+        let viewports = scene.map_or_else(Vec::new, |s| s.scroll_viewports());
         let inside = |r: &Rect| {
             point.0 >= r.x && point.1 >= r.y && point.0 < r.x + r.w && point.1 < r.y + r.h
         };
@@ -1805,6 +1853,9 @@ impl App {
                 self.end_motion(&target, Instant::now());
             }
             return;
+        }
+        if content {
+            self.scrolls.note_settles(&key, viewports, point);
         }
         let previous = self.scrolls.motions.remove(&key);
         self.scrolls.flings.remove(&key);

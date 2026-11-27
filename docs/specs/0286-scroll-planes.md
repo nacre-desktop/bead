@@ -2,8 +2,8 @@
 
 Composited scrolling: every `ui.Scroll` becomes a plane whose content main can move as one, with
 text rastered ahead of the viewport while it moves. Status: U1 (planes in the scene), U2a (GL
-shifts), U4 (kits), U2b1 and U2b2 (main stepping and its switch-on) and U5a1 (`axis="x"`) landed;
-later units (U2b3 thumb and windows, U3 CPU fallback, U5a2 `on_settle`, U5a3 snap and motion, U5b
+shifts), U4 (kits), U2b1 and U2b2 (main stepping and its switch-on), U5a1 (`axis="x"`) and U5a2 (`on_settle`)
+landed; later units (U2b3 thumb and windows, U3 CPU fallback, U5a3 snap and motion, U5b
 `ui.scrolled`) append their contracts here.
 
 ## U1 contract: planes in the scene
@@ -198,3 +198,29 @@ Tests (no Wayland, `scroll.rs` `plane_tests`): `a_step_inside_ready_sends_no_ui_
 - Tests: bead-ui `materialized_tests` `axis_x_places_content_by_the_x_offset_and_takes_only_x_deltas`
   (placement, limit, no plane, the patch equals a full layout, each axis moves only its viewport,
   keys, AccessKit, validation); bead `host` `folder_source_dispatches_horizontal_scroll_to_an_x_scroll`.
+
+## U5a2: scroll viewports on main and `on_settle`
+
+- `bead_render::ScrollViewport{id, rect, horizontal, offset, settle}` is one scroll viewport as
+  main's wheel sees it: the clipped rect, the axis, the store offset when read, and whether it has
+  `on_settle`. U5a3 adds `snap` and `motion` with their props.
+- `SceneSource::scroll_viewports()` (default: none) lists them; `Session::scroll_viewports()` fills
+  it, the worker mirrors it per packet, and Bead's host forwards it. A host with its own
+  `SceneSource` must forward it too, or its worker-path bursts get no settle (as today).
+  Main reads it through each surface's source (window and overlay expose `source()`).
+- `ui.Scroll{on_settle=ui.action(name)}` (Scroll only; a markup error otherwise). The action runs
+  once per settle of a viewport that moved since its last settle, with the final offset as its
+  argument: `Session::scroll` notes the store it moves, and `Session::scroll_settled(id)` runs the
+  action and clears a matching `bead.scrolling` in one stage. The worker commits a burst's last
+  scroll before it stages the settle, so the store already holds the final offset.
+- Main: each content wheel or finger event notes the viewports with `on_settle` under the point
+  along its axis; at the burst's end (`settle`, after the final syncs) it sends one
+  `ScrollSettled { id }` per noted or named id, once each. A main-stepped plane is named anyway; a
+  worker-path burst (CPU, x, a source without planes) now settles too, but only over a viewport with
+  `on_settle`, so every other burst keeps today's events exactly.
+- Not covered: keyboard scrolling, scrollbar drags and programmatic writes run no `on_settle`.
+- Tests: bead-wayland `plane_tests`
+  `a_burst_over_on_settle_sends_one_scroll_settled_on_the_worker_and_the_compositing_path`,
+  `a_renderer_that_cannot_composite_gets_todays_events` (now with viewports without `on_settle`,
+  on the other axis and elsewhere); `worker` `a_source_without_scroll_viewports_lists_none`;
+  bead-ui `materialized_tests` `on_settle_runs_once_with_the_final_offset_after_a_burst`.

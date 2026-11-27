@@ -133,6 +133,7 @@ pub const PROPERTIES: &[&str] = &[
     "overscan",
     "ready",
     "axis",
+    "on_settle",
     "scrollbar",
     "fill",
     "radial",
@@ -260,6 +261,7 @@ pub struct ViewSpec {
     pub ready: Option<(f32, f32)>,
     /// B0419 U5a: `axis="x"`: the Scroll moves its content along x.
     pub horizontal: bool,
+    pub on_settle: Option<String>,
     pub scrollbar: bool,
     pub fill: Option<Json>,
     /// The fill amount is an animation marker: draw the box even while it is transparent,
@@ -1312,6 +1314,10 @@ impl ViewSpec {
                         })
                         .transpose()
                 };
+            if raw.kind != Widget::Scroll && p.contains_key("on_settle") {
+                return Err(source.error("on_settle needs a Scroll"));
+            }
+            let on_settle = parse_action("on_settle")?.map(|(name, _)| name);
             let graph = if raw.kind == Widget::Graph {
                 Some(std::sync::Arc::new(crate::graph::GraphData::parse(
                     &|name| p.get(name),
@@ -1456,6 +1462,7 @@ impl ViewSpec {
                 overscan,
                 ready,
                 horizontal,
+                on_settle,
                 scrollbar: boolean(p, "scrollbar", true, source)?,
                 fill: p.get("fill").cloned(),
                 animated_fill: raw
@@ -2208,6 +2215,7 @@ pub fn layout(
                 scrollbar: view.scroll.is_some() && view.scrollbar && !view.horizontal,
                 scroll_limit,
                 scroll_horizontal: scroll_x,
+                on_settle: view.on_settle.clone(),
                 focusable: view.action.is_some() || view.input.is_some() || view.graph.is_some(),
                 multiline: view.multiline && view.input.is_some(),
                 masked: view.masked && view.input.is_some(),

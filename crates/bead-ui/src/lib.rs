@@ -127,6 +127,9 @@ pub struct Node {
     /// B0419 U5a: that viewport moves along x (`axis="x"`), so it takes horizontal deltas.
     #[serde(skip)]
     pub scroll_horizontal: bool,
+    /// B0419 U5a2: a viewport's `on_settle` action.
+    #[serde(skip)]
+    pub on_settle: Option<String>,
     #[serde(default)]
     pub focusable: bool,
     #[serde(default)]

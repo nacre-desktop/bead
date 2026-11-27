@@ -661,6 +661,16 @@ impl Default for ScrollSteps {
         }
     }
 }
+/// A scroll viewport (clipped rect, axis, store offset) as main's wheel sees it (B0419 U5a2).
+#[derive(Clone, Debug, PartialEq)]
+pub struct ScrollViewport {
+    pub id: String,
+    pub rect: Rect,
+    pub horizontal: bool,
+    pub offset: f32,
+    /// It has `on_settle`: a burst over it ends with `ScrollSettled { id }` on every path.
+    pub settle: bool,
+}
 impl Scene {
     /// A fully opaque scene of this size with nothing in it.
     pub fn empty(width: f32, height: f32) -> Self {

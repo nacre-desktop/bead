@@ -694,6 +694,10 @@ pub trait SceneSource {
     fn scroll_step_regions(&self) -> Vec<StepRegion> {
         Vec::new()
     }
+    /// B0419 U5a2: the scroll viewports; without them a worker-path burst sends no ScrollSettled.
+    fn scroll_viewports(&self) -> Vec<bead_render::ScrollViewport> {
+        Vec::new()
+    }
     /// Whether outside pointer presses may dismiss this surface.
     fn outside_dismiss(&self) -> bool {
         true

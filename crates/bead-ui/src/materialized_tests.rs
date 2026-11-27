@@ -2106,6 +2106,81 @@ fn scroll_settled_clears_the_named_plane_with_no_luau_and_ignores_another() {
     );
 }
 
+/// B0419 U5a2: `on_settle` runs once per settle of a viewport that moved, with the final offset.
+#[test]
+fn on_settle_runs_once_with_the_final_offset_after_a_burst() {
+    let view = PLANE_VIEW.replace("height=200,", "height=200,on_settle=ui.action('landed'),");
+    let behavior = "return {stores={scroll=100,landed=-1,count=0},\
+        actions={landed=function(s,offset) s.landed=offset;s.count=s.count+1 end},computed={}}";
+    let (_fixture, mut session) = interaction_fixture(&view, behavior);
+    let (id, _) = plane_of(&session.current);
+    let viewports = session.scroll_viewports();
+    assert_eq!(viewports.len(), 1);
+    let v = &viewports[0];
+    assert_eq!(
+        (v.id.as_str(), v.rect, v.horizontal, v.offset, v.settle),
+        (
+            id.as_str(),
+            Rect::new(0., 0., 180., 200.),
+            false,
+            100.,
+            true
+        )
+    );
+    let landed = |s: &Session| {
+        (
+            s.stores.get("landed").cloned(),
+            s.stores.get("count").cloned(),
+        )
+    };
+    let number = |n: f64| Some(Value::Number(n));
+    assert!(
+        session.scroll_settled(&id).unwrap().is_none(),
+        "nothing moved"
+    );
+    // Worker path: three steps, then the settle.
+    for delta in [30., 30., 30.] {
+        let scene = session.scroll(90., 100., delta, false).unwrap().unwrap();
+        session.commit(scene);
+    }
+    assert_eq!(landed(&session), (number(-1.), number(0.)), "not per step");
+    let scene = session.scroll_settled(&id).unwrap().unwrap();
+    session.commit(scene);
+    assert_eq!(landed(&session), (number(190.), number(1.)));
+    assert!(session.scroll_settled(&id).unwrap().is_none(), "once");
+    // Compositing path: main named the plane; the settle clears it and lands in one stage.
+    let moving = session.update(scrolling(&id)).unwrap().unwrap();
+    session.commit(moving);
+    let scene = session.scroll(90., 100., -40., false).unwrap().unwrap();
+    session.commit(scene);
+    let scene = session.scroll_settled(&id).unwrap().unwrap();
+    session.commit(scene);
+    assert_eq!(landed(&session), (number(150.), number(2.)));
+    assert_eq!(
+        session.stores.get("bead.scrolling"),
+        Some(&Value::Text(String::new()))
+    );
+    for (view, message) in [
+        (
+            PLANE_VIEW.replace("id='gap',", "id='gap',on_settle=ui.action('landed'),"),
+            "on_settle needs a Scroll",
+        ),
+        (
+            PLANE_VIEW.replace("height=200,", "height=200,on_settle='landed',"),
+            "on_settle requires ui.action",
+        ),
+    ] {
+        let fixture = Fixture::new();
+        fs::create_dir_all(fixture.0.join("ui")).unwrap();
+        fs::write(fixture.0.join("ui/behavior.luau"), behavior).unwrap();
+        fs::write(fixture.0.join("ui/main.luau"), view).unwrap();
+        let mut session = fixture.session();
+        session.entry = "ui/main.luau".into();
+        let error = session.reload().err().expect("a markup error");
+        assert!(error.message.contains(message), "{}", error.message);
+    }
+}
+
 #[test]
 fn scroll_plane_at_rest_adds_no_primitive_or_raster() {
     use bead_render::tree::TreeCache;

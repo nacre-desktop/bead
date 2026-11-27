@@ -1428,6 +1428,9 @@ impl SceneSource for FolderView {
     fn scroll_step_regions(&self) -> Vec<crate::wayland::StepRegion> {
         self.session.scroll_step_regions()
     }
+    fn scroll_viewports(&self) -> Vec<crate::render::ScrollViewport> {
+        self.session.scroll_viewports()
+    }
     fn wakeup_at(&self) -> Option<std::time::Instant> {
         self.session.preview_deadline()
     }

@@ -29,6 +29,7 @@ struct Mirror {
     outside_dismiss: bool,
     scroll_regions: Vec<Rect>,
     scroll_steps: Vec<crate::StepRegion>,
+    viewports: Vec<bead_render::ScrollViewport>,
     regions: Vec<InputRegion>,
     surrounding: Option<(String, i32, i32)>,
     sensitive: bool,
@@ -79,6 +80,7 @@ impl Mirror {
             outside_dismiss: source.outside_dismiss(),
             scroll_regions: source.scroll_regions(),
             scroll_steps: source.scroll_step_regions(),
+            viewports: source.scroll_viewports(),
             regions: source.input_regions(),
             surrounding: source.surrounding_text(),
             sensitive: source.sensitive_input(),
@@ -1545,6 +1547,9 @@ impl SceneSource for Source {
     fn scroll_step_regions(&self) -> Vec<crate::StepRegion> {
         self.mirror.scroll_steps.clone()
     }
+    fn scroll_viewports(&self) -> Vec<bead_render::ScrollViewport> {
+        self.mirror.viewports.clone()
+    }
     fn outside_dismiss(&self) -> bool {
         self.mirror.outside_dismiss
     }
@@ -2376,6 +2381,16 @@ mod tests {
         fn error_scene(&mut self, _: String) -> Scene {
             scene()
         }
+    }
+    #[test]
+    fn a_source_without_scroll_viewports_lists_none() {
+        let mock = Mock {
+            commits: Default::default(),
+            panic: false,
+            scales: vec![],
+            expected_scales: None,
+        };
+        assert!(mock.scroll_viewports().is_empty());
     }
     #[test]
     fn settled_packets_share_state_copies_until_the_source_revision_changes() {

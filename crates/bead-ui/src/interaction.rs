@@ -361,15 +361,44 @@ impl Session {
             })
             .collect()
     }
-    /// B0419: the plane main was moving is at rest; re-bake it (a patch, no Luau).
+    /// B0419 U5a2: each scroll viewport with its offset, for `SceneSource::scroll_viewports`.
+    pub fn scroll_viewports(&self) -> Vec<bead_render::ScrollViewport> {
+        let viewport = |node: &Node| {
+            let Value::Number(offset) = self.stores.get(node.scroll_store.as_ref()?)? else {
+                return None;
+            };
+            let bounds = rect(&node.draw);
+            Some(bead_render::ScrollViewport {
+                id: node.id.clone(),
+                rect: node.clip.map_or(bounds, |clip| bounds.intersect(clip)),
+                horizontal: node.scroll_horizontal,
+                offset: *offset as f32,
+                settle: node.on_settle.is_some(),
+            })
+        };
+        let nodes = self.current_nodes.iter().filter(|node| node.scrollable);
+        nodes.filter_map(viewport).collect()
+    }
+    /// B0419: the plane main was moving is at rest; re-bake it (a patch, no Luau). U5a2: a viewport
+    /// that moved since its last settle runs `on_settle` once, with its final (committed) offset.
     pub fn scroll_settled(&mut self, id: &str) -> Result<Option<Scene>, Diagnostic> {
-        if self.stores.get("bead.scrolling") != Some(&Value::Text(id.into())) {
+        let mut changes = BTreeMap::new();
+        let nodes = &self.current_nodes;
+        let node = nodes.iter().find(|n| n.scrollable && n.id == id);
+        if let Some((action, store)) =
+            node.and_then(|n| Some((n.on_settle.clone()?, n.scroll_store.clone()?)))
+            && self.unsettled.remove(&store)
+            && let Some(offset) = self.stores.get(&store).cloned()
+        {
+            changes = self.action_values(&action, offset)?;
+        }
+        if self.stores.get("bead.scrolling") == Some(&Value::Text(id.into())) {
+            changes.insert("bead.scrolling".into(), Value::Text(String::new()));
+        }
+        if changes.is_empty() {
             return Ok(None);
         }
-        self.update(BTreeMap::from([(
-            "bead.scrolling".into(),
-            Value::Text(String::new()),
-        )]))
+        self.update(changes)
     }
     /// A wheel or finger delta along y, or along x when `horizontal` (B0419 U5a): a viewport takes
     /// only its own axis; scroll actions and graphs take y only, as before.
@@ -451,6 +480,7 @@ impl Session {
                     Value::Number((offset + delta).clamp(0., limit)),
                 )]))
                 .map_err(|e| node.diagnostic(e))?;
+            self.unsettled.insert(id.clone());
             stores
         } else if let Some(action) = &node.scroll {
             self.act(action, &self.stores, Value::Number(delta))?
