@@ -1,9 +1,10 @@
 # 0286 Scroll planes (B0419)
 
 Composited scrolling: every `ui.Scroll` becomes a plane whose content main can move as one, with
-text rastered ahead of the viewport while it moves. Status: U1 (planes in the scene) landed; later
-units (U2a GL shifts, U2b main stepping, U3 CPU fallback, U4 kits, U5a axis x/snap/motion/on_settle,
-U5b `ui.scrolled`) append their contracts here.
+text rastered ahead of the viewport while it moves. Status: U1 (planes in the scene), U2a (GL
+shifts) and U2b1 (main stepping, switched off) landed; later units (U2b2 the switch-on, U2b3 thumb
+and windows, U3 CPU fallback, U4 kits, U5a axis x/snap/motion/on_settle, U5b `ui.scrolled`) append
+their contracts here.
 
 ## U1 contract: planes in the scene
 
@@ -94,3 +95,59 @@ Tests: bead-ui `materialized_tests` `kit_lists_rerun_luau_only_when_a_scroll_ste
 (fixed, variable, grid), `kit_lists_at_rest_show_the_same_rows_at_the_same_positions`,
 `scroll_plane_ready_is_the_declared_span_within_the_interest`, and the `ready` errors in
 `scroll_plane_geometry_at_rest_and_while_moving`.
+
+## U2b1: main stepping (switched off until U2b2)
+
+Panels and layer surfaces (`window.rs` is U2b3). `scroll.rs` keeps a pure `Planes` map per
+(target, plane id): `live` (shown), `baked` (last adopted scene), unsent motion, the running
+totals of the syncs in flight.
+- Step: a content wheel, fling or finger Δ goes to the innermost plane under the point that can
+  take it (the `Session::scroll` rule). While the plane moves (`interest != clip`) and the
+  viewport at `live + Δ` stays inside `ready`, main moves it and draws: no `UiEvent`. Otherwise
+  the worker gets Δ plus the unsent motion as today's `UiEvent::Scroll`; for a moving plane that
+  is a stall. `scroll_steps` nodes and the x axis keep today's path.
+- Probe: the step asks the target's renderer `scroll_shifts(&[empty range])`. A renderer that
+  refuses (CPU until U3, wgpu, frozen snapshots) takes today's path with no plane state at all;
+  one that stops compositing mid-motion (a GL fallback) hands the unsent motion to the worker
+  in that step and drops its planes, so nothing snaps back.
+- Syncs (`UiEvent::Scroll` of the unsent motion at the last step's point; the worker's
+  `ContentScroll` coalescing is unchanged): 50 ms after the last; within ½ overscan viewport of
+  a `ready` edge that is not the content's end, with nothing in flight; before any other input
+  (`view_event` flushes every tracked plane, on every surface, before delivering it, so hit
+  tests and keys see the offset main shows); at motion end. They ride the motion frames and
+  input: no timers, nothing at idle.
+- Adopt (every step and draw): a plane offset equal to baked + some prefix of the syncs in
+  flight (clamped; the longest prefix wins) keeps `live`, since the worker can bake or merge any
+  prefix. Any other offset is a worker write (keys, Luau, clamp, reload): `live` takes it and,
+  if main was moving the plane, the target's wheel/fling/finger motion stops.
+- Draw (`rendering.rs`, after the drawn-ahead pass returns and before any paint): shift =
+  baked − `live` clamped to `ready`, snapped to device px, passed with the content range and
+  clip to `scroll_shifts` on every draw (empty without planes: one renderer draws every layer
+  surface, so a set never outlives its surface's draw). Damage += the clip of each moving or
+  last-shifted plane, so a main-only step always repaints, including the prepared GL snapshot
+  path and never a callback-only commit; a pose drawn ahead (B0422) only prepared rasters and
+  damage, so its present pass paints the current shift. A plane drops once its motion ended,
+  its syncs are baked and it is drawn unshifted.
+- Switched off: nothing sets `bead.scrolling` yet (U2b2), so no plane moves, every step is
+  today's worker step and frames and events are unchanged.
+
+Known limits (U2b1):
+- A scroll-action node (`scroll=ui.action`) inside a moving plane is invisible to main: a wheel
+  over it while the plane moves scrolls the plane. The first step of a burst always reaches the
+  worker (at rest `ready` is the viewport), so only a later step at a new point is affected.
+- Two-way scrolling that cancels out within one flight can match an older prefix; the plane then
+  takes the scene's offset (as for a worker write) and its motion stops.
+- The focus ring of a focused node inside a moving plane stays at its baked place until the next
+  sync (≤ 50 ms); the thumb follows the syncs (its shift is U2b3, with windows).
+- Nested planes: only the plane main moves is shifted; the U2a shortcut on cut inner clips holds.
+
+Tests (no Wayland, `scroll.rs` `plane_tests`): `a_step_inside_ready_sends_no_ui_event`,
+`a_step_outside_ready_falls_to_the_worker_and_counts_a_stall`,
+`syncs_fire_at_50_ms_near_the_ready_edge_and_before_input`,
+`a_worker_write_is_adopted_and_stops_the_motion`,
+`a_scene_that_merged_two_of_three_syncs_is_no_worker_write`,
+`the_settle_sends_the_final_sync_once_and_drops_the_plane_once_baked`,
+`a_renderer_that_cannot_composite_gets_todays_events`,
+`a_renderer_that_stops_compositing_mid_burst_sends_the_pending_motion_at_once`,
+`one_surface_shifts_never_reach_another`; the SCROLL_FRAMES line in
+`burst_lines_report_gaps_and_skip_single_steps`.

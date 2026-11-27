@@ -3368,6 +3368,22 @@ impl App {
                 return Ok(());
             }
             bead_core::profile::split("damage");
+            // B0419: moving planes paint at main's offset. One renderer draws every layer surface,
+            // so each draw sets its own target's shifts, empty without planes.
+            let target = if s.companion {
+                crate::scroll::Target::Panel(self.panel_epoch)
+            } else {
+                let output = self.active_output_epoch.zip(self.active_output.clone());
+                crate::scroll::Target::Primary(
+                    output.filter(|_| self.options.primary_factory.is_some()),
+                )
+            };
+            let (shifts, clips) = self.scrolls.plane_shifts(&target, &scene.layers, scale);
+            for clip in clips {
+                let clip = clip.translated(scene.offset.0, scene.offset.1);
+                regions.push(clip.pixels(scale, w as u32, h as u32));
+            }
+            renderer.scroll_shifts(&shifts);
             damage_px = regions
                 .iter()
                 .map(|r| u64::from(r.w) * u64::from(r.h))

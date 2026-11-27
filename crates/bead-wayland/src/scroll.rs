@@ -424,10 +424,11 @@ mod tests {
         let at = |ms| t0 + Duration::from_millis(ms);
         let (y, x) = ((Target::Panel(1), false), (Target::Panel(1), true));
         let mut state = State::default();
+        // A surface whose renderer does not composite shifts: every step is today's worker step.
         for ms in [0, 8, 16, 33] {
-            state.record(&y, at(ms));
+            assert_eq!(state.content_step(&y, None, (4., 5.), 9., at(ms)), Some(9.));
         }
-        state.record(&x, at(5));
+        state.content_step(&x, None, (4., 5.), 9., at(5));
         let tick = Duration::from_nanos(8_333_333);
         let panel = |key: &(Target, bool)| {
             let (target, horizontal) = key;
@@ -437,7 +438,8 @@ mod tests {
             panel(&y).as_deref(),
             Some(
                 "SCROLL_FRAMES surface=panel axis=y frames=4 duration_ms=33.000 \
-                 interval_mean=11.000 p95=17.000 max=17.000 tick_ms=8.333 worker_frames=4"
+                 interval_mean=11.000 p95=17.000 max=17.000 tick_ms=8.333 worker_frames=4 \
+                 plane=- main_steps=0 syncs=0 stalls=0"
             )
         );
         assert_eq!(panel(&x), None);
@@ -486,6 +488,227 @@ mod tests {
     }
 }
 
+#[cfg(test)]
+mod plane_tests {
+    use super::*;
+
+    const KEY: (Target, bool) = (Target::Panel(1), false);
+    const AT: (f32, f32) = (50., 100.);
+    /// A 200 px viewport on 1000 px of content; moving: overscan 1, as layout bakes it.
+    fn layers(offset: f32, moving: bool) -> Vec<bead_render::SceneLayer> {
+        let clip = Rect::new(0., 0., 100., 200.);
+        let (y, bottom) = if moving {
+            ((-200_f32).max(-offset), 400_f32.min(1000. - offset))
+        } else {
+            (0., 200.)
+        };
+        let plane = bead_render::ScrollPlane {
+            offset,
+            limit: 800.,
+            clip,
+            interest: Rect::new(0., y, 100., bottom - y),
+            ready: (y + offset, bottom + offset),
+        };
+        vec![bead_render::SceneLayer {
+            id: "list".into(),
+            parent: None,
+            own: 0..1,
+            subtree_end: 9,
+            bounds: clip,
+            scroll: Some(plane),
+        }]
+    }
+    fn step(
+        state: &mut State,
+        scene: &[bead_render::SceneLayer],
+        delta: f64,
+        now: Instant,
+    ) -> Option<f64> {
+        state.content_step(&KEY, Some(scene), AT, delta, now)
+    }
+    fn line(state: &State) -> String {
+        state.bursts[&KEY]
+            .line("panel", false, Duration::from_millis(8))
+            .unwrap()
+    }
+
+    #[test]
+    fn a_step_inside_ready_sends_no_ui_event() {
+        let (mut state, t0) = (State::default(), Instant::now());
+        let scene = layers(300., true);
+        assert_eq!(step(&mut state, &scene, 40., t0), None);
+        assert!(state.syncs(None, false, t0).is_empty());
+        // The draw moves the content up by what main moved, and damages the viewport.
+        let (shifts, clips) = state.plane_shifts(&KEY.0, &scene, 1.5);
+        assert_eq!(shifts, [(1..9, scene[0].scroll.unwrap().clip, (0., -40.))]);
+        assert_eq!(clips, [scene[0].scroll.unwrap().clip]);
+    }
+
+    #[test]
+    fn a_step_outside_ready_falls_to_the_worker_and_counts_a_stall() {
+        let (mut state, t0) = (State::default(), Instant::now());
+        let scene = layers(300., true);
+        assert_eq!(step(&mut state, &scene, 40., t0), None);
+        // 590 is past 500, the last offset with a ready viewport: the worker gets it + main's 40.
+        let t1 = t0 + Duration::from_millis(8);
+        assert_eq!(step(&mut state, &scene, 250., t1), Some(290.));
+        // A plane at rest has `ready` = its viewport: today's worker step, not a stall.
+        let mut rest = State::default();
+        assert_eq!(step(&mut rest, &layers(300., false), 40., t0), Some(40.));
+        assert_eq!(
+            line(&state),
+            "SCROLL_FRAMES surface=panel axis=y frames=2 duration_ms=8.000 interval_mean=8.000 \
+             p95=8.000 max=8.000 tick_ms=8.000 worker_frames=1 plane=list main_steps=1 syncs=0 \
+             stalls=1"
+        );
+        let b = &rest.bursts[&KEY];
+        assert_eq!((b.worker, b.main, b.stalls), (1, 0, 0));
+    }
+
+    #[test]
+    fn syncs_fire_at_50_ms_near_the_ready_edge_and_before_input() {
+        let (mut state, t0) = (State::default(), Instant::now());
+        let scene = layers(300., true);
+        let scroll = |delta| {
+            (
+                Target::Panel(1),
+                UiEvent::Scroll {
+                    x: AT.0,
+                    y: AT.1,
+                    delta,
+                },
+            )
+        };
+        let syncs = |state: &mut State, flush, at| -> Vec<String> {
+            let syncs = state.syncs(Some(&KEY.0), flush, at);
+            syncs
+                .iter()
+                .map(|(t, e)| format!("{}:{e:?}", surface_label(t)))
+                .collect()
+        };
+        let expect = |delta| vec![format!("panel:{:?}", scroll(delta).1)];
+        step(&mut state, &scene, 40., t0);
+        assert!(syncs(&mut state, false, t0 + Duration::from_millis(49)).is_empty());
+        assert_eq!(
+            syncs(&mut state, false, t0 + Duration::from_millis(50)),
+            expect(40.)
+        );
+        // Near the edge (440: 60 px from the end of ready, ½ overscan is 100) with nothing in
+        // flight it syncs at once.
+        let mut edge = State::default();
+        step(&mut edge, &scene, 140., t0);
+        assert_eq!(syncs(&mut edge, false, t0), expect(140.));
+        // Input flushes every plane first: view_event delivers these before its event.
+        step(&mut state, &scene, 25., t0 + Duration::from_millis(60));
+        let flushed = state.syncs(None, true, t0 + Duration::from_millis(61));
+        assert_eq!(
+            format!("{:?}", flushed[0].1),
+            format!("{:?}", scroll(25.).1)
+        );
+        assert!(
+            state
+                .syncs(None, true, t0 + Duration::from_millis(62))
+                .is_empty()
+        );
+        assert_eq!(state.bursts[&KEY].syncs, 2);
+    }
+
+    #[test]
+    fn a_worker_write_is_adopted_and_stops_the_motion() {
+        let (mut state, t0) = (State::default(), Instant::now());
+        state.motions.insert(
+            KEY,
+            Motion {
+                started: t0,
+                distance: 300.,
+                delivered: 40.,
+                point: AT,
+            },
+        );
+        step(&mut state, &layers(300., true), 40., t0);
+        // The worker wrote 600 (a key, Luau or a reload): main takes it and its motion ends.
+        state.adopt(&KEY.0, &layers(600., true));
+        assert_eq!(state.planes.0[&(KEY.0, "list".to_string())].live, 600.);
+        assert!(!state.animating(&KEY.0));
+    }
+
+    #[test]
+    fn a_scene_that_merged_two_of_three_syncs_is_no_worker_write() {
+        let (mut state, t0) = (State::default(), Instant::now());
+        state.motions.insert(
+            KEY,
+            Motion {
+                started: t0,
+                distance: 300.,
+                delivered: 0.,
+                point: AT,
+            },
+        );
+        for delta in [10., 20., 30.] {
+            step(&mut state, &layers(300., true), delta, t0);
+            assert_eq!(state.syncs(None, true, t0).len(), 1);
+        }
+        // The worker merged the first two syncs; the third is still in flight.
+        let (shifts, _) = state.plane_shifts(&KEY.0, &layers(330., true), 1.);
+        assert_eq!(shifts[0].2, (0., -30.));
+        assert!(state.animating(&KEY.0));
+        let (shifts, _) = state.plane_shifts(&KEY.0, &layers(360., true), 1.);
+        assert!(shifts.is_empty() && state.planes.0[&(KEY.0, "list".to_string())].sent.is_empty());
+    }
+
+    #[test]
+    fn the_settle_sends_the_final_sync_once_and_drops_the_plane_once_baked() {
+        let (mut state, t0) = (State::default(), Instant::now());
+        step(&mut state, &layers(300., true), 40., t0);
+        // The motion ended (no wheel, fling or finger left): one final sync, then none.
+        assert!(state.ended(&KEY.0));
+        assert_eq!(state.syncs(Some(&KEY.0), true, t0).len(), 1);
+        assert!(state.syncs(Some(&KEY.0), true, t0).is_empty());
+        state.drop_idle(&KEY.0);
+        assert_eq!(state.planes.0.len(), 1, "kept while the sync is in flight");
+        // The draw of the scene that baked it shows it unshifted, then the plane drops.
+        state.plane_shifts(&KEY.0, &layers(340., true), 1.);
+        assert!(state.planes.0.is_empty());
+    }
+
+    #[test]
+    fn a_renderer_that_cannot_composite_gets_todays_events() {
+        let (mut state, t0) = (State::default(), Instant::now());
+        for delta in [40., 40., -15.] {
+            assert_eq!(state.content_step(&KEY, None, AT, delta, t0), Some(delta));
+        }
+        assert!(state.planes.0.is_empty() && state.syncs(None, true, t0).is_empty());
+        assert!(line(&state).ends_with("worker_frames=3 plane=- main_steps=0 syncs=0 stalls=0"));
+    }
+
+    #[test]
+    fn a_renderer_that_stops_compositing_mid_burst_sends_the_pending_motion_at_once() {
+        let (mut state, t0) = (State::default(), Instant::now());
+        let scene = layers(300., true);
+        assert_eq!(step(&mut state, &scene, 40., t0), None);
+        // The GL renderer fell back: the next step carries main's 40 px with its own 10 px.
+        assert_eq!(state.content_step(&KEY, None, AT, 10., t0), Some(50.));
+        assert_eq!(state.plane_shifts(&KEY.0, &scene, 1.), (vec![], vec![]));
+        assert_eq!(state.content_step(&KEY, None, AT, 10., t0), Some(10.));
+    }
+
+    #[test]
+    fn one_surface_shifts_never_reach_another() {
+        let (mut state, t0) = (State::default(), Instant::now());
+        let (a, b) = (
+            Target::Primary(Some((1, "A".into()))),
+            Target::Primary(Some((2, "B".into()))),
+        );
+        let scene = layers(300., true);
+        assert_eq!(
+            state.content_step(&(a.clone(), false), Some(&scene[..]), AT, 40., t0),
+            None
+        );
+        assert_eq!(state.plane_shifts(&b, &scene, 1.), (vec![], vec![]));
+        assert_eq!(state.plane_shifts(&a, &scene, 1.).0.len(), 1);
+    }
+}
+
 use super::*;
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -506,12 +729,18 @@ pub(super) struct State {
     flings: std::collections::BTreeMap<(Target, bool), Fling>,
     steps: std::collections::BTreeMap<(Target, String), Steps>,
     bursts: std::collections::BTreeMap<(Target, bool), Burst>,
+    planes: Planes,
 }
 /// One motion burst of a (target, axis): its moved steps, for the SCROLL_FRAMES journal line.
 struct Burst {
     last: Instant,
     gaps: Vec<f64>,
     worker: u32,
+    /// B0419: steps main moved a plane for, its syncs, stalls (worker steps of a moving plane).
+    main: u32,
+    syncs: u32,
+    stalls: u32,
+    plane: Option<String>,
 }
 /// Nearest-rank 95th percentile of a sorted slice (0 when empty).
 fn p95(sorted: &[f64]) -> f64 {
@@ -527,7 +756,8 @@ impl Burst {
         let duration: f64 = gaps.iter().sum();
         Some(format!(
             "SCROLL_FRAMES surface={surface} axis={} frames={} duration_ms={duration:.3} \
-             interval_mean={:.3} p95={:.3} max={:.3} tick_ms={:.3} worker_frames={}",
+             interval_mean={:.3} p95={:.3} max={:.3} tick_ms={:.3} worker_frames={} plane={} \
+             main_steps={} syncs={} stalls={}",
             if horizontal { 'x' } else { 'y' },
             gaps.len() + 1,
             duration / gaps.len() as f64,
@@ -535,6 +765,10 @@ impl Burst {
             gaps.last()?,
             tick.as_secs_f64() * 1000.,
             self.worker,
+            self.plane.as_deref().unwrap_or("-"),
+            self.main,
+            self.syncs,
+            self.stalls,
         ))
     }
 }
@@ -591,25 +825,113 @@ impl Steps {
 }
 impl State {
     pub(super) fn interrupt(&mut self, target: &Target) {
+        self.stop(target);
+        self.planes.0.retain(|(t, _), _| t != target);
+        self.end_idle();
+    }
+    fn stop(&mut self, target: &Target) {
         self.motions.retain(|(t, _), _| t != target);
         self.flings.retain(|(t, _), _| t != target);
         self.pixels.retain(|(t, _), _| t != target);
-        self.end_idle();
     }
-    /// One delivered step that moved content: it starts the key's burst or extends it.
-    fn record(&mut self, key: &(Target, bool), now: Instant) {
-        let burst = self.bursts.entry(key.clone()).or_insert(Burst {
-            last: now,
-            gaps: Vec::new(),
-            worker: 0,
+    fn ended(&self, target: &Target) -> bool {
+        !self
+            .motions
+            .keys()
+            .chain(self.flings.keys())
+            .chain(self.pixels.keys())
+            .any(|(t, _)| t == target)
+    }
+    /// B0419 (x is U5a): `layers` of a surface that composites shifts; Some(Δ) for the worker.
+    fn content_step(
+        &mut self,
+        key: &(Target, bool),
+        layers: Option<&[bead_render::SceneLayer]>,
+        point: (f32, f32),
+        delta: f64,
+        now: Instant,
+    ) -> Option<f64> {
+        let hit = layers.filter(|_| !key.1).and_then(|layers| {
+            self.adopt(&key.0, layers);
+            self.planes.step(&key.0, layers, point, delta, now)
         });
-        if burst.worker > 0 {
-            burst
-                .gaps
-                .push(now.duration_since(burst.last).as_secs_f64() * 1000.);
+        // A renderer that stopped compositing (a GL fallback) hands over the unsent motion now,
+        // so the content does not snap back to the baked offset until the next flush.
+        let delta = match layers {
+            None if !key.1 => delta + self.planes.release(&key.0),
+            _ => delta,
+        };
+        if delta != 0. {
+            let burst = self.bursts.entry(key.clone()).or_insert(Burst {
+                last: now,
+                gaps: Vec::new(),
+                worker: 0,
+                main: 0,
+                syncs: 0,
+                stalls: 0,
+                plane: None,
+            });
+            if burst.worker + burst.main > 0 {
+                burst
+                    .gaps
+                    .push(now.duration_since(burst.last).as_secs_f64() * 1000.);
+            }
+            burst.last = now;
+            let (worker, stall) = hit.as_ref().map_or((true, false), |h| (h.1.is_some(), h.2));
+            (burst.worker, burst.main) = (
+                burst.worker + u32::from(worker),
+                burst.main + u32::from(!worker),
+            );
+            burst.stalls += u32::from(stall);
+            if let Some((id, ..)) = &hit {
+                burst.plane = Some(id.clone());
+            }
         }
-        burst.last = now;
-        burst.worker += 1;
+        hit.map_or(Some(delta), |(_, worker, _)| worker)
+    }
+    /// B0419: a worker write to a plane main was moving ends the motion.
+    fn adopt(&mut self, target: &Target, layers: &[bead_render::SceneLayer]) {
+        if self.planes.adopt(target, layers) {
+            self.stop(target);
+        }
+    }
+    /// B0419: the plane syncs due, counted in their bursts.
+    pub(super) fn syncs(
+        &mut self,
+        target: Option<&Target>,
+        flush: bool,
+        now: Instant,
+    ) -> Vec<(Target, UiEvent)> {
+        let syncs = self.planes.syncs(target, flush, now);
+        for (t, _) in &syncs {
+            if let Some(burst) = self.bursts.get_mut(&(t.clone(), false)) {
+                burst.syncs += 1;
+            }
+        }
+        syncs
+    }
+    /// B0419: after the motion, a plane drops once its syncs are baked and drawn.
+    fn drop_idle(&mut self, target: &Target) {
+        if self.ended(target) {
+            self.planes.0.retain(|(t, _), e| {
+                t != target || !e.sent.is_empty() || e.unsent != 0. || e.shifted
+            });
+        }
+    }
+    /// B0419: adopt the drawn scene, then its shifts and the clips to damage.
+    pub(super) fn plane_shifts(
+        &mut self,
+        target: &Target,
+        layers: &[bead_render::SceneLayer],
+        scale: f32,
+    ) -> (Vec<Shift>, Vec<Rect>) {
+        if !self.planes.0.keys().any(|(t, _)| t == target) {
+            return Default::default();
+        }
+        self.adopt(target, layers);
+        let out = self.planes.shifts(target, layers, scale);
+        self.drop_idle(target);
+        out
     }
     /// Log and drop every burst whose motion, fling and finger state is gone.
     fn end_idle(&mut self) {
@@ -664,6 +986,189 @@ impl State {
     }
     pub(super) fn is_animating(&self) -> bool {
         !self.motions.is_empty() || !self.flings.is_empty()
+    }
+}
+/// B0419 (spec 0286 U2b): a moving plane syncs its offset to the worker at least this often.
+const PLANE_SYNC: Duration = Duration::from_millis(50);
+/// (content range, clip, (0, baked - shown)), as `Renderer::scroll_shifts` takes it.
+type Shift = (std::ops::Range<usize>, Rect, (f32, f32));
+/// The scroll planes main moves between worker syncs, per (target, plane id).
+#[derive(Default)]
+struct Planes(std::collections::BTreeMap<(Target, String), Live>);
+struct Live {
+    /// Shown (within the baked `ready`); `baked` is the last adopted scene's offset.
+    live: f32,
+    baked: f32,
+    unsent: f64,
+    /// Running totals of the syncs since `baked`: a scene bakes some prefix of them.
+    sent: Vec<f64>,
+    last_sync: Instant,
+    /// So a sync hits the plane the steps did.
+    point: (f32, f32),
+    /// Near a `ready` edge with nothing in flight.
+    due: bool,
+    /// The next draw damages the clip the last one shifted.
+    shifted: bool,
+}
+impl Live {
+    /// Hand `delta` plus the unsent motion to the worker.
+    fn send(&mut self, delta: f64, now: Instant) -> f64 {
+        let delta = std::mem::take(&mut self.unsent) + delta;
+        self.sent
+            .push(self.sent.last().copied().unwrap_or(0.) + delta);
+        (self.last_sync, self.due) = (now, false);
+        delta
+    }
+}
+/// The offsets whose viewport lies inside the baked `ready` span.
+fn span(layer: &bead_render::SceneLayer, p: &bead_render::ScrollPlane) -> (f32, f32) {
+    let lead = p.clip.y - layer.bounds.y;
+    (p.ready.0 - lead, p.ready.1 - lead - p.clip.h)
+}
+impl Planes {
+    /// The innermost plane under `point` that can take Δ (the `Session::scroll` rule) moves on
+    /// main while its viewport stays in `ready`, else the worker gets it (id, worker Δ, stall).
+    fn step(
+        &mut self,
+        target: &Target,
+        layers: &[bead_render::SceneLayer],
+        point: (f32, f32),
+        delta: f64,
+        now: Instant,
+    ) -> Option<(String, Option<f64>, bool)> {
+        let inside = |r: Rect| {
+            point.0 >= r.x && point.1 >= r.y && point.0 < r.x + r.w && point.1 < r.y + r.h
+        };
+        let (layer, p, live) = layers.iter().rev().find_map(|l| {
+            let p = l.scroll.filter(|p| inside(p.clip))?;
+            let live = self
+                .0
+                .get(&(target.clone(), l.id.clone()))
+                .map_or(p.offset, |e| e.live);
+            ((live + delta as f32).min(p.limit).max(0.) != live).then_some((l, p, live))
+        })?;
+        let e = self
+            .0
+            .entry((target.clone(), layer.id.clone()))
+            .or_insert(Live {
+                live,
+                baked: p.offset,
+                unsent: 0.,
+                sent: Vec::new(),
+                last_sync: now,
+                point,
+                due: false,
+                shifted: false,
+            });
+        let next = (live + delta as f32).min(p.limit).max(0.);
+        let ((lo, hi), moving) = (span(layer, &p), p.interest != p.clip);
+        e.point = point;
+        if moving && next >= lo && next <= hi {
+            e.unsent += f64::from(next - e.live);
+            e.live = next;
+            // ½ overscan viewport from a ready edge that is not the content's end.
+            let margin = (p.interest.h - p.clip.h) / 4.;
+            e.due = e.sent.is_empty()
+                && ((lo > 0. && next - lo < margin) || (hi < p.limit && hi - next < margin));
+            return Some((layer.id.clone(), None, false));
+        }
+        e.live = next;
+        Some((layer.id.clone(), Some(e.send(delta, now)), moving))
+    }
+    /// An offset other than baked + a prefix of the syncs in flight is a worker write (keys,
+    /// Luau, clamp, reload): `live` takes it. True when that stopped a plane main was moving.
+    fn adopt(&mut self, target: &Target, layers: &[bead_render::SceneLayer]) -> bool {
+        let mut stopped = false;
+        self.0.retain(|(t, id), e| {
+            let Some(p) = layers
+                .iter()
+                .find(|l| t == target && l.id == *id)
+                .and_then(|l| l.scroll)
+            else {
+                return t != target;
+            };
+            let total = |i: usize| i.checked_sub(1).map_or(0., |i| e.sent[i]);
+            let baked = |c: f64| (f64::from(e.baked) + c).min(f64::from(p.limit)).max(0.) as f32;
+            // The longest prefix: a clamped or no-op sync bakes into the same offset.
+            let found = (0..=e.sent.len())
+                .rev()
+                .find(|&i| (baked(total(i)) - p.offset).abs() <= 0.5)
+                .map(|i| (i, total(i)));
+            if let Some((i, c)) = found {
+                e.sent.drain(..i);
+                e.sent.iter_mut().for_each(|t| *t -= c);
+                e.baked = p.offset;
+                if e.sent.is_empty() && e.unsent == 0. {
+                    e.live = p.offset;
+                }
+            } else {
+                stopped |= p.interest != p.clip || e.unsent != 0.;
+                (e.live, e.baked, e.unsent) = (p.offset, p.offset, 0.);
+                e.sent.clear();
+            }
+            true
+        });
+        stopped
+    }
+    /// Syncs at 50 ms, near a `ready` edge, or on `flush` (input, motion end); `None`: all.
+    fn syncs(
+        &mut self,
+        target: Option<&Target>,
+        flush: bool,
+        now: Instant,
+    ) -> Vec<(Target, UiEvent)> {
+        let mut out = Vec::new();
+        for ((t, _), e) in &mut self.0 {
+            if target.is_none_or(|target| target == t)
+                && e.unsent != 0.
+                && (flush || e.due || now.duration_since(e.last_sync) >= PLANE_SYNC)
+            {
+                let (x, y) = e.point;
+                out.push((
+                    t.clone(),
+                    UiEvent::Scroll {
+                        x,
+                        y,
+                        delta: e.send(0., now),
+                    },
+                ));
+            }
+        }
+        out
+    }
+    /// Drop `target`'s planes, returning their unsent motion.
+    fn release(&mut self, target: &Target) -> f64 {
+        let mut unsent = 0.;
+        self.0.retain(|(t, _), e| {
+            unsent += if t == target { e.unsent } else { 0. };
+            t != target
+        });
+        unsent
+    }
+    /// Shifts snapped to device px, and the clips to damage: the frame's own damage misses moves.
+    fn shifts(
+        &mut self,
+        target: &Target,
+        layers: &[bead_render::SceneLayer],
+        scale: f32,
+    ) -> (Vec<Shift>, Vec<Rect>) {
+        let (mut shifts, mut clips) = (Vec::new(), Vec::new());
+        for l in layers {
+            let Some(p) = l.scroll else { continue };
+            let Some(e) = self.0.get_mut(&(target.clone(), l.id.clone())) else {
+                continue;
+            };
+            let (lo, hi) = span(l, &p);
+            let shift = ((p.offset - e.live.min(hi).max(lo)) * scale).round() / scale;
+            if e.shifted || p.interest != p.clip {
+                clips.push(p.clip);
+            }
+            e.shifted = shift != 0.;
+            if e.shifted {
+                shifts.push((l.own.end..l.subtree_end, p.clip, (0., shift)));
+            }
+        }
+        (shifts, clips)
     }
 }
 struct Fling {
@@ -840,13 +1345,10 @@ impl App {
         self.scrolls.in_frame = true;
         for horizontal in [false, true] {
             if let Some((delta, point)) = self.scrolls.step(target, horizontal, now) {
-                self.deliver_scroll(target, horizontal, point, delta);
-                if delta != 0. {
-                    self.scrolls.record(&(target.clone(), horizontal), now);
-                }
+                self.content_scroll(target, horizontal, point, delta, now);
             }
         }
-        self.scrolls.end_idle();
+        self.end_motion(target, now);
         // Scrolling already advances view-local animation and decoration state.
         // Only request a second source update if its deadline is still pending.
         if self
@@ -1052,6 +1554,71 @@ impl App {
         };
         self.deliver_source_event(target, event);
     }
+    /// B0419: main moves a plane where the renderer composites shifts, else the worker gets Δ.
+    fn content_scroll(
+        &mut self,
+        target: &Target,
+        horizontal: bool,
+        point: (f32, f32),
+        delta: f64,
+        now: Instant,
+    ) {
+        let surface = match target {
+            Target::Panel(_) => self.companion.as_mut().map(|(s, r, _)| (&*s, r)),
+            Target::Primary(Some((epoch, id))) => self
+                .output_sessions
+                .get(id)
+                .filter(|s| s.epoch == *epoch)
+                .map(|s| &s.scene)
+                .zip(Some(&mut self.renderer)),
+            Target::Primary(None) => Some((&self.scene, &mut self.renderer)),
+            _ => None,
+        };
+        // The probe: an empty range only a compositing renderer accepts.
+        let probe = [(0..0, Rect::new(0., 0., 0., 0.), (0., 0.))];
+        let layers =
+            surface.and_then(|(scene, r)| r.scroll_shifts(&probe).then_some(&scene.layers[..]));
+        let key = (target.clone(), horizontal);
+        match self.scrolls.content_step(&key, layers, point, delta, now) {
+            Some(delta) => self.deliver_scroll(target, horizontal, point, delta),
+            None => self.redraw_target(target),
+        }
+        for (target, sync) in self.scrolls.syncs(Some(target), false, now) {
+            self.deliver_source_event(&target, sync);
+        }
+    }
+    fn redraw_target(&mut self, target: &Target) {
+        let qh = self.qh.clone();
+        for i in 0..self.surfaces.len() {
+            let s = &self.surfaces[i];
+            if match target {
+                Target::Panel(_) => s.companion,
+                Target::Primary(o) => {
+                    !s.companion && o.as_ref().is_none_or(|(_, name)| *name == s.output_name)
+                }
+                _ => false,
+            } {
+                self.surfaces[i].redraw = true;
+                self.draw(i, &qh);
+            }
+        }
+    }
+    /// The final plane syncs of an ended motion (B0419), then the burst lines.
+    fn end_motion(&mut self, target: &Target, now: Instant) {
+        if self.scrolls.ended(target) {
+            for (target, sync) in self.scrolls.syncs(Some(target), true, now) {
+                self.deliver_source_event(&target, sync);
+            }
+            self.scrolls.drop_idle(target);
+        }
+        self.scrolls.end_idle();
+    }
+    /// B0419: input hit-tests the offset main shows, so every unsynced plane syncs first.
+    pub(super) fn flush_planes(&mut self) {
+        for (target, sync) in self.scrolls.syncs(None, true, Instant::now()) {
+            self.deliver_source_event(&target, sync);
+        }
+    }
     fn deliver_source_event(&mut self, target: &Target, event: UiEvent) {
         match target {
             Target::Canvas(epoch) => self.ui(UiEvent::Canvas(*epoch, Box::new(event))),
@@ -1135,16 +1702,17 @@ impl App {
         if delta == 0. {
             if axis.stop {
                 self.release_pixels(&key);
-                self.scrolls.end_idle();
+                self.end_motion(&target, Instant::now());
             }
             return;
         }
         let previous = self.scrolls.motions.remove(&key);
         self.scrolls.flings.remove(&key);
         if !wheel || bead_core::animation::reduced_motion() {
-            self.deliver_scroll(&target, horizontal, point, delta);
             if content {
-                self.scrolls.record(&key, Instant::now());
+                self.content_scroll(&target, horizontal, point, delta, Instant::now());
+            } else {
+                self.deliver_scroll(&target, horizontal, point, delta);
             }
             if content
                 && source == Some(AxisSource::Finger)
@@ -1157,7 +1725,7 @@ impl App {
             } else {
                 self.scrolls.pixels.remove(&key);
             }
-            self.scrolls.end_idle();
+            self.end_motion(&target, Instant::now());
             return;
         }
         self.scrolls.pixels.remove(&key);

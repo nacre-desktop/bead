@@ -89,6 +89,7 @@ impl App {
         }
     }
     pub(super) fn view_event(&mut self, panel: bool, event: UiEvent) {
+        self.flush_planes();
         if panel && self.panel_runtime.is_some() {
             self.panel_ui(event);
         } else if !panel && self.options.primary_factory.is_some() {
