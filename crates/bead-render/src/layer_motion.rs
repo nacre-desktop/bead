@@ -86,14 +86,6 @@ impl RevealContour {
         contour
     }
 
-    /// Retain this contour's geometry for later retargeting while leaving the
-    /// full-scene close atlas visually unchanged.
-    pub fn tracking_only(&self) -> Self {
-        let mut contour = self.reversed();
-        contour.mode = RevealMode::TrackingOnly;
-        contour
-    }
-
     /// Translate scene-local shape data into its root surface-local frame.
     pub fn translated(&self, dx: f32, dy: f32) -> Self {
         let mut contour = self.clone();
@@ -720,13 +712,10 @@ impl LayerMotionPlan {
         let Some(motion) = scene.motion.as_ref() else {
             return Ok(None);
         };
-        // A reveal grows out of its edge when opening and shrinks back into it
-        // when closing; only an explicit slide distance closes as a whole scene.
-        let in_place = opening || motion.slide_distance.is_none();
+        // Reveal art needs its contour both ways: a close is the open reversed (B0277, B0431).
         if bead_core::animation::reduced_motion()
             || still_motion(motion)
-            || in_place
-                && motion.reveal
+            || motion.reveal
                 && motion
                     .art
                     .as_ref()
@@ -751,42 +740,28 @@ impl LayerMotionPlan {
         let (reveal, reveal_owned_indices) = if motion.reveal {
             if let Some(art) = motion.art.as_ref() {
                 if let Some(contour) = art.contour.as_ref() {
-                    let (contour, indices) = if in_place {
-                        (
-                            if opening {
-                                contour.clone()
-                            } else {
-                                contour.reversed()
-                            },
-                            motion
-                                .parts
-                                .iter()
-                                .map(|(index, _)| *index)
-                                .chain(std::iter::once(art.index))
-                                .collect::<std::collections::BTreeSet<_>>(),
-                        )
+                    let contour = if opening {
+                        contour.clone()
                     } else {
-                        (contour.tracking_only(), Default::default())
+                        contour.reversed()
                     };
                     (
                         Some(contour.translated(scene.offset.0, scene.offset.1)),
-                        indices,
+                        motion
+                            .parts
+                            .iter()
+                            .map(|(index, _)| *index)
+                            .chain(std::iter::once(art.index))
+                            .collect::<std::collections::BTreeSet<_>>(),
                     )
                 } else {
                     (None, Default::default())
                 }
             } else if let Some((contour, indices)) = inferred_reveal_contour(scene, width, height) {
-                let (contour, indices) = if in_place {
-                    (
-                        if opening { contour } else { contour.reversed() },
-                        indices.into_iter().collect(),
-                    )
-                } else {
-                    (contour.tracking_only(), Default::default())
-                };
+                let contour = if opening { contour } else { contour.reversed() };
                 (
                     Some(contour.translated(scene.offset.0, scene.offset.1)),
-                    indices,
+                    indices.into_iter().collect(),
                 )
             } else {
                 return Ok(None);
@@ -854,32 +829,6 @@ impl LayerMotionPlan {
         let mut pixels = vec![0; bytes];
         let mut final_scene = scene.clone();
         final_scene.panel_offset(1., opening);
-        if !in_place
-            && let Some(art) = final_scene
-                .motion
-                .as_ref()
-                .and_then(|motion| motion.art.clone())
-                .filter(|art| art.contour.is_some())
-        {
-            let (rect, bytes) = (art.draw)(art.body, None);
-            use std::hash::{Hash, Hasher};
-            let mut hash = std::collections::hash_map::DefaultHasher::new();
-            bytes.hash(&mut hash);
-            let path = std::path::PathBuf::from(format!("@reveal-art-{:x}.svg", hash.finish()));
-            final_scene
-                .asset_data
-                .retain(|path, _| !path.to_string_lossy().starts_with("@reveal-art-"));
-            final_scene.asset_data.insert(path.clone(), bytes);
-            if let Some(Primitive::Image {
-                path: target,
-                rect: target_rect,
-                ..
-            }) = final_scene.primitives.get_mut(art.index)
-            {
-                *target_rect = rect;
-                *target = path;
-            }
-        }
         if !reveal_owned_indices.is_empty() {
             let mut index = 0;
             final_scene.retain_primitives(|_| {
@@ -1440,39 +1389,47 @@ mod tests {
         Ok(())
     }
 
+    /// B0431: a sliding reveal's close plan (bottom edge, slide 32) is its open reversed: a visible
+    /// contour shrinking into its edge and the content plane sliding back by the open's offset, with
+    /// contour-owned art out of both atlases (it was a whole-scene slide tracking the contour invisibly).
     #[test]
-    fn generic_close_keeps_the_full_scene_and_tracks_geometry_invisibly() -> Result<()> {
+    fn sliding_reveal_close_plan_is_the_reversed_open() -> Result<()> {
+        let source = scene(true, false);
         let mut renderer = TreeCpuRenderer::default();
-        let mut plan = LayerMotionPlan::for_slide(
-            &scene(true, false),
-            false,
-            96,
-            72,
-            1.,
-            PixelFormat::Rgba,
-            &mut renderer,
-        )?
-        .expect("whole-scene close plan");
-        let contour = plan.reveal.as_ref().expect("latent contour state");
-        assert_eq!(contour.mode, RevealMode::TrackingOnly);
-        assert_eq!(contour.animated_from, Rect::new(8., 8., 80., 56.));
-        assert_eq!(contour.animated_to, Rect::new(8., 64., 80., 0.));
-        let opening_scene = scene(true, false);
-        let opening_clip_from = opening_scene.reveal_window_at(0.).unwrap();
-        let opening_clip_to = opening_scene.reveal_window_at(1.).unwrap();
-        assert_eq!(contour.content_clip_from, opening_clip_to);
-        assert_eq!(contour.content_clip_to, opening_clip_from);
-        let opening_retarget_sample = Rect::new(
-            contour.animated_from.x + (contour.animated_to.x - contour.animated_from.x) * 0.5,
-            contour.animated_from.y + (contour.animated_to.y - contour.animated_from.y) * 0.5,
-            contour.animated_from.w + (contour.animated_to.w - contour.animated_from.w) * 0.5,
-            contour.animated_from.h + (contour.animated_to.h - contour.animated_from.h) * 0.5,
+        let mut plan = |opening| {
+            LayerMotionPlan::for_slide(
+                &source,
+                opening,
+                96,
+                72,
+                1.,
+                PixelFormat::Rgba,
+                &mut renderer,
+            )
+            .map(|plan| plan.expect("sliding reveal plan"))
+        };
+        let (open, close) = (plan(true)?, plan(false)?);
+        let (open_contour, close_contour) = (open.reveal.unwrap(), close.reveal.unwrap());
+        assert_eq!(close_contour.mode, RevealMode::Visible);
+        assert_eq!(close_contour.animated_from, open_contour.animated_to);
+        assert_eq!(close_contour.animated_to, open_contour.animated_from);
+        assert_eq!(close_contour.animated_to, Rect::new(8., 64., 80., 0.));
+        assert_eq!(
+            close_contour.content_clip_from,
+            open_contour.content_clip_to
         );
-        assert_eq!(opening_retarget_sample, Rect::new(8., 36., 80., 28.));
-        assert!(opening_retarget_sample.h < contour.animated_from.h);
-        let center = ((36 * plan.atlas.width + 48) * 4) as usize;
-        assert_eq!(plan.atlas.pixels[center..center + 4], [35, 80, 120, 255]);
-        assert!(!plan.atlas.take_pixels().is_empty());
+        assert_eq!(
+            close_contour.content_clip_to,
+            open_contour.content_clip_from
+        );
+        let (open_plane, close_plane) = (&open.planes[0], &close.planes[0]);
+        assert_eq!(close_plane.from.destination, open_plane.to.destination);
+        assert_eq!(close_plane.to.destination, open_plane.from.destination);
+        assert_eq!(close_plane.to.destination, Rect::new(0., 32., 96., 72.));
+        assert_eq!(
+            close.atlas.pixels, open.atlas.pixels,
+            "contour-owned art stays out of both atlases"
+        );
         Ok(())
     }
 
@@ -1588,7 +1545,8 @@ mod tests {
             }
         }
         for fade in [false, true] {
-            let scene = scene(true, fade);
+            // A plain slide: a reveal's close is its open reversed, its body drawn by the contour (B0431).
+            let scene = scene(false, fade);
             let mut renderer = CountPaint {
                 renderer: TreeCpuRenderer::default(),
                 prepares: 0,

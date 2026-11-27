@@ -570,9 +570,9 @@ impl Motion {
     }
 }
 impl Motion {
-    /// A reveal that grows out of and shrinks back into its edge, rather than closing as a slid scene.
+    /// A reveal grows out of and shrinks back into its edge both ways; a close is the open reversed (B0431).
     pub fn reshapes_body(&self) -> bool {
-        self.reveal && (self.open || self.slide_distance.is_none())
+        self.reveal
     }
     /// Scene opacity at a progress: the progress itself when fading, else opaque once any of it is shown.
     pub fn opacity(&self, progress: f32) -> f32 {
@@ -684,36 +684,21 @@ impl Scene {
         }
     }
     /// Pose a panel motion. Revealing panels grow from their dock while opening
-    /// and shrink back into it on close (B0277). With an explicit slide distance
-    /// a close still moves the complete scene as one unit.
+    /// and shrink back into it on close, their content sliding by any slide
+    /// distance behind the reveal window (B0277, B0431); others move whole.
     pub fn panel_offset(&mut self, progress: f32, opening: bool) -> (f32, f32) {
-        let Some((edge, reveal, distance, width, height)) = self.motion.as_ref().map(|motion| {
-            (
-                motion.edge,
-                motion.reveal,
-                motion.slide_distance,
-                self.bounds.w,
-                self.bounds.h,
-            )
-        }) else {
+        let Some(motion) = &mut self.motion else {
             return (0., 0.);
         };
-        if let Some(motion) = &mut self.motion {
-            motion.open = opening;
-        }
-        if reveal && (opening || distance.is_none()) {
+        motion.open = opening;
+        let (edge, distance) = (motion.edge, motion.slide_distance);
+        if motion.reshapes_body() {
             self.reveal(progress);
             (0., 0.)
         } else {
-            if reveal {
-                self.reveal(1.);
-                if let Some(motion) = &mut self.motion {
-                    motion.progress = progress;
-                }
-            }
             edge.closed_offset(
-                distance.unwrap_or(width),
-                distance.unwrap_or(height),
+                distance.unwrap_or(self.bounds.w),
+                distance.unwrap_or(self.bounds.h),
                 progress,
             )
         }
@@ -799,7 +784,7 @@ impl Scene {
     fn content_offset(&self, index: usize) -> (f32, f32) {
         self.motion
             .as_ref()
-            .filter(|m| m.reveal && m.open && !m.parts.iter().any(|(i, _)| *i == index))
+            .filter(|m| m.reshapes_body() && !m.parts.iter().any(|(i, _)| *i == index))
             .and_then(|m| {
                 m.slide_distance
                     .map(|distance| m.edge.closed_offset(distance, distance, m.progress))
@@ -3831,7 +3816,8 @@ mod tests {
     }
 
     /// B0279: the posed body (what an attached edge tab rides) keeps its anchor side and grows its inner
-    /// edge with the progress under a reveal, and moves whole with a slide, opening and closing alike.
+    /// edge with the progress under a reveal (with or without a slide distance, B0431), and moves whole
+    /// with a plain slide, opening and closing alike.
     #[test]
     fn posed_body_tracks_the_revealed_inner_edge_and_the_slid_scene() {
         use bead_core::Edge;
@@ -3864,8 +3850,11 @@ mod tests {
             art: None,
             body: Some(body),
         };
-        for edge in [Edge::Top, Edge::Bottom, Edge::Left, Edge::Right] {
-            scene.motion = Some(motion(edge, true, None));
+        for (edge, slide) in [Edge::Top, Edge::Bottom, Edge::Left, Edge::Right]
+            .into_iter()
+            .flat_map(|edge| [(edge, None), (edge, Some(300.))])
+        {
+            scene.motion = Some(motion(edge, true, slide));
             scene.offset = (10., 20.);
             for opening in [true, false] {
                 for p in [0., 0.25, 0.5, 1.] {
@@ -3877,11 +3866,11 @@ mod tests {
                         Edge::Left => Rect::new(42., 52., 300. * p, 200.),
                         Edge::Right => Rect::new(42. + 300. * (1. - p), 52., 300. * p, 200.),
                     };
-                    assert_eq!(posed, expected, "{edge:?} open={opening} p={p}");
+                    assert_eq!(posed, expected, "{edge:?} {slide:?} open={opening} p={p}");
                 }
             }
-            // A slide close moves the whole body with the scene offset the presenter sets.
-            scene.motion = Some(motion(edge, true, Some(300.)));
+            // A plain slide's close moves the whole body with the scene offset the presenter sets.
+            scene.motion = Some(motion(edge, false, Some(300.)));
             let (dx, dy) = scene.panel_offset(0.5, false);
             scene.offset = (10. + dx, 20. + dy);
             assert_eq!(
@@ -3890,6 +3879,89 @@ mod tests {
                 "{edge:?} slide"
             );
             assert!(dx != 0. || dy != 0.);
+        }
+    }
+
+    /// B0431: a reveal with a slide distance (a launcher on the bottom edge, a docked side panel) closes
+    /// as its open reversed: at each progress the close pose is the open pose, pixel for pixel (body shrunk
+    /// into its edge, content slid back behind the reveal window), with no scene travel.
+    #[test]
+    fn sliding_reveal_close_is_the_open_pose_for_pose() {
+        use bead_core::Edge;
+        let body = Rect::new(32., 32., 300., 200.);
+        let paint = |scene: &Scene| {
+            let mut pixels = vec![0; 364 * 264 * 4];
+            let mut renderer = tree::TreeCpuRenderer::default();
+            renderer.prepare_on_ui(scene, 1.).unwrap();
+            let target = ShmTarget {
+                bytes: &mut pixels,
+                width: 364,
+                height: 264,
+                scale: 1.,
+                format: PixelFormat::Rgba,
+            };
+            renderer
+                .render(scene, target, Damage::full(364, 264))
+                .unwrap();
+            pixels
+        };
+        for edge in [Edge::Top, Edge::Bottom, Edge::Left, Edge::Right] {
+            let mut scene = Scene::empty(364., 264.);
+            scene.primitives = vec![
+                Primitive::Rounded {
+                    rect: body,
+                    radius: 18.,
+                    fill: [1, 2, 3, 255],
+                    border: Some(([200, 100, 50, 255], 2.)),
+                    radial: None,
+                },
+                // Content along the body's bottom, like a launcher's search field.
+                Primitive::Rounded {
+                    rect: Rect::new(48., 180., 268., 40.),
+                    radius: 6.,
+                    fill: [90, 80, 40, 255],
+                    border: None,
+                    radial: None,
+                },
+            ];
+            scene.motion = Some(Motion {
+                id: "m".into(),
+                open: true,
+                duration: 0.3,
+                return_duration: None,
+                return_curve: None,
+                auto_open: false,
+                spring: false,
+                curve: None,
+                edge,
+                slide_distance: Some(200.),
+                scale_from: None,
+                fade: false,
+                reveal: true,
+                progress: 1.,
+                parts: Vec::new(),
+                art: None,
+                body: None,
+            });
+            for progress in [0.75, 0.5, 0.25, 0.02] {
+                let tag = format!("{edge:?} {progress}");
+                let (mut open, mut close) = (scene.clone(), scene.clone());
+                assert_eq!(open.panel_offset(progress, true), (0., 0.));
+                let travel = close.panel_offset(progress, false);
+                assert_eq!(travel, (0., 0.), "{tag}: no scene travel");
+                let shrunk = Scene::revealed(body, edge, progress);
+                assert_eq!(close.posed_body(), Some(shrunk), "{tag}: into its edge");
+                assert_eq!(close.posed_body(), open.posed_body(), "{tag}");
+                assert_ne!(close.content_offset(1), (0., 0.), "{tag}: content slides");
+                assert_eq!(close.content_offset(1), open.content_offset(1), "{tag}");
+                assert_eq!(close.clip_at(1), open.clip_at(1), "{tag}");
+                assert_eq!(
+                    serde_json::to_vec(&close.primitives).unwrap(),
+                    serde_json::to_vec(&open.primitives).unwrap(),
+                    "{tag}"
+                );
+                assert!(paint(&close) == paint(&open), "{tag}: pixels differ");
+            }
         }
     }
 
@@ -3995,8 +4067,10 @@ mod tests {
         }
     }
 
+    /// B0431: a sliding reveal's close (once a whole-scene slide, eed9aa56) is the open reversed at
+    /// 120 Hz: no scene travel, the body shrinks into its edge, still accelerating to the end.
     #[test]
-    fn revealing_panel_close_moves_every_part_as_one_scene_at_120_hz() {
+    fn revealing_panel_close_shrinks_into_its_edge_at_120_hz() {
         let body = Rect::new(32., 32., 300., 200.);
         let mut scene = Scene {
             opacity: 1.,
@@ -4068,7 +4142,6 @@ mod tests {
             key_repeat: None,
             palette_at_rest: false,
         };
-        let original = scene.primitives.clone();
         let mut animations = bead_core::animation::Animations::default();
         animations.open_to("panel", true, 0., 0.3, bead_core::animation::Curve::EaseOut);
         animations.committed("panel", 0., 0.);
@@ -4081,34 +4154,13 @@ mod tests {
         for frame in 0..=22 {
             let now = 0.3 + frame as f64 / 120.;
             let progress = animations.value("panel", now).unwrap().0;
-            let (dx, dy) = scene.panel_offset(progress, false);
-            assert_eq!(dx, 0., "bottom slide keeps x constant at frame {frame}");
-            last_positions.push(dy);
-            scene.offset = (32. + dx, 32. + dy);
-            assert!(
-                scene.reveal_window().is_none(),
-                "close has no shrinking clip"
-            );
-            assert!(
-                scene.primitives.iter().zip(&original).all(|(a, b)| {
-                    match (a, b) {
-                        (
-                            Primitive::Rounded { rect: a, .. },
-                            Primitive::Rounded { rect: b, .. },
-                        ) => a == b,
-                        _ => true,
-                    }
-                }),
-                "body and lips retain their complete open geometry"
-            );
-            // Every primitive, including header, lips and contour, receives the
-            // same host scene translation at this sampled pose.
-            assert!(scene.primitives.iter().zip(&original).all(|(posed, base)| {
-                let posed = tree::rect(posed);
-                let base = tree::rect(base);
-                ((posed.x + scene.offset.0) - (base.x + 32. + dx)).abs() < 0.01
-                    && ((posed.y + scene.offset.1) - (base.y + 32. + dy)).abs() < 0.01
-            }));
+            assert_eq!(scene.panel_offset(progress, false), (0., 0.), "{frame}");
+            let posed = scene.posed_body().unwrap();
+            assert_eq!(posed.y + posed.h, body.y + body.h, "anchored at {frame}");
+            last_positions.push(posed.y);
+            assert_eq!(scene.reveal_window().is_some(), progress < 1.);
+            // The content slides back behind the shrinking window by the open's rule.
+            assert_eq!(scene.content_offset(1), (0., 200. * (1. - progress)));
             animations.committed("panel", now, now);
             if frame == 22 {
                 assert_eq!(progress, 0.);

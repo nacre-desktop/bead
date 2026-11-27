@@ -1194,17 +1194,18 @@ mod tests {
         server_thread.join().unwrap();
     }
 
+    /// B0431: a sliding reveal closes as its open reversed, so its contour is visible too.
     #[test]
-    fn whole_scene_reveal_close_sends_tracking_only_contour_once() {
-        reveal_close_sends_contour_once(Some(32.), true);
+    fn sliding_reveal_close_sends_a_visible_contour_once() {
+        reveal_close_sends_a_visible_contour_once(Some(32.));
     }
 
     #[test]
     fn stationary_reveal_close_sends_a_visible_contour_once() {
-        reveal_close_sends_contour_once(None, false);
+        reveal_close_sends_a_visible_contour_once(None);
     }
 
-    fn reveal_close_sends_contour_once(slide_distance: Option<f32>, tracking: bool) {
+    fn reveal_close_sends_a_visible_contour_once(slide_distance: Option<f32>) {
         let counts = Arc::new(Counts::default());
         let (client_stream, server_stream) = UnixStream::pair().unwrap();
         let (server_thread, stop) = server(server_stream, counts.clone(), Some(2));
@@ -1225,9 +1226,8 @@ mod tests {
                 .unwrap()
                 .unwrap();
         assert_eq!(
-            plan.reveal.as_ref().unwrap().mode
-                == bead_render::layer_motion::RevealMode::TrackingOnly,
-            tracking
+            plan.reveal.as_ref().unwrap().mode,
+            bead_render::layer_motion::RevealMode::Visible
         );
         let mut controller = manager.create(&surface, &qh);
         assert!(controller.queue(&plan).is_some());
@@ -1237,10 +1237,7 @@ mod tests {
         while counts.animates.load(Ordering::Relaxed) == 0 && Instant::now() < deadline {
             thread::sleep(Duration::from_millis(2));
         }
-        assert_eq!(
-            counts.tracking_mode.load(Ordering::Relaxed),
-            usize::from(tracking)
-        );
+        assert_eq!(counts.tracking_mode.load(Ordering::Relaxed), 0);
         assert_eq!(counts.reveal_geometry.load(Ordering::Relaxed), 1);
         assert_eq!(counts.reveal_clip.load(Ordering::Relaxed), 1);
         assert_eq!(counts.animates.load(Ordering::Relaxed), 1);

@@ -106,8 +106,9 @@ static-body open/close; making it the default needs the compositor side and is n
   reveal window, slide-content cache and `reveal_window` follow it). Compositor: `closed_plane_offset` is
   (0,0), the planner sends `RevealContour::reversed()` in `Visible` mode with contour-owned art left out of
   the atlas, and `motion_atlas_ink_is_safe` shares the rule. Protocol unchanged. `slide_distance =
-  Some(_)` closes keep the whole-scene translation and `tracking_only` contour, as do non-reveal motions;
-  reduced motion still skips. Net: +212/-69 lines, product code about neutral, the rest tests.
+  Some(_)` closes kept the whole-scene translation and `tracking_only` contour (until B0431, below);
+  non-reveal motions still do; reduced motion still skips. Net: +212/-69 lines, product code about
+  neutral, the rest tests.
 - Tests: `reveal_close_mirrors_the_open_and_settles_into_every_anchor_edge` (4 edges: close pose equals the
   open pose at each progress, offset 0, ink stays inside the shrinking body, hidden at progress 0),
   `stationary_reveal_close_is_the_reversed_open_with_no_plane_travel`, and a wayland wire test (visible
@@ -118,6 +119,18 @@ static-body open/close; making it the default needs the compositor side and is n
   148, 124, 67, 42, 39, none, last visible frame at 100 %). Frame gaps in the close, normal 0.22 s: p50 8.3,
   p95 10.6, max 10.6 ms (before: 8.0, 10.1, 10.1). The compositor path is covered by the plan and wire
   tests only: the desktop capture is parked (swap gate closed, see the unit handoff).
+- B0431: a reveal close always mirrors its open, with a `slide_distance` too. A host launcher on the
+  bottom edge (reveal, slide 590) slid whole through its bar to the screen edge on close: the fillet went,
+  1 px side rims and the search field ran through the bar band. Now `Motion::reshapes_body` is `reveal`
+  alone: `panel_offset` reshapes the body, `content_offset` slides the content back by the open's rule
+  behind the shrinking window, the slide layer (`SlideContent`, `closing_from_rest`) is the content above
+  the body both ways, and the planner always sends the `Visible` reversed contour with the content plane
+  sliding back to the open's start (`tracking_only()` and the whole-scene art repaint are gone). A docked
+  side panel with reveal and slide (a control centre) now shrinks into its edge on close instead of sliding
+  out. Content past the anchor edge stays visible as in the open (the reveal window is open on that side),
+  so the close's first frames show what the open's last frames show there. Tests:
+  `sliding_reveal_close_is_the_open_pose_for_pose` (4 edges, pixel-equal poses, no travel),
+  `sliding_reveal_close_plan_is_the_reversed_open`, `sliding_reveal_close_sends_a_visible_contour_once`.
 
 
 ## Slide pacing and terminal pose (B0283)

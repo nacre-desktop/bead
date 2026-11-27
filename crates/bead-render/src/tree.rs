@@ -3934,8 +3934,8 @@ struct BackgroundLayer {
     job: std::thread::JoinHandle<Option<Pixmap>>,
     charge: bead_core::cache::Charge,
 }
-/// B0185: a panel slide in progress moves its content as one piece: opening, the content above
-/// the growing body slides behind the reveal window; closing, the whole open picture moves.
+/// B0185: a panel slide in progress moves its content as one piece: the content above the
+/// reshaped body slides behind the reveal window, opening and closing alike (B0431).
 /// Painting that content primitive by primitive costs every frame as much as a full repaint
 /// (fills, strokes and blends over the whole panel), so it is flattened once per slide into a
 /// layer, and each frame paints only the body below it and composites the layer at its pose.
@@ -3954,16 +3954,9 @@ impl SlideContent {
             .motion
             .as_ref()
             .filter(|m| m.reveal && m.progress < 1.)?;
-        let window = scene.reveal_window();
-        if motion.reshapes_body() && window.is_none() {
-            return None;
-        }
-        // Opening (or closing in place), the body (its parts and whatever lies below them) is reshaped per frame.
-        let scene_start = if motion.reshapes_body() {
-            motion.parts.iter().map(|(index, _)| index + 1).max()?
-        } else {
-            0
-        };
+        let window = scene.reveal_window()?;
+        // The body (its parts and whatever lies below them) is reshaped per frame.
+        let scene_start = motion.parts.iter().map(|(index, _)| index + 1).max()?;
         let posed_start = scene_start + frame.items.len().checked_sub(scene.primitives.len())?;
         if scene_start >= scene.primitives.len() || posed_start >= frame.items.len() {
             return None;
@@ -3983,7 +3976,7 @@ impl SlideContent {
             scene_start,
             posed_start,
             offset,
-            window,
+            window: Some(window),
         })
     }
     /// The content items at their scene (unposed) geometry, with the posed frame's rasters.
@@ -4004,18 +3997,13 @@ impl SlideContent {
             .collect()
     }
     /// The close slide of a reveal panel resting open (or held at the close's first frame, B0383): the
-    /// whole scene is the content of a slid panel, the content above the body (as an open's) for a
-    /// plain reveal that closes in place (B0312).
+    /// content above the body, as an open's (B0312, B0431).
     fn closing_from_rest(scene: &Scene, frame: &Frame) -> Option<Self> {
         let motion = scene
             .motion
             .as_ref()
             .filter(|m| m.reveal && m.progress >= 1.)?;
-        let scene_start = if motion.slide_distance.is_some() {
-            0
-        } else {
-            motion.parts.iter().map(|(index, _)| index + 1).max()?
-        };
+        let scene_start = motion.parts.iter().map(|(index, _)| index + 1).max()?;
         let posed_start = scene_start + frame.items.len().checked_sub(scene.primitives.len())?;
         (scene_start < scene.primitives.len() && posed_start < frame.items.len()).then_some(Self {
             scene_start,
@@ -6832,7 +6820,8 @@ mod tests {
                 renderer.prepare_on_ui(&scene, 1.5).unwrap();
                 let posed = renderer.prepared_frame().unwrap();
                 let slide = SlideContent::of(&scene, &posed).expect("slide content split");
-                assert_eq!(slide.scene_start, if open { 2 } else { 0 });
+                // The content above the reshaped body, both ways (B0431).
+                assert_eq!(slide.scene_start, 2);
                 let mut expected = vec![0u8; w * h * 4];
                 paint(
                     &posed,
