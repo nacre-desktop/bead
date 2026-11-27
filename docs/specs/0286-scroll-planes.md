@@ -58,7 +58,8 @@ patch under a translating ancestor); bead-render `tree.rs`
 `Renderer::scroll_shifts(&[(item range, clip, shift)]) -> bool` is a per-surface hint like
 `presentation_motion`; the default returns true only for an empty set, so every renderer without
 an override means "take the worker path". `GlRenderer` stores the latest set (an empty set clears
-it) and `paint` applies it per item with the pure fns `shift_for` and `placement`:
+it) and `paint` applies it per item with the pure fns `shift_for` and `placement` (tree.rs since
+U3, shared with the CPU presenter):
 - shift = the sum over every plane whose range contains the item (nested planes compose), added to
   the paint offset, so the device-px rounding of images and text is unchanged;
 - scissor = the innermost plane's clip (unshifted) when the item's own clip is that clip or absent;
@@ -67,7 +68,7 @@ it) and `paint` applies it per item with the pure fns `shift_for` and `placement
 
 Nothing calls it with a non-empty set until U2b, so an empty set paints exactly as before.
 Known limit: an inner clip already cut by the viewport at bake time is shifted as cut (see the
-`shortcut:` comment in gl.rs).
+`shortcut:` comment on `placement`).
 
 Tests (no GL context): gl.rs `shift_tests` (`nested_planes_compose_their_shifts`,
 `items_outside_the_plane_clip_are_culled_and_partial_ones_are_cut`,
@@ -224,3 +225,58 @@ Tests (no Wayland, `scroll.rs` `plane_tests`): `a_step_inside_ready_sends_no_ui_
   `a_renderer_that_cannot_composite_gets_todays_events` (now with viewports without `on_settle`,
   on the other axis and elsewhere); `worker` `a_source_without_scroll_viewports_lists_none`;
   bead-ui `materialized_tests` `on_settle_runs_once_with_the_final_offset_after_a_burst`.
+
+## U3: CPU presenter shifts
+
+The host's panels draw with `TreeCpuRenderer`, so before U3 the probe refused and every scroll
+frame was a worker round trip (`plane=- main_steps=0`).
+- `TreeCpuRenderer::scroll_shifts` stores the set with the content key of the frame it was placed
+  against and returns true for an empty set, or when the last render painted its frame directly
+  with one item per scene primitive. It returns false, so main takes today's worker path, after a
+  frozen snapshot (a suspended GL panel: only its group moves), an opacity group (a fade or
+  `OpaqueComposition::Cached`), a reveal slide, a frame not one item per primitive (an imported
+  posed frame), or before any render. The probe (`0..0`) gets the same answer from the last
+  render, so it is true exactly when a real set would be painted. A state change at the next
+  draw falls back at the next probe, as for a GL fallback (U2b1).
+- Paint: the direct paint (`paint_items`) places each item with U2a's `placement`: shift = the
+  sum of the containing planes, added to the paint offset (main snaps it to device px, so the
+  rounding of rasters and fills is unchanged); scissor = the innermost plane clip, or an inner
+  clip moved with the shift and cut by the plane clip; items whose moved bounds miss the plane
+  clip are skipped. `opaque_start` places items the same way, so a fill that covers the damage
+  only at its baked position never hides what lies below it. Rasters are reused as baked;
+  vectors inside the damage are rastered as today. An empty set paints exactly as before.
+- Shifts apply only to the frame whose content key they were placed against. A close's
+  layer-motion atlas renders a newer scene through the same renderer without the draw hook,
+  and paints it as baked. The settled-opening copy (B0205) is skipped while shifted, because its
+  pixels are unshifted.
+- Damage: no change. U2b1's hook adds the plane clip (device px, rounded out) while the plane
+  moves or was last shifted. The SHM path tracks it per buffer, so every retained buffer
+  repaints the clip, and a main-only step (same frame, no item damage) repaints exactly the
+  clip.
+- No band copy: every step repaints the whole plane clip. The SHM buffers are two or three deep
+  and the renderer does not know which shift a buffer shows, so moving last frame's pixels by
+  the delta needs per-buffer shift bookkeeping in `rendering.rs`. That is the follow-up if the
+  rig misses 4 ms.
+- GL fix: gl.rs `paint` added the shift to the offset before placing the scissor, so the plane
+  clip moved with the content and an inner clip moved twice. The scissor now uses the unshifted
+  offset (one line moved).
+
+Cost (laptop, `cargo test --release` with LTO off, BGRA, a list of rounded cards with an icon and
+two text lines, 120 steps of 4 px; the job runs at idle CPU weight, so p95 is inflated):
+- a 560x960 list clip on 1920x1080 at scale 1: p50 2.2 ms, p95 8.0 ms, max 9.0 ms;
+- the same list at scale 1.5 (840x1440 device px on 2880x1620): p50 9.6 ms, p95 16.3 ms;
+- a full 1920x1080 clip at scale 1: p50 11.0 ms, p95 18.4 ms.
+
+The step costs what today's main-side repaint of the clip already costs, and the worker round
+trip is gone. Most of the time goes to the tiny-skia antialiased fill of each rounded card that
+the damage does not cover. At the laptop's scale a large list misses the 4 ms target, so the
+band copy above, or a faster rounded fill (an opaque interior run plus corners), is the
+follow-up the Platform rig decides.
+
+Tests: tree.rs `a_plane_baked_at_100_drawn_shifted_up_50_equals_it_baked_at_150` (scales 1 and
+1.5; red with `scroll_shifts` returning `shifts.is_empty()`),
+`nested_plane_shifts_compose_an_inner_clip_moves_and_items_off_the_clip_are_culled`,
+`the_probe_composites_only_after_a_direct_paint_of_one_item_per_primitive`,
+`a_shift_change_repaints_the_plane_clip_only_and_leaves_no_stale_rows` (sentinel outside the
+damage; a band where an unshifted `opaque_start` would leave stale pixels); timing, ignored and
+run in release by the lead's checks: `cpu_plane_step_paint_time_at_1920x1080`.

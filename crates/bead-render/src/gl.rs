@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 //! Shared native EGL context, retained subtree rasters and direct vector primitives.
+use crate::tree::{Shift, placement};
 use crate::{Damage, Rect, RenderTarget, Renderer, Result, Scene, ShmTarget};
 use glutin::{
     config::{Config, ConfigTemplateBuilder},
@@ -1434,44 +1435,6 @@ pub struct GlRenderer {
     /// B0419: the scroll planes' shifts the next paints apply (empty: paint as baked).
     shifts: Vec<Shift>,
 }
-/// A scroll plane: its item range, its clip (the viewport) and the shift (baked - live).
-type Shift = (std::ops::Range<usize>, Rect, (f32, f32));
-/// The sum of the shifts of every plane containing item `index` (nested planes compose).
-fn shift_for(index: usize, shifts: &[Shift]) -> (f32, f32) {
-    shifts
-        .iter()
-        .filter(|(range, ..)| range.contains(&index))
-        .fold((0., 0.), |sum, (.., s)| (sum.0 + s.0, sum.1 + s.1))
-}
-/// The shift and scissor for item `index` (`None`: culled). The innermost plane's clip stays put;
-/// an inner clip moves with the shift.
-fn placement(
-    index: usize,
-    own: Option<Rect>,
-    bounds: Rect,
-    shifts: &[Shift],
-) -> Option<((f32, f32), Option<Rect>)> {
-    let Some((_, plane, _)) = shifts
-        .iter()
-        .filter(|(range, ..)| range.contains(&index))
-        .min_by_key(|(range, ..)| range.len())
-    else {
-        return Some(((0., 0.), own));
-    };
-    let shift = shift_for(index, shifts);
-    let moved = bounds.translated(shift.0, shift.1);
-    let sees =
-        |a: Rect, b: Rect| a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
-    if !sees(moved, *plane) {
-        return None;
-    }
-    // shortcut: an inner clip already cut by the viewport at bake time is shifted as cut, so content entering through it can be trimmed until the next sync; carry uncut inner clips (design `inner`) if that shows.
-    let clip = match own {
-        Some(c) if c != *plane => c.translated(shift.0, shift.1).intersect(*plane),
-        _ => *plane,
-    };
-    Some((shift, Some(clip)))
-}
 /// B0338: one `native-gl-images` budget per renderer: its textures live and die with its canvas.
 const TEXTURE_LIMIT: usize = 64 * bead_core::cache::MIB;
 /// B0338: the renderer's texture budget refused a texture and nothing was left to evict.
@@ -1804,7 +1767,6 @@ impl GlRenderer {
             else {
                 continue;
             };
-            let offset = (offset.0 + shift.0, offset.1 + shift.1);
             canvas.reset_scissor();
             if let Some(clip) = clip {
                 canvas.scissor(
@@ -1814,6 +1776,8 @@ impl GlRenderer {
                     clip.h * frame.scale,
                 );
             }
+            // The scissor is already placed (the plane clip stays put), so only the item moves.
+            let offset = (offset.0 + shift.0, offset.1 + shift.1);
             let r = crate::tree::rect(&item.primitive);
             let opacity = item.primitive.opacity();
             let (x, y) = (
@@ -2655,7 +2619,8 @@ mod gpu_ring_tests {
 }
 #[cfg(test)]
 mod shift_tests {
-    use super::{Rect, placement, shift_for};
+    use crate::Rect;
+    use crate::tree::{placement, shift_for};
 
     #[test]
     fn nested_planes_compose_their_shifts() {

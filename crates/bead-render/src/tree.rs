@@ -2840,6 +2840,44 @@ fn fill_covers(primitive: &Primitive, offset: (f32, f32), scale: f32, clip: Dama
         && ((y >= top + radius + inset && y1 <= bottom - radius - inset)
             || (x >= left + radius + inset && x1 <= right - radius - inset))
 }
+/// A scroll plane: its item range, its clip (the viewport) and the shift (baked - live).
+pub(crate) type Shift = (std::ops::Range<usize>, Rect, (f32, f32));
+/// The sum of the shifts of every plane containing item `index` (nested planes compose).
+pub(crate) fn shift_for(index: usize, shifts: &[Shift]) -> (f32, f32) {
+    shifts
+        .iter()
+        .filter(|(range, ..)| range.contains(&index))
+        .fold((0., 0.), |sum, (.., s)| (sum.0 + s.0, sum.1 + s.1))
+}
+/// The shift and scissor for item `index` (`None`: culled). The innermost plane's clip stays put;
+/// an inner clip moves with the shift.
+pub(crate) fn placement(
+    index: usize,
+    own: Option<Rect>,
+    bounds: Rect,
+    shifts: &[Shift],
+) -> Option<((f32, f32), Option<Rect>)> {
+    let Some((_, plane, _)) = shifts
+        .iter()
+        .filter(|(range, ..)| range.contains(&index))
+        .min_by_key(|(range, ..)| range.len())
+    else {
+        return Some(((0., 0.), own));
+    };
+    let shift = shift_for(index, shifts);
+    let moved = bounds.translated(shift.0, shift.1);
+    let sees =
+        |a: Rect, b: Rect| a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+    if !sees(moved, *plane) {
+        return None;
+    }
+    // shortcut: an inner clip already cut by the viewport at bake time is shifted as cut, so content entering through it can be trimmed until the next sync; carry uncut inner clips (design `inner`) if that shows.
+    let clip = match own {
+        Some(c) if c != *plane => c.translated(shift.0, shift.1).intersect(*plane),
+        _ => *plane,
+    };
+    Some((shift, Some(clip)))
+}
 fn opaque_start(
     items: &[Item],
     offset: (f32, f32),
@@ -2847,12 +2885,17 @@ fn opaque_start(
     damage: Damage,
     width: u32,
     height: u32,
+    shifts: &[Shift],
 ) -> Option<usize> {
-    items.iter().rposition(|item| {
+    items.iter().enumerate().rposition(|(index, item)| {
+        let Some((shift, clip)) = placement(index, item.clip, rect(&item.primitive), shifts) else {
+            return false;
+        };
+        let moved = (offset.0 + shift.0, offset.1 + shift.1);
         item.raster.is_none()
             && matches!(&item.primitive,Primitive::Rounded{fill,..}if fill[3]==255)
-            && fill_covers(&item.primitive, offset, scale, damage)
-            && item.clip.is_none_or(|r| {
+            && fill_covers(&item.primitive, moved, scale, damage)
+            && clip.is_none_or(|r| {
                 intersection(
                     damage,
                     r.translated(offset.0, offset.1)
@@ -3178,7 +3221,7 @@ fn paint_with_scratch(
     damage: Damage,
     repair_scratch: &mut RepairScratch,
 ) -> Result<()> {
-    paint_items(&frame.items, offset, target, damage, repair_scratch)
+    paint_items(&frame.items, offset, target, damage, repair_scratch, &[])
 }
 /// A polyline's fill (closed paths only) then its round-joined stroke, onto `target`.
 fn draw_polyline(
@@ -3215,12 +3258,15 @@ fn draw_polyline(
         target.stroke_path(path, &paint, &stroke, transform, mask);
     }
 }
+/// B0419: items in a scroll plane's range paint moved by `shifts`, cut by the plane clip (U2a's
+/// `placement`); their rasters are reused as baked.
 fn paint_items(
     items: &[Item],
     offset: (f32, f32),
     target: ShmTarget<'_>,
     damage: Damage,
     repair_scratch: &mut RepairScratch,
+    shifts: &[Shift],
 ) -> Result<()> {
     if items.iter().any(|item| item.image.is_some()) {
         return Err("CPU paint requires worker-materialized dense images".into());
@@ -3242,7 +3288,7 @@ fn paint_items(
     if damage_mask_bytes > RepairScratch::CAP {
         return Err("repair mask exceeds budget".into());
     }
-    let start = opaque_start(items, offset, scale, damage, width, height);
+    let start = opaque_start(items, offset, scale, damage, width, height, shifts);
     if start.is_none() {
         let clear_profile = bead_core::profile::Span::new("paint_clear");
         for y in damage.y..damage.y + damage.h {
@@ -3256,7 +3302,7 @@ fn paint_items(
     let mut mask = Mask::new(width, damage.h).ok_or("damage mask")?;
     let mut mask_clip = None;
     let mut painted = false;
-    for item in &items[start.unwrap_or(0)..] {
+    for (index, item) in items.iter().enumerate().skip(start.unwrap_or(0)) {
         let _item_profile = bead_core::profile::Span::new(match item.primitive {
             Primitive::Arc { .. } => "paint_arc",
             Primitive::Polyline { .. } => "paint_polyline",
@@ -3266,6 +3312,13 @@ fn paint_items(
             Primitive::Shadow { .. } => "paint_shadow",
             Primitive::Graph { .. } => "paint_graph",
         });
+        let Some((shift, own_clip)) = placement(index, item.clip, rect(&item.primitive), shifts)
+        else {
+            continue;
+        };
+        // The clip is placed in the scene; everything else below paints at the moved offset.
+        let own_clip = own_clip.map(|r| r.translated(offset.0, offset.1));
+        let offset = (offset.0 + shift.0, offset.1 + shift.1);
         if item.raster.is_none()
             && matches!(&item.primitive,Primitive::Rounded{fill,border,..} if fill[3]==0 && border.as_ref().is_none_or(|(color,_)|color[3]==0))
         {
@@ -3279,12 +3332,8 @@ fn paint_items(
             continue;
         }
 
-        let mut clip = item.clip.map_or(damage, |r| {
-            intersection(
-                damage,
-                r.translated(offset.0, offset.1)
-                    .pixels(scale, width, height),
-            )
+        let mut clip = own_clip.map_or(damage, |r| {
+            intersection(damage, r.pixels(scale, width, height))
         });
         if clip.w == 0 || clip.h == 0 {
             continue;
@@ -3900,6 +3949,13 @@ pub struct TreeCpuRenderer {
     /// When a reveal panel resting open last rendered new content, at a scale and format.
     close_due: Option<(std::time::Instant, f32, PixelFormat)>,
     close_timer: bool,
+    /// B0419: the scroll planes' shifts, the content key of the frame they were placed against
+    /// (a close's atlas may render a newer scene without new shifts), and whether the last
+    /// render painted its frame directly with an item per scene primitive (the only paint that
+    /// applies them).
+    shifts: Vec<Shift>,
+    shifts_key: u64,
+    composites: bool,
 }
 /// B0205: an opening ends on the worker-prepared frame at the slide's offset, painted directly
 /// over the whole surface (the window no longer clips any content), which avoids doing a full
@@ -4089,6 +4145,7 @@ fn flatten_layer(
                 h: band.min(h - y),
             },
             scratch,
+            &[],
         )?;
     }
     Ok(pixels)
@@ -4127,6 +4184,7 @@ fn repaint_layer(
                 h: band.min(region.y + region.h - y),
             },
             scratch,
+            &[],
         )?;
     }
     Ok(())
@@ -4548,6 +4606,7 @@ impl TreeCpuRenderer {
             },
             damage,
             &mut self.repair_scratch,
+            &[],
         )?;
         let (_, layer) = self.slide_layer.as_ref().expect("slide layer built");
         let x = ((scene.offset.0 + slide.offset.0 + scene.bounds.x) * scale).round() as i64;
@@ -4588,6 +4647,13 @@ impl TreeCpuRenderer {
 /// so hover and live updates do not each start a background paint.
 const CLOSE_LAYER_QUIET: std::time::Duration = std::time::Duration::from_millis(150);
 impl Renderer for TreeCpuRenderer {
+    /// B0419: a frozen snapshot, an opacity group, a slide or a frame not one item per primitive
+    /// last rendered (or nothing did): main's steps take the worker path.
+    fn scroll_shifts(&mut self, shifts: &[Shift]) -> bool {
+        self.shifts = shifts.to_vec();
+        self.shifts_key = self.cache.frame.as_ref().map_or(0, |frame| frame.key);
+        shifts.is_empty() || self.composites
+    }
     fn take_transient_timer(&mut self) -> bool {
         let scratch = self.repair_scratch.used.is_some() && !self.repair_scratch.timer;
         let close = (self.close_due.is_some() || self.settled.is_some()) && !self.close_timer;
@@ -4847,6 +4913,7 @@ impl Renderer for TreeCpuRenderer {
         {
             return Err("damage outside SHM".into());
         }
+        self.composites = false;
         let frozen_snapshot = self.snapshot_fingerprint.is_some();
         let frame = if frozen_snapshot {
             None
@@ -4880,17 +4947,23 @@ impl Renderer for TreeCpuRenderer {
                 }
             }
             let mut target = target;
+            // Shift ranges index scene primitives; the settled picture has none applied.
+            self.composites = frame.items.len() == scene.primitives.len();
+            let shifted =
+                self.composites && self.shifts_key == frame.key && !self.shifts.is_empty();
             if self.settled.is_some()
+                && !shifted
                 && self.repair_from_settled(&frame, scene.offset, &mut target, damage)
             {
                 return Ok(());
             }
-            return paint_with_scratch(
-                &frame,
+            return paint_items(
+                &frame.items,
                 scene.offset,
                 target,
                 damage,
                 &mut self.repair_scratch,
+                if shifted { &self.shifts[..] } else { &[] },
             );
         }
         self.slide_layer = None;
@@ -8270,6 +8343,456 @@ mod tests {
         );
         assert!(!far(&cache));
     }
+    /// B0419 U3: the list plane's viewport.
+    fn list_clip() -> Rect {
+        Rect::new(0., 10., 60., 80.)
+    }
+    /// B0419 U3: a 60x100 panel (a background and a header) over a plane clipped to y 10..90:
+    /// 30 rows (a fill, then a label in the gap below it, pitch 20) from content y 0 at
+    /// `10 - offset`, moving, so labels raster one viewport past the clip.
+    fn shifted_list(offset: f32) -> Scene {
+        let mut scene = scene();
+        scene.bounds = Rect::new(0., 0., 60., 100.);
+        scene.width = 60.;
+        scene.font_files = vec![
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../bead-test/fonts/IBMPlexSans.ttf"),
+        ];
+        let fill = |rect, fill| Primitive::Rounded {
+            rect,
+            radius: 0.,
+            fill,
+            border: None,
+            radial: None,
+        };
+        let mut primitives = vec![
+            fill(Rect::new(-4., -4., 68., 108.), [20, 20, 30, 255]),
+            fill(Rect::new(-4., -4., 68., 14.), [90, 30, 30, 255]),
+        ];
+        for i in 0..30_u8 {
+            let y = 10. + 20. * f32::from(i) - offset;
+            let color = [40 + 6 * i, 120, 200 - 5 * i, 255];
+            primitives.push(fill(Rect::new(-4., y, 68., 10.), color));
+            primitives.push(Primitive::Text {
+                rect: Rect::new(4., y + 11., 50., 8.),
+                text: format!("Row {i}"),
+                family: "IBM Plex Sans".into(),
+                size: 6.,
+                color: [240, 240, 240, 255],
+                weight: 400,
+                align: None,
+                shadow: None,
+                features: Vec::new(),
+            });
+        }
+        let end = primitives.len();
+        scene.clips = (2..end).map(|index| (index, list_clip())).collect();
+        let plane = crate::ScrollPlane {
+            offset,
+            limit: 520.,
+            clip: list_clip(),
+            interest: Rect::new(0., -70., 60., 240.),
+            ready: (offset - 80., offset + 160.),
+        };
+        let layer =
+            |id: &str, parent: Option<&str>, own, subtree_end, bounds, scroll| crate::SceneLayer {
+                id: id.into(),
+                parent: parent.map(Into::into),
+                own,
+                subtree_end,
+                bounds,
+                scroll,
+            };
+        scene.layers = vec![
+            layer("panel", None, 0..2, 2, scene.bounds, None),
+            layer("list", None, 2..2, end, list_clip(), Some(plane)),
+            layer(
+                "rows",
+                Some("list"),
+                2..end,
+                end,
+                Rect::new(-4., 10. - offset, 68., 600.),
+                None,
+            ),
+        ];
+        scene.primitives = primitives;
+        scene
+    }
+    #[test]
+    fn a_plane_baked_at_100_drawn_shifted_up_50_equals_it_baked_at_150() {
+        let shift = [(2..62, list_clip(), (0., -50.))];
+        for scale in [1_f32, 1.5] {
+            let at_100 = shifted_list(100.);
+            let mut renderer = TreeCpuRenderer::default();
+            render_cpu_frame(&mut renderer, &at_100, scale, PixelFormat::Rgba);
+            assert!(
+                renderer.scroll_shifts(&shift),
+                "a plain CPU renderer composites"
+            );
+            let moved = render_cpu_frame(&mut renderer, &at_100, scale, PixelFormat::Rgba);
+            let baked = render_cpu_frame(
+                &mut TreeCpuRenderer::default(),
+                &shifted_list(150.),
+                scale,
+                PixelFormat::Rgba,
+            );
+            assert!(
+                moved == baked,
+                "scale {scale}: the shifted plane differs from its bake"
+            );
+            assert!(renderer.scroll_shifts(&[]));
+            let rest = render_cpu_frame(&mut renderer, &at_100, scale, PixelFormat::Rgba);
+            assert!(
+                rest == render_cpu_frame(
+                    &mut TreeCpuRenderer::default(),
+                    &at_100,
+                    scale,
+                    PixelFormat::Rgba
+                ),
+                "scale {scale}: an empty set paints as baked"
+            );
+        }
+    }
+    #[test]
+    fn nested_plane_shifts_compose_an_inner_clip_moves_and_items_off_the_clip_are_culled() {
+        // A background; an outer plane 1..5 (clip y 10..40, shift -10) holding an inner one 2..4
+        // (shift -5): A in the outer only, B in both, C in both under its own inner clip, D
+        // unclipped in the outer only, shifted off the plane clip.
+        let plane = Rect::new(0., 10., 40., 30.);
+        let build = |rects: [Rect; 4], inner: Rect, d_alpha: u8| {
+            let mut scene = scene();
+            scene.bounds = Rect::new(0., 0., 40., 40.);
+            scene.width = 40.;
+            let colors = [
+                [200, 40, 40, 255],
+                [40, 200, 40, 255],
+                [40, 40, 200, 255],
+                [220, 220, 0, d_alpha],
+            ];
+            scene.primitives = std::iter::once((Rect::new(-4., -4., 48., 48.), [20, 20, 30, 255]))
+                .chain(rects.into_iter().zip(colors))
+                .map(|(rect, fill)| Primitive::Rounded {
+                    rect,
+                    radius: 0.,
+                    fill,
+                    border: None,
+                    radial: None,
+                })
+                .collect();
+            scene.clips = BTreeMap::from([(1, plane), (2, plane), (3, inner)]);
+            scene.layers = vec![crate::SceneLayer {
+                id: "root".into(),
+                parent: None,
+                own: 0..5,
+                subtree_end: 5,
+                bounds: scene.bounds,
+                scroll: None,
+            }];
+            scene
+        };
+        let baked = build(
+            [
+                Rect::new(0., 20., 40., 5.),
+                Rect::new(0., 30., 20., 4.),
+                Rect::new(20., 30., 20., 4.),
+                Rect::new(0., 12., 40., 4.),
+            ],
+            Rect::new(20., 28., 10., 8.),
+            255,
+        );
+        let expected = build(
+            [
+                Rect::new(0., 10., 40., 5.),
+                Rect::new(0., 15., 20., 4.),
+                Rect::new(20., 15., 20., 4.),
+                Rect::new(0., 2., 40., 4.),
+            ],
+            Rect::new(20., 13., 10., 8.),
+            0,
+        );
+        let shifts = [(1..5, plane, (0., -10.)), (2..4, plane, (0., -5.))];
+        let mut renderer = TreeCpuRenderer::default();
+        render_cpu_frame(&mut renderer, &baked, 1., PixelFormat::Rgba);
+        assert!(renderer.scroll_shifts(&shifts));
+        let moved = render_cpu_frame(&mut renderer, &baked, 1., PixelFormat::Rgba);
+        let reference = render_cpu_frame(
+            &mut TreeCpuRenderer::default(),
+            &expected,
+            1.,
+            PixelFormat::Rgba,
+        );
+        let at = |x: usize, y: usize| moved[(y * 40 + x) * 4..(y * 40 + x) * 4 + 4].to_vec();
+        assert_eq!(at(25, 16), [40, 40, 200, 255], "C moved by both shifts");
+        assert_eq!(
+            at(35, 16),
+            [20, 20, 30, 255],
+            "C is cut by its moved inner clip"
+        );
+        assert_eq!(
+            at(5, 3),
+            [20, 20, 30, 255],
+            "D off the plane clip is not painted"
+        );
+        assert!(moved == reference);
+    }
+    #[test]
+    fn the_probe_composites_only_after_a_direct_paint_of_one_item_per_primitive() {
+        let probe = [(0..0, Rect::new(0., 0., 0., 0.), (0., 0.))];
+        let shift = [(2..62, list_clip(), (0., -50.))];
+        let scene = shifted_list(100.);
+        let mut plain = TreeCpuRenderer::default();
+        assert!(
+            plain.scroll_shifts(&[]),
+            "an empty set always paints as baked"
+        );
+        assert!(!plain.scroll_shifts(&probe), "nothing painted yet");
+        render_cpu_frame(&mut plain, &scene, 1., PixelFormat::Rgba);
+        assert!(
+            plain.scroll_shifts(&probe),
+            "a plain CPU renderer composites"
+        );
+
+        let mut frozen = TreeCpuRenderer::snapshot(&scene, 1.).unwrap();
+        render_cpu_frame(&mut frozen, &scene, 1., PixelFormat::Rgba);
+        assert!(
+            !frozen.scroll_shifts(&probe),
+            "a frozen snapshot only moves its group"
+        );
+
+        // An imported frame with an item more than the scene's primitives.
+        let mut extra = scene.clone();
+        extra.primitives.push(Primitive::Rounded {
+            rect: Rect::new(0., 0., 4., 4.),
+            radius: 0.,
+            fill: [0, 0, 0, 0],
+            border: None,
+            radial: None,
+        });
+        let mut cache = TreeCache::default();
+        cache.prepare(&extra, 1.).unwrap();
+        let mut imported = scene.clone();
+        imported
+            .prepared
+            .insert(1_f32.to_bits(), cache.frame.clone().unwrap());
+        let mut posed = TreeCpuRenderer::default();
+        let unshifted = render_cpu_frame(&mut posed, &imported, 1., PixelFormat::Rgba);
+        let items = posed.prepared_frame().unwrap().items.len();
+        assert_eq!(
+            items,
+            imported.primitives.len() + 1,
+            "the import is not 1:1"
+        );
+        assert!(
+            !posed.scroll_shifts(&probe),
+            "a frame not one item per primitive"
+        );
+        assert!(!posed.scroll_shifts(&shift));
+        let painted = render_cpu_frame(&mut posed, &imported, 1., PixelFormat::Rgba);
+        assert!(painted == unshifted, "and its paint ignores the set");
+    }
+    #[test]
+    fn a_shift_change_repaints_the_plane_clip_only_and_leaves_no_stale_rows() {
+        let shift = [(2..62, list_clip(), (0., -50.))];
+        let sentinel = [17_u8, 29, 41, 233];
+        for scale in [1_f32, 1.5] {
+            let (w, h) = ((60. * scale) as u32, (100. * scale) as u32);
+            let at_100 = shifted_list(100.);
+            let baked = render_cpu_frame(
+                &mut TreeCpuRenderer::default(),
+                &shifted_list(150.),
+                scale,
+                PixelFormat::Rgba,
+            );
+            let mut renderer = TreeCpuRenderer::default();
+            render_cpu_frame(&mut renderer, &at_100, scale, PixelFormat::Rgba);
+            // A main-only step keeps the frame: no item damage, only the draw hook's plane clip.
+            let frame = renderer.prepared_frame().unwrap();
+            let mut tracker = crate::damage::FrameDamage::default();
+            tracker.update(&frame, at_100.offset, 1., w, h).unwrap();
+            let items = tracker.update(&frame, at_100.offset, 1., w, h).unwrap();
+            assert!(items.is_empty(), "scale {scale}: {items:?}");
+            assert!(renderer.scroll_shifts(&shift));
+            // The clip, and a band an unshifted row 6 covers but the shifted rows leave in a gap.
+            let band = Rect::new(0., 32., 60., 6.).pixels(scale, w, h);
+            assert_eq!(
+                opaque_start(&frame.items, (0., 0.), scale, band, w, h, &[]),
+                Some(2 + 2 * 6)
+            );
+            assert_eq!(
+                opaque_start(&frame.items, (0., 0.), scale, band, w, h, &shift),
+                Some(0)
+            );
+            for damage in [list_clip().pixels(scale, w, h), band] {
+                let mut bytes = sentinel.repeat(w as usize * h as usize);
+                renderer
+                    .render(
+                        &at_100,
+                        ShmTarget {
+                            bytes: &mut bytes,
+                            width: w,
+                            height: h,
+                            scale,
+                            format: PixelFormat::Rgba,
+                        },
+                        damage,
+                    )
+                    .unwrap();
+                for (i, pixel) in bytes.as_chunks::<4>().0.iter().enumerate() {
+                    let (x, y) = (i as u32 % w, i as u32 / w);
+                    let inside = (damage.x..damage.x + damage.w).contains(&x)
+                        && (damage.y..damage.y + damage.h).contains(&y);
+                    let want = if inside {
+                        &baked[i * 4..i * 4 + 4]
+                    } else {
+                        &sentinel[..]
+                    };
+                    assert_eq!(
+                        &pixel[..],
+                        want,
+                        "scale {scale} damage {damage:?} at {x},{y}"
+                    );
+                }
+            }
+        }
+    }
+    /// B0419 U3: a list plane at `clip` on a 1920x1080 surface: 88 rows (a rounded card, an icon,
+    /// a title and a body line, pitch 64) from content y 0 at `clip.y - offset`, moving (one
+    /// viewport of interest past each side of the clip).
+    fn timing_list(clip: Rect, offset: f32) -> Scene {
+        let mut scene = scene();
+        scene.bounds = Rect::new(0., 0., 1920., 1080.);
+        scene.width = 1920.;
+        scene.font_files = vec![
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../bead-test/fonts/IBMPlexSans.ttf"),
+        ];
+        let fill = |rect, radius, fill| Primitive::Rounded {
+            rect,
+            radius,
+            fill,
+            border: None,
+            radial: None,
+        };
+        let text = |rect, text: String, size| Primitive::Text {
+            rect,
+            text,
+            family: "IBM Plex Sans".into(),
+            size,
+            color: [235, 235, 240, 255],
+            weight: 400,
+            align: None,
+            shadow: None,
+            features: Vec::new(),
+        };
+        let mut primitives = vec![fill(
+            Rect::new(-4., -4., 1928., 1088.),
+            0.,
+            [18, 18, 24, 255],
+        )];
+        for i in 0..88_u16 {
+            let (x, y) = (clip.x + 10., clip.y + 64. * f32::from(i) - offset);
+            let card = Rect::new(x, y + 4., clip.w - 20., 56.);
+            primitives.push(fill(card, 8., [40, 44, 56, 255]));
+            let icon = Rect::new(x + 12., y + 20., 24., 24.);
+            primitives.push(fill(icon, 12., [90, 140, 220, 255]));
+            let title = Rect::new(x + 48., y + 12., clip.w - 90., 18.);
+            primitives.push(text(title, format!("Notification {i}"), 14.));
+            let body = Rect::new(x + 48., y + 34., clip.w - 90., 16.);
+            primitives.push(text(
+                body,
+                format!("A body line for row {i}, a few words"),
+                12.,
+            ));
+        }
+        let end = primitives.len();
+        scene.clips = (1..end).map(|index| (index, clip)).collect();
+        let plane = crate::ScrollPlane {
+            offset,
+            limit: 64. * 88. - clip.h,
+            clip,
+            interest: Rect::new(clip.x, clip.y - clip.h, clip.w, clip.h * 3.),
+            ready: (offset - clip.h, offset + 2. * clip.h),
+        };
+        let layer = |id: &str, parent: Option<&str>, own, bounds, scroll| crate::SceneLayer {
+            id: id.into(),
+            parent: parent.map(Into::into),
+            own,
+            subtree_end: if id == "back" { 1 } else { end },
+            bounds,
+            scroll,
+        };
+        scene.layers = vec![
+            layer("back", None, 0..1, scene.bounds, None),
+            layer("list", None, 1..1, clip, Some(plane)),
+            layer(
+                "rows",
+                Some("list"),
+                1..end,
+                Rect::new(clip.x, clip.y - offset, clip.w, 64. * 88.),
+                None,
+            ),
+        ];
+        scene.primitives = primitives;
+        scene
+    }
+    #[test]
+    #[ignore = "timing, in release: the B0419 U3 night checks print it"]
+    fn cpu_plane_step_paint_time_at_1920x1080() {
+        for (scale, clip) in [
+            (1_f32, Rect::new(680., 60., 560., 960.)),
+            (1., Rect::new(0., 0., 1920., 1080.)),
+            (1.5, Rect::new(680., 60., 560., 960.)),
+        ] {
+            let scene = timing_list(clip, 1200.);
+            let (w, h) = ((1920. * scale) as u32, (1080. * scale) as u32);
+            let mut bytes = vec![0; w as usize * h as usize * 4];
+            let mut renderer = TreeCpuRenderer::default();
+            renderer.prepare(&scene, scale).unwrap();
+            renderer
+                .render(
+                    &scene,
+                    ShmTarget {
+                        bytes: &mut bytes,
+                        width: w,
+                        height: h,
+                        scale,
+                        format: PixelFormat::Bgra,
+                    },
+                    Damage::full(w, h),
+                )
+                .unwrap();
+            let damage = clip.pixels(scale, w, h);
+            let mut times = Vec::new();
+            for step in 1..=120_u16 {
+                let shift = [(1..scene.primitives.len(), clip, (0., -4. * f32::from(step)))];
+                assert!(renderer.scroll_shifts(&shift));
+                let started = std::time::Instant::now();
+                renderer
+                    .render(
+                        &scene,
+                        ShmTarget {
+                            bytes: &mut bytes,
+                            width: w,
+                            height: h,
+                            scale,
+                            format: PixelFormat::Bgra,
+                        },
+                        damage,
+                    )
+                    .unwrap();
+                times.push(started.elapsed().as_secs_f64() * 1000.);
+            }
+            times.sort_by(f64::total_cmp);
+            let at = |q: usize| times[(times.len() * q / 100).min(times.len() - 1)];
+            println!(
+                "CPU_PLANE_STEP surface={w}x{h} scale={scale} clip={}x{} steps={} p50_ms={:.3} p95_ms={:.3} max_ms={:.3}",
+                damage.w,
+                damage.h,
+                times.len(),
+                at(50),
+                at(95),
+                at(100)
+            );
+        }
+    }
     #[test]
     fn scroll_thumb_frames_reuse_the_content_and_equal_a_full_prepare() {
         // Content: an image row, an unowned fill, a clipped child text; then one thumb layer.
@@ -10212,7 +10735,8 @@ mod tests {
                                         scale,
                                         damage,
                                         width,
-                                        height
+                                        height,
+                                        &[]
                                     ),
                                     Some(1),
                                     "interior test must exercise coverage skip"
@@ -10226,7 +10750,8 @@ mod tests {
                                         scale,
                                         damage,
                                         width,
-                                        height
+                                        height,
+                                        &[]
                                     )
                                     .is_none(),
                                     "canvas corner must retain shadow/clear"
