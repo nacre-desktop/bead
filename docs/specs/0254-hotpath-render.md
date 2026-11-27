@@ -76,7 +76,7 @@ Fade-frame samples follow a sleep to the frame deadline, so they run colder than
 
 ## Fade stalls (B0387)
 
-A mid-fade retarget bakes into an uninitialised GL texture (cleared on the GPU) instead of femtovg's zero-filled ~20 MB upload. A palette-driven decoration sync (`sync_decoration_variant`) rasters a missing tile set on one thread and installs it from the cache when it arrives; panel, pearl and render syncs stay synchronous. `MAIN_BUSY` names `fade_launch`, `fade_retarget`, `warm_prime` and `warm_release`.
+A mid-fade retarget bakes into an uninitialised GL texture (cleared on the GPU) instead of femtovg's zero-filled ~20 MB upload. A palette-driven decoration sync (`sync_decoration_variant`) rasters a missing tile set on one thread and installs it from the cache when it arrives; panel, pearl and render syncs stay synchronous. `MAIN_BUSY` names `fade_launch`, `fade_retarget`, `warm_prime` and `warm_release`. B0434: caching a tile set of a new decoration variant drops every other variant's cached sets (the variant counter never repeats), so dead sets do not stay resident; nothing is re-rastered.
 
 ## Cold panel fallback (B0390)
 

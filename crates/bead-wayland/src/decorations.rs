@@ -79,10 +79,12 @@ pub(super) struct RasterCache {
 const RASTER_SETS: usize = 6;
 impl RasterCache {
     /// Keep a set (a key already cached keeps its own), newest last, at most `RASTER_SETS`.
+    /// B0434: the variant counter never repeats, so a new variant drops every other variant's sets.
     fn insert(&mut self, key: Key, set: Vec<Raster>) {
         if self.sets.iter().any(|(k, _)| *k == key) {
             return;
         }
+        self.sets.retain(|(k, _)| k.variant == key.variant);
         self.sets.push((key, set));
         if self.sets.len() > RASTER_SETS {
             self.sets.remove(0);
@@ -591,9 +593,26 @@ mod tests {
             )],
         );
         assert!(cache.sets[0].1.is_empty());
-        for variant in 10..20 {
-            cache.insert(key(variant), Vec::new());
+        for width in 10..20 {
+            let mut k = key(1);
+            k.viewport.0 = width;
+            cache.insert(k, Vec::new());
         }
         assert_eq!(cache.sets.len(), RASTER_SETS);
+    }
+    /// B0434: a new variant drops the other variants' sets; a second set of it keeps the first.
+    #[test]
+    fn a_new_variant_drops_the_sets_of_the_others() {
+        let mut cache = RasterCache::default();
+        let mut wide = key(1);
+        wide.viewport.0 = 200;
+        cache.insert(key(1), Vec::new());
+        cache.insert(wide, Vec::new());
+        cache.insert(key(2), Vec::new());
+        assert!(cache.sets.len() == 1 && cache.sets[0].0 == key(2));
+        let mut wide2 = key(2);
+        wide2.viewport.0 = 200;
+        cache.insert(wide2, Vec::new());
+        assert_eq!(cache.sets.len(), 2);
     }
 }
