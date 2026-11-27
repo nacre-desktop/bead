@@ -2437,8 +2437,34 @@ impl TreeCache {
                     ..
                 }
             );
-            // B0428: a CPU bake_size image is its bake, which paint stretches.
-            let (key, stretch) = if self.image_policy == ImagePolicy::Dense && baked.is_some() {
+            // B0428: a CPU shadow is its template (`crate::shadow_raster`'s axis rule) that paint
+            // stretches like a bake_size image; a pinned (B0156) or revealing (B0117) one is 1:1.
+            let template = match primitive {
+                Primitive::Shadow {
+                    rect: r,
+                    radius,
+                    blur,
+                    alpha,
+                    ..
+                } if self.image_policy == ImagePolicy::Dense && !reshaped_reveal => {
+                    let (w, h) = crate::dimensions(*r, scale);
+                    let cut = ((radius + 6. * blur) * scale).ceil() as u32;
+                    let side = 2 * cut + 2;
+                    let axis = |n| if cut > 0 && n >= side { side } else { n };
+                    let size = (axis(w), axis(h));
+                    let own = crate::shadow_key(*r, *radius, *blur, *alpha, scale);
+                    let pinned = crate::PINNED_SHADOWS
+                        .lock()
+                        .is_ok_and(|pinned| pinned.iter().any(|(key, _)| *key == own));
+                    (size != (w, h) && !pinned).then_some((size, cut, [*radius, *blur, *alpha]))
+                }
+                _ => None,
+            };
+            let (key, stretch) = if let Some((size, cut, shape)) = template {
+                let mut hash = std::collections::hash_map::DefaultHasher::new();
+                (size, shape.map(f32::to_bits), scale.to_bits()).hash(&mut hash);
+                (hash.finish(), Some(cut))
+            } else if self.image_policy == ImagePolicy::Dense && baked.is_some() {
                 (source_key, Some(0))
             } else {
                 (key, None)
@@ -2524,6 +2550,10 @@ impl TreeCache {
                         raster
                     } else if let Some(raster) = cached_variant {
                         (raster.pixels.clone(), raster.origin)
+                    } else if let Some(((w, h), _, [radius, blur, alpha])) = template {
+                        let (logical_w, logical_h) = (w as f32 / scale, h as f32 / scale);
+                        let svg = crate::shadow_svg(logical_w, logical_h, radius, blur, alpha);
+                        (Arc::new(crate::svg_pixmap(svg.as_bytes(), w, h)?), (0, 0))
                     } else {
                         // A cache miss bakes one primitive, not the rest of its
                         // scene. Reuse its immutable context across missing rasters.
@@ -7666,13 +7696,13 @@ mod tests {
         scene.asset_data.clear();
         scene.width = 2000.;
         scene.bounds = Rect::new(0., 0., 2000., 2000.);
-        scene.primitives = vec![Primitive::Shadow {
+        // A raster box (B0331): a CPU shadow this size is one small template (B0428).
+        scene.primitives = vec![Primitive::Rounded {
             rect: Rect::new(0., 0., 2000., 2000.),
             radius: 35.,
-            blur: 10.,
-            spread: 0.,
-            dy: 0.,
-            alpha: 1.,
+            fill: [30, 40, 50, 200],
+            border: None,
+            radial: Some(Arc::from(Vec::new())),
         }];
         scene.layers = vec![crate::SceneLayer {
             id: "large-shadow".into(),
@@ -7689,7 +7719,7 @@ mod tests {
         let old_raster_weak = Arc::downgrade(&old_raster);
         let old_pixels = old_raster.pixels.data().to_vec();
         let mut replacement = scene.clone();
-        let Primitive::Shadow { radius, .. } = &mut replacement.primitives[0] else {
+        let Primitive::Rounded { radius, .. } = &mut replacement.primitives[0] else {
             unreachable!();
         };
         *radius = 37.;
@@ -8872,6 +8902,23 @@ mod tests {
         assert_eq!((raster.pixels.width(), raster.pixels.height()), (16, 16));
         assert_eq!(raster.extent(Rect::new(0., 0., 10., 10.), 1.), (10, 10));
     }
+    /// B0428: a widening island's shadow (radius 17, blur 4) over an optional opaque backdrop.
+    fn island_shadow(w: f32, h: f32, backdrop: bool) -> Scene {
+        let mut scene = Scene::empty(320., 140.);
+        if backdrop {
+            let fill = [30, 40, 50, 255];
+            scene.primitives = vec![Primitive::rounded(scene.bounds, 0., fill)];
+        }
+        scene.primitives.push(Primitive::Shadow {
+            rect: Rect::new(4., 6., w, h),
+            radius: 17.,
+            blur: 4.,
+            spread: 0.,
+            dy: 0.,
+            alpha: 1.,
+        });
+        scene
+    }
     fn paint_damage(
         frame: &Frame,
         scale: f32,
@@ -8889,6 +8936,40 @@ mod tests {
         };
         paint(frame, (0., 0.), target, damage).unwrap();
         bytes
+    }
+    #[test]
+    fn a_resizing_cpu_shadow_bakes_one_template_and_paints_its_own_raster_bit_for_bit() {
+        let (scale, size) = (1.5, (480, 210));
+        let band = Damage {
+            x: 100,
+            y: 20,
+            w: 300,
+            h: 60,
+        };
+        for (h, template) in [(58., (126, 87)), (100., (126, 126))] {
+            for backdrop in [false, true] {
+                let mut cache = TreeCache::default();
+                for step in 0..11 {
+                    let scene = island_shadow(100. + 20. * step as f32, h, backdrop);
+                    cache.prepare(&scene, scale).unwrap();
+                    // The per-size raster: what an upload-policy cache (and the CPU before) bakes.
+                    let mut own = TreeCache::default().with_image_policy(ImagePolicy::UploadOnly);
+                    own.prepare(&scene, scale).unwrap();
+                    let (frame, own) = (cache.frame.as_ref().unwrap(), own.frame.as_ref().unwrap());
+                    for damage in [Damage::full(size.0, size.1), band] {
+                        assert!(
+                            paint_damage(frame, scale, size, damage)
+                                == paint_damage(own, scale, size, damage),
+                            "h {h} backdrop {backdrop} step {step} damage {damage:?}"
+                        );
+                    }
+                }
+                assert_eq!(cache.builds, 1, "h {h}: one template for 11 widths");
+                let frame = cache.frame.as_ref().unwrap();
+                let raster = frame.items.last().unwrap().raster.as_ref().unwrap();
+                assert_eq!((raster.pixels.width(), raster.pixels.height()), template);
+            }
+        }
     }
     /// B0428: a gradient bar (a volume fill) at `w` x 4 whose width follows its value.
     fn bar_scene(w: f32, bake_size: Option<(f32, f32)>) -> Scene {
