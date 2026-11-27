@@ -24,4 +24,4 @@ unicode-segmentation = "1.13"
 accesskit = "=0.25.1"
 
 [features]
-test-counters = []
+test-counters = ["bead-render/test-counters"]

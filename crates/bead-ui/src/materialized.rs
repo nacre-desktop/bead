@@ -404,7 +404,7 @@ impl Cached {
             view: &ViewSpec,
             cached: &mut Cached,
             lookup: &Index<'_>,
-            palette: &Palette,
+            (palette, roles): (&Palette, &layout::Roles),
             implicit_parent_label: bool,
             root: bool,
         ) -> Result<bool, Diagnostic> {
@@ -420,8 +420,8 @@ impl Cached {
                     .and_then(|own| own.into_iter().find(|i| kind(&cached.scene.primitives[*i])))
             };
             if lookup.nodes.contains_key(view.id.as_str()) {
-                let idle = layout::surface_colors(view, false, palette)?;
-                let hot = layout::surface_colors(view, true, palette)?;
+                let idle = layout::surface_colors(view, false, palette, roles)?;
+                let hot = layout::surface_colors(view, true, palette, roles)?;
                 if idle != hot {
                     let boxed =
                         |fill: [u8; 4]| fill[3] > 0 || view.border_width > 0. || view.selected;
@@ -570,7 +570,7 @@ impl Cached {
                     && value.get("__bind").is_some();
                 if text {
                     if let Some(index) = primitive(|p| matches!(p, Primitive::Text { .. })) {
-                        let foreground = layout::surface_colors(view, false, palette)?.1;
+                        let foreground = layout::surface_colors(view, false, palette, roles)?.1;
                         cached.text.push(Text {
                             masked: view.masked,
                             node: if view.aria_label.is_empty() && !view.masked {
@@ -620,7 +620,7 @@ impl Cached {
                     view,
                     cached,
                     lookup,
-                    palette,
+                    (palette, roles),
                     implicit_parent_label || (view.action.is_some() && view.aria_label.is_empty()),
                     false,
                 )? {
@@ -629,7 +629,15 @@ impl Cached {
             }
             Ok(true)
         }
-        if !walk(&raw, view, &mut cached, &index, palette, false, true)? {
+        if !walk(
+            &raw,
+            view,
+            &mut cached,
+            &index,
+            (palette, &layout::Roles::new(palette)),
+            false,
+            true,
+        )? {
             return Ok(None);
         }
         fn scrolls(view: &ViewSpec, scene: &Scene, nodes: &[Node], out: &mut Vec<Scroll>) {

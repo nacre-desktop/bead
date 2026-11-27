@@ -1723,16 +1723,40 @@ pub(super) fn color(
             .map_err(|_| source.error("color requires a palette role or RGBA array")),
     }
 }
+/// The palette roles a view's colours fall back to, read once per layout pass instead of per node.
+pub(super) struct Roles {
+    body: [u8; 4],
+    ink: [u8; 4],
+    container: [u8; 4],
+    primary: [u8; 4],
+    muted: [u8; 4],
+    outline: [u8; 4],
+}
+impl Roles {
+    pub(super) fn new(palette: &Palette) -> Self {
+        let role = |name: &str, default| palette.get(name).unwrap_or(default);
+        let body = role("surface", [24, 24, 24, 255]);
+        let ink = role("onSurface", [240, 240, 240, 255]);
+        let muted = role("onSurfaceVariant", ink);
+        Self {
+            body,
+            ink,
+            container: role("surfaceContainer", body),
+            primary: role("primary", ink),
+            muted,
+            outline: role("outlineVariant", muted),
+        }
+    }
+}
 /// The box fill and text colour of a view in its idle or hovered state: the only
 /// outputs of a layout that depend on `bead.hovered`.
 pub(super) fn surface_colors(
     view: &ViewSpec,
     hovered: bool,
     palette: &Palette,
+    roles: &Roles,
 ) -> Result<([u8; 4], [u8; 4]), Diagnostic> {
-    let palette_role = |name: &str, default| palette.get(name).unwrap_or(default);
-    let body = palette_role("surface", [24, 24, 24, 255]);
-    let ink = palette_role("onSurface", [240, 240, 240, 255]);
+    let (body, ink) = (roles.body, roles.ink);
     // Only a focusable view takes the pointer's hover; a `visible_on_hover` group's id paints nothing.
     let hovered =
         hovered && (view.action.is_some() || view.input.is_some() || view.graph.is_some());
@@ -1748,7 +1772,7 @@ pub(super) fn surface_colors(
         if view.kind == Widget::Panel {
             body
         } else if selected || view.kind == Widget::TextInput {
-            palette_role("surfaceContainer", body)
+            roles.container
         } else {
             [0, 0, 0, 0]
         },
@@ -1757,11 +1781,7 @@ pub(super) fn surface_colors(
     )?;
     let foreground = color(
         view.color.as_ref(),
-        if selected {
-            palette_role("primary", ink)
-        } else {
-            ink
-        },
+        if selected { roles.primary } else { ink },
         palette,
         &view.source,
     )?;
@@ -1908,6 +1928,7 @@ pub fn layout(
         scroll_x: bool,
         resolve: &Resolve<'_>,
         palette: &Palette,
+        roles: &Roles,
         (hover, scrolling): (&str, &str),
         out: &mut LaidOut,
     ) -> Result<(), Diagnostic> {
@@ -1940,11 +1961,8 @@ pub fn layout(
             scroll: None,
         });
         let source = &view.source;
-        let palette_role = |name: &str, default| palette.get(name).unwrap_or(default);
-        let ink = palette_role("onSurface", [240, 240, 240, 255]);
-        let muted = palette_role("onSurfaceVariant", ink);
-        let accent = palette_role("primary", ink);
-        let (fill, foreground) = surface_colors(view, hover == view.id, palette)?;
+        let (muted, accent) = (roles.muted, roles.primary);
+        let (fill, foreground) = surface_colors(view, hover == view.id, palette, roles)?;
         // A joined edge: the box (and its shadow, `join_margin` = 30) reaches `join * radius`
         // behind that edge and is clipped at it, so its two corners there are square and flush
         // with the surface it hangs from.
@@ -1992,12 +2010,7 @@ pub fn layout(
         let border = (view.border_width > 0. || view.selected)
             .then(|| {
                 (
-                    color(
-                        view.border_color.as_ref(),
-                        palette_role("outlineVariant", muted),
-                        palette,
-                        source,
-                    ),
+                    color(view.border_color.as_ref(), roles.outline, palette, source),
                     view.border_width.max(if view.selected { 1. } else { 0. }),
                 )
             })
@@ -2287,6 +2300,7 @@ pub fn layout(
                 scroll_x,
                 resolve,
                 palette,
+                roles,
                 (hover, scrolling),
                 out,
             )?;
@@ -2307,6 +2321,7 @@ pub fn layout(
         false,
         resolve,
         palette,
+        &Roles::new(palette),
         (&hover, &scrolling),
         &mut output,
     )?;
@@ -2469,5 +2484,42 @@ mod scrollbar_property_tests {
         let forward = scene(&mut props.iter());
         assert!(forward.contains("rounded"));
         assert_eq!(forward, scene(&mut props.iter().rev()));
+    }
+    #[cfg(feature = "test-counters")]
+    #[test]
+    fn palette_role_lookups_do_not_grow_with_the_node_count() {
+        let gets = |nodes: usize| {
+            let node = |id: String, children| RawNode {
+                kind: Widget::Panel,
+                props: [
+                    ("id".to_owned(), serde_json::json!(id)),
+                    ("width".to_owned(), serde_json::json!(20.)),
+                    ("height".to_owned(), serde_json::json!(20.)),
+                ]
+                .into_iter()
+                .collect(),
+                children,
+                source: Source {
+                    file: "test.luau".into(),
+                    line: 1,
+                },
+                scope: None,
+            };
+            let raw = node(
+                "root".into(),
+                (0..nodes).map(|i| node(format!("n{i}"), vec![])).collect(),
+            );
+            let resolve = |_: &str| Ok(Value::Number(0.));
+            let view = ViewSpec::from_raw(&raw, &resolve).unwrap();
+            let palette = Palette(std::sync::Arc::new(
+                [("surface".to_owned(), [1, 2, 3, 255])].into(),
+            ));
+            let before = bead_render::palette_gets();
+            layout(&view, &resolve, &palette, 1, (400., 300.)).unwrap();
+            bead_render::palette_gets() - before
+        };
+        let (few, many) = (gets(3), gets(60));
+        assert_eq!(few, many, "role lookups must not scale with nodes");
+        assert!(many <= 6, "{many}");
     }
 }

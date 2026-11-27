@@ -25,6 +25,7 @@ imgref = { version = "1", optional = true }
 glutin = { version = "0.32", default-features = false, features = ["egl", "wayland"], optional = true }
 
 [features]
+test-counters = []
 default = ["native-gl"]
 native-gl = ["dep:femtovg", "dep:raw-window-handle", "dep:rgb", "dep:imgref", "dep:glutin"]
 wgpu = ["dep:wgpu", "dep:vello", "dep:femtovg", "femtovg/wgpu", "dep:pollster", "dep:raw-window-handle", "dep:rgb", "dep:imgref"]

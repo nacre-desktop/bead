@@ -3036,6 +3036,13 @@ pub fn prewarm_image(
     }
     Ok(())
 }
+#[cfg(feature = "test-counters")]
+std::thread_local! { static PALETTE_GETS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) }; }
+/// Thread-local `Palette::get` calls, for tests that bound role lookups.
+#[cfg(feature = "test-counters")]
+pub fn palette_gets() -> usize {
+    PALETTE_GETS.get()
+}
 /// Reads Orient format 1 only. Unknown metadata is intentionally ignored.
 #[derive(Clone)]
 pub struct Palette(pub std::sync::Arc<HashMap<String, [u8; 4]>>);
@@ -3075,6 +3082,8 @@ impl Palette {
         Ok(Self(colors))
     }
     pub fn get(&self, name: &str) -> Result<[u8; 4]> {
+        #[cfg(feature = "test-counters")]
+        PALETTE_GETS.set(PALETTE_GETS.get() + 1);
         self.0
             .get(name)
             .copied()
