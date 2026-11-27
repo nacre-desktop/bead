@@ -131,6 +131,7 @@ pub const PROPERTIES: &[&str] = &[
     "scroll",
     "scroll_steps",
     "overscan",
+    "ready",
     "scrollbar",
     "fill",
     "radial",
@@ -254,6 +255,8 @@ pub struct ViewSpec {
     pub scroll_steps: Option<bead_render::ScrollSteps>,
     /// B0419: how many viewports past its clip a Scroll rasters while it moves.
     pub overscan: f32,
+    /// B0419: the content span (px) a kit has materialized; `None` is the whole content.
+    pub ready: Option<(f32, f32)>,
     pub scrollbar: bool,
     pub fill: Option<Json>,
     /// The fill amount is an animation marker: draw the box even while it is transparent,
@@ -696,6 +699,24 @@ fn scroll_steps(
         }
     }
     Ok(Some(out))
+}
+/// A Scroll's `ready={from=,to=}`: content px that exist, `from <= to`.
+fn ready_span(
+    p: &Props<'_>,
+    scroll: bool,
+    source: &Source,
+) -> Result<Option<(f32, f32)>, Diagnostic> {
+    let Some(v) = p.get("ready") else {
+        return Ok(None);
+    };
+    if !scroll {
+        return Err(source.error("ready needs a Scroll"));
+    }
+    let end = |k| v.get(k).and_then(Json::as_f64).filter(|n| n.abs() <= 1e9);
+    match (end("from"), end("to")) {
+        (Some(from), Some(to)) if from <= to => Ok(Some((from as f32, to as f32))),
+        _ => Err(source.error("ready must be {from=, to=} numbers with from <= to")),
+    }
 }
 /// The `shadow` prop (B0320): `true` is the surface shadow (blur 10, spread 0, no offset, full strength).
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -1232,6 +1253,7 @@ impl ViewSpec {
             if !(0. ..=3.).contains(&overscan) {
                 return Err(source.error("overscan must be 0..3"));
             }
+            let ready = ready_span(p, raw.kind == Widget::Scroll, source)?;
             // A graph's `on_activate` takes a node id from its canvas, not the generic action.
             let action = p
                 .get("on_activate")
@@ -1421,6 +1443,7 @@ impl ViewSpec {
                 scroll_action,
                 scroll_steps,
                 overscan,
+                ready,
                 scrollbar: boolean(p, "scrollbar", true, source)?,
                 fill: p.get("fill").cloned(),
                 animated_fill: raw
@@ -1729,6 +1752,7 @@ pub(crate) fn plane(
     clip: Rect,
     (offset, limit): (f32, f32),
     overscan: f32,
+    declared: Option<(f32, f32)>,
     moving: bool,
 ) -> bead_render::ScrollPlane {
     let top = r.y - offset;
@@ -1739,7 +1763,10 @@ pub(crate) fn plane(
         interest.y = (clip.y - overscan * r.h).max(top);
         interest.h = (clip.y + clip.h + overscan * r.h).min(top + r.h + limit) - interest.y;
     }
-    let ready = (interest.y - top, interest.y + interest.h - top);
+    let (from, to) = (interest.y - top, interest.y + interest.h - top);
+    let ready = declared.map_or((from, to), |(a, b)| {
+        (a.max(from), b.min(to).max(a.max(from)))
+    });
     bead_render::ScrollPlane {
         offset,
         limit,
@@ -2199,7 +2226,7 @@ pub fn layout(
             child_clip = Some(clip);
             let span = (offset, scroll_limit.unwrap_or(0.) as f32);
             let moving = !scrolling.is_empty() && scrolling == view.id;
-            let plane = plane(r, clip, span, view.overscan, moving);
+            let plane = plane(r, clip, span, view.overscan, view.ready, moving);
             out.scene.layers[layer_index].scroll = Some(plane);
         }
         for child in &view.children {

@@ -26,8 +26,7 @@ U5b `ui.scrolled`) append their contracts here.
   culling change: it already keeps every Scroll descendant in the scene (`retain_offscreen`).
 - `ready` is what was rastered. The bake rasters every text in `interest` in the same pass
   (Dense images too). Images on the GL upload path keep today's async decode on the resource
-  worker. The `ready={from,to}` Luau prop is deferred to U4, where the kits that materialize
-  windows declare it.
+  worker. `ui.Scroll{ready={from,to}}` (U4) bounds it.
 - Patch path: a scroll-store or `bead.scrolling` change rewrites `offset`, `interest` and `ready`
   (`layout::plane`) with no Luau or layout. `Topology::place` moves a plane's `clip` (and a resting
   plane's `interest`) with its layer, so a plane under an animated ancestor stays placed.
@@ -73,3 +72,25 @@ Tests (no GL context): gl.rs `shift_tests` (`nested_planes_compose_their_shifts`
 `items_outside_the_plane_clip_are_culled_and_partial_ones_are_cut`,
 `the_viewport_clip_stays_and_an_inner_clip_moves`); lib.rs
 `a_renderer_without_an_override_takes_the_worker_path`.
+
+## U4: kit lists materialize in bands and declare `ready`
+
+- `ui.Scroll{ready={from=,to=}}` (content px; numbers, `from <= to`, Scroll only; a markup error
+  otherwise). `layout::plane` sets the plane's `ready` to the declared span within the interest span
+  (declared ∩ interest); absent means the whole interest, as in U1. `materialized::Scroll` keeps it,
+  so a store patch re-places the plane with the same declaration.
+- `kit-virtual-list` (fixed and variable heights) and `kit.VirtualGrid` window the rows in bands of
+  half the viewport: the one Luau dependency is `ui.window_index(scroll, band, prefix, max)`.
+  The materialized span is `[k*band, k*band + viewport + 3*band)`, so at every offset in the band
+  the viewport has at least half a viewport of rows on each side. A step inside a band re-runs no
+  Luau; crossing a band edge re-runs once. Variable heights use the offsets table and the same band
+  dependency (no `resolve_for_check` of the scroll store).
+- Each kit declares `ready` as the span of rows that exist (rows past a lazy `total_count` prefix
+  are not ready; the content's own start and end are included when the window reaches them).
+- At rest the visible rows and positions are unchanged; the extra rows sit outside the clip and get
+  no rasters (U1 interest rule). Cost: about 2 to 3 viewports of row nodes instead of 1 to 2.
+
+Tests: bead-ui `materialized_tests` `kit_lists_rerun_luau_only_when_a_scroll_step_crosses_a_band`
+(fixed, variable, grid), `kit_lists_at_rest_show_the_same_rows_at_the_same_positions`,
+`scroll_plane_ready_is_the_declared_span_within_the_interest`, and the `ready` errors in
+`scroll_plane_geometry_at_rest_and_while_moving`.

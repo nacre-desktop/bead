@@ -357,11 +357,16 @@ return function(ui, tokens)
         local pitch=p.row_height+p.gap_y
         local rows=math.ceil(math.max(ui.model_count(p.model),value(p.total_count,0))/columns)
         local height=math.max(0,rows*pitch-p.gap_y)
-        local first=ui.window_index(p.scroll or 0,pitch,0,math.max(0,height-p.height))
-        -- Track both edges: fractional viewport heights can change the last row first.
-        local last=ui.window_index(p.scroll or 0,pitch,-p.height-pitch,math.max(0,height-p.height))+2
-        local count=math.min(math.ceil(p.height/pitch)+2,last-first)
-        return ui.Scroll{id=p.id,scroll=p.scroll,scrollbar=p.scrollbar,grow=1,
+        -- Bands of half a viewport (see kit-virtual-list): a step inside a band re-runs no Luau.
+        local band=math.max(1,p.height/2)
+        local start=ui.window_index(p.scroll or 0,band,0,math.max(0,height-p.height))*band
+        local first=math.floor(start/pitch)
+        local count=math.ceil((start+p.height+3*band)/pitch)-first
+        -- `ready`: the rows that exist, so a host never steps past them.
+        local shown=math.min(first+count,math.ceil(ui.model_count(p.model)/columns))
+        local from=first*pitch
+        local to=shown>=rows and height or math.max(from,shown*pitch-p.gap_y)
+        return ui.Scroll{id=p.id,scroll=p.scroll,ready={from=from,to=to},scrollbar=p.scrollbar,grow=1,
             ui.Box{id="extent",height=height,shrink=0,width="fill",
                 ui.Grid{id="window",position="absolute",top=first*pitch,width="fill",
                     columns=columns,row_height=p.row_height,gap_x=p.gap_x,gap_y=p.gap_y,

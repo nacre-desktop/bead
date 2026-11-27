@@ -1995,6 +1995,18 @@ fn scroll_plane_geometry_at_rest_and_while_moving() {
             PLANE_VIEW.replace("id='gap',", "id='gap',overscan=1,"),
             "overscan needs a Scroll",
         ),
+        (
+            PLANE_VIEW.replace("id='gap',", "id='gap',ready={from=0,to=1},"),
+            "ready needs a Scroll",
+        ),
+        (
+            PLANE_VIEW.replace("height=200,", "height=200,ready={from=9,to=1},"),
+            "ready must be {from=, to=}",
+        ),
+        (
+            PLANE_VIEW.replace("height=200,", "height=200,ready=3,"),
+            "ready must be {from=, to=}",
+        ),
     ] {
         let fixture = Fixture::new();
         fs::create_dir_all(fixture.0.join("ui")).unwrap();
@@ -2147,4 +2159,86 @@ return ui.Column{id='root',width=300,height=400,fill='surface',
         assert_close(&json(plane), &json(plane_of(&full).1), &format!("t={t}"));
     }
     crate::layout::PINNED_CLOCK.set(None);
+}
+
+#[test]
+fn scroll_plane_ready_is_the_declared_span_within_the_interest() {
+    let ready = |span: &str| {
+        let view = PLANE_VIEW.replace("height=200,", &format!("height=200,ready={span},"));
+        let (_fixture, mut session) = interaction_fixture(&view, PLANE_BEHAVIOR);
+        let (id, rest) = plane_of(&session.current);
+        let moving = session.update(scrolling(&id)).unwrap().unwrap();
+        (rest.ready, plane_of(&moving).1.ready)
+    };
+    // Rest: the clip spans 100..300; moving: 0..500 (the content's top clamps the overscan).
+    assert_eq!(ready("{from=120,to=260}"), ((120., 260.), (120., 260.)));
+    assert_eq!(ready("{from=-50,to=2000}"), ((100., 300.), (0., 500.)));
+}
+
+/// B0419 U4: bands of half a viewport. Luau runs once per band crossing, not per step.
+fn band_evals(main: &str, steps: &[f64]) -> (Fixture, Session, Vec<usize>) {
+    let behavior = "local rows={};for i=1,400 do rows[i]={id=tostring(i)} end;\
+        return {stores={scroll=0,rows=rows},actions={select=function()end},computed={}}";
+    let (fixture, mut session) = interaction_fixture(main, behavior);
+    let evals = steps
+        .iter()
+        .map(|&offset| {
+            frontend::reset_eval_calls();
+            let next = session
+                .update(BTreeMap::from([("scroll".into(), Value::Number(offset))]))
+                .unwrap();
+            if let Some(scene) = next {
+                session.commit(scene);
+            }
+            frontend::eval_calls()
+        })
+        .collect();
+    (fixture, session, evals)
+}
+const LIST_FIXED: &str = r#"local ui=require('bead.ui');local list=require('bead.widgets.kit.virtual-list')
+return list{id='list',width=200,height=100,row_height=32,gap=0,scroll=ui.bind('scroll'),model=ui.bind('rows'),key='id',render=function(item)return ui.Button{id='row',text=item.id,width='fill',height=32,on_activate=ui.action('select',item.id)}end}"#;
+const LIST_VARIABLE: &str = r#"local ui=require('bead.ui');local list=require('bead.widgets.kit.virtual-list')
+return list{id='list',width=200,height=100,row_height=function(item)return 20+tonumber(item.id)%3*10 end,gap=2,scroll=ui.bind('scroll'),model=ui.bind('rows'),key='id',render=function(item)return ui.Button{id='row',text=item.id,width='fill',height=20+tonumber(item.id)%3*10,on_activate=ui.action('select',item.id)}end}"#;
+const GRID: &str = r#"local ui=require('bead.ui');local kit=require('bead.kit')
+return ui.Panel{id='panel',width=200,height=300,kit.VirtualGrid{id='grid',width=200,height=100,min_cell_width=100,gap_x=0,gap_y=0,row_height=40,scroll=ui.bind('scroll'),model=ui.bind('rows'),key='id',render=function(item)return ui.Button{id='row',text=item.id,width='fill',height=40,on_activate=ui.action('select',item.id)}end}}"#;
+
+/// Bands are 50 px (half the 100 px viewport); the window index trails by one band.
+fn assert_band_evals(main: &str) {
+    let (_fixture, _session, evals) = band_evals(main, &[10., 40., 60., 90., 100., 110., 90.]);
+    assert_eq!(evals, [0, 0, 0, 0, 1, 0, 1]);
+}
+#[test]
+fn kit_fixed_list_reruns_luau_only_when_a_step_crosses_a_band() {
+    assert_band_evals(LIST_FIXED);
+}
+#[test]
+fn kit_variable_list_reruns_luau_only_when_a_step_crosses_a_band() {
+    assert_band_evals(LIST_VARIABLE);
+}
+#[test]
+fn kit_grid_reruns_luau_only_when_a_step_crosses_a_band() {
+    assert_band_evals(GRID);
+}
+
+#[test]
+fn kit_lists_at_rest_show_the_same_rows_at_the_same_positions() {
+    let rows = |main: &str, offset: f64| {
+        let (_fixture, session, _) = band_evals(main, &[offset]);
+        let nodes = session.view_nodes();
+        let top = nodes
+            .iter()
+            .find(|n| n.scrollable)
+            .map(|n| crate::rect(&n.draw).y)
+            .unwrap();
+        let mut ys: Vec<f32> = nodes
+            .iter()
+            .filter(|n| n.id.ends_with(".row"))
+            .map(|n| crate::rect(&n.draw).y - top)
+            .filter(|y| *y > -32. && *y < 100.)
+            .collect();
+        ys.sort_by(f32::total_cmp);
+        ys
+    };
+    assert_eq!(rows(LIST_FIXED, 0.), [0., 32., 64., 96.]);
+    assert_eq!(rows(LIST_FIXED, 500.), [-20., 12., 44., 76.]);
 }

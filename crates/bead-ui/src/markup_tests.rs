@@ -3284,7 +3284,7 @@ return {stores={scroll=0,rows=rows},actions={select=function()end},computed={}}"
     fs::write(f.0.join("ui/main.luau"),r#"local ui=require("bead.ui");local kit=require("bead.kit")
 return ui.Panel{id="panel",width=400,height=240,kit.VirtualGrid{id="grid",width=400,height=240,min_cell_width=100,gap_x=0,gap_y=0,row_height=48,scroll=ui.bind("scroll"),model=ui.bind("rows"),key="id",render=function(item)return ui.Button{id="tile",text=item.name,on_activate=ui.action("select",item.id)}end}}"#).unwrap();
     let mut s = session(&f);
-    assert!(s.view_nodes().len() < 35);
+    assert!(s.view_nodes().len() < 80);
     let first = s
         .view_nodes()
         .iter()
@@ -3318,7 +3318,7 @@ return ui.Panel{id="panel",width=400,height=240,kit.VirtualGrid{id="grid",width=
         "a virtual window change must relayout"
     );
     s.commit(next);
-    assert!(s.view_nodes().len() < 35);
+    assert!(s.view_nodes().len() < 80);
     assert!(!s.view_nodes().iter().any(|n| n.id == first));
     // Invalid keys outside the viewport still reject the candidate.
     let mut rows = if let Some(Value::List(rows)) = s.stores.get("rows") {
@@ -3361,12 +3361,12 @@ return ui.Panel{id="panel",width=400,height=240,kit.VirtualGrid{id="grid",width=
         s.commit(next);
     };
     // The grid claims a 100 px viewport inside a 240 px scroll area, so every built row is
-    // on screen and countable. Top of the model: 4 columns x 4 rows (2.5 visible + 1 below).
+    // on screen and countable. Top of the model: 4 columns x 7 rows (2.5 visible + bands of overscan).
     let grid = tiles(&s);
-    assert_eq!(grid.len(), 4 * 4);
+    assert_eq!(grid.len(), 4 * 7);
     set(&mut s, "mode", Value::Text("list".into()));
     let list = tiles(&s);
-    assert_eq!(list.len(), 4);
+    assert_eq!(list.len(), 7);
     set(&mut s, "mode", Value::Text("grid".into()));
     assert_eq!(
         tiles(&s),
@@ -3376,7 +3376,7 @@ return ui.Panel{id="panel",width=400,height=240,kit.VirtualGrid{id="grid",width=
     // Mid-scroll: the window moves and never exceeds viewport + 2 rows.
     set(&mut s, "scroll", Value::Number(1000.));
     let mid = tiles(&s);
-    assert!(!mid.is_empty() && mid.len() <= 4 * 5);
+    assert!(!mid.is_empty() && mid.len() <= 4 * 8);
     assert!(mid.iter().all(|id| !grid.contains(id)));
 }
 #[test]

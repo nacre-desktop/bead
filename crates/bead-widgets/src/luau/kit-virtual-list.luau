@@ -19,19 +19,20 @@ return function(p)
   local prefix = (p.before_height or 0)+(p.before_gap or 0)
   local extent = prefix+rows_extent
   local window_height=p.window_height or p.height
-  local scroll, first
-  local count = total
+  -- Materialize in bands of half a viewport: the only dependency is the band index, so a
+  -- scroll step inside a band re-runs no Luau. The window spans [start, start+window_height+3*band).
+  local band=math.max(1,window_height/2)
+  local start=ui.window_index(p.scroll,band,prefix,math.max(0,extent-window_height))*band
+  local stop=start+window_height+3*band
+  local first, count = 0, total
   if variable then
-    scroll = math.max(0,math.clamp(ui.resolve_for_check(p.scroll),0,math.max(0,extent-window_height))-prefix)
-    first = 0
-    while first<total and offset(first+1)<scroll do first+=1 end
-    first=math.max(0,first-1)
+    while first+1<total and offset(first+1)<=start do first+=1 end
     local last=first
-    while last<total and offset(last)<scroll+window_height do last+=1 end
-    count=math.min(total,last+1)-first
+    while last<total and offset(last)<stop do last+=1 end
+    count=last-first
   else
-    first=ui.window_index(p.scroll,pitch,prefix,math.max(0,extent-window_height))
-    count=math.min(total-first,math.ceil(window_height/pitch)+2)
+    first=math.min(total,math.floor(start/pitch))
+    count=math.min(total-first,math.ceil((stop-first*pitch)/pitch))
   end
   local children = {}
   local function space(prefix, height)
@@ -56,7 +57,11 @@ return function(p)
     space("unloaded",(count-available)*pitch-(available==0 and count>0 and p.gap or 0))
   end
   space("after",math.max(0,rows_extent-offset(first)-math.max(0,offset(first+count)-offset(first)-p.gap)))
-  return ui.Scroll{id=p.id,scroll=p.scroll,scrollbar=p.scrollbar,width=p.width,height=p.height,grow=p.grow,
+  -- `ready`: the span of content that exists, so a host never steps past the materialized rows.
+  local shown=variable and count or math.min(count,math.max(0,loaded-first))
+  local from=first==0 and 0 or prefix+offset(first)
+  local to=first+shown>=total and extent or math.max(from,prefix+offset(first+shown)-p.gap)
+  return ui.Scroll{id=p.id,scroll=p.scroll,ready={from=from,to=to},scrollbar=p.scrollbar,width=p.width,height=p.height,grow=p.grow,
     position=p.position,left=p.left,top=p.top,
     ui.Column{id="content",width="fill",gap=0,shrink=0,table.unpack(children)}}
 end

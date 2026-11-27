@@ -524,7 +524,7 @@ return ui.Panel{id='panel',width=200,height=120,ui.Scroll{id='list',width=200,he
 return list{id='list',width=200,height=100,row_height=32,gap=0,total_count=1000,scroll=ui.bind('offset'),model=ui.bind('rows'),key='id',render=function(item)return ui.Text{id='row',height=32,text=item.id}end}"#).unwrap();
             let scene = s.reload().unwrap();
             s.commit(scene);
-            assert!(s.current.primitives.len() < 10);
+            assert!(s.current.primitives.len() < 20);
             let config = scrollbar::Config {
                 minimum_thumb: 0.,
                 ..s.scrollbar_config.clone()
@@ -542,7 +542,7 @@ return list{id='list',width=200,height=100,row_height=32,gap=0,total_count=1000,
                 assert!((g.thumb.h - g.track.h * 100. / 32000.).abs() < 0.001);
                 let fraction = (g.thumb.y - g.track.y) / (g.track.h - g.thumb.h);
                 assert!((f64::from(fraction) - offset / 31900.).abs() < 0.0001);
-                assert!(s.current.primitives.len() < 11);
+                assert!(s.current.primitives.len() < 21);
             }
         }
     }

@@ -28,6 +28,7 @@ struct Scroll {
     limit: f64,
     /// B0419: the plane's `overscan`, so a patch can re-place it.
     overscan: f32,
+    ready: Option<(f32, f32)>,
 }
 struct Floating {
     index: usize,
@@ -640,6 +641,7 @@ impl Cached {
                     binding: binding.clone(),
                     limit: node.scroll_limit.unwrap_or(0.),
                     overscan: view.overscan,
+                    ready: view.ready,
                 });
             }
             for child in &view.children {
@@ -1079,7 +1081,14 @@ impl Cached {
                 let moving =
                     matches!(scrolling, Some(Value::Text(id)) if !id.is_empty() && *id == layer.id);
                 let span = (offset.clamp(0., scroll.limit) as f32, plane.limit);
-                let plane = layout::plane(layer.bounds, plane.clip, span, scroll.overscan, moving);
+                let plane = layout::plane(
+                    layer.bounds,
+                    plane.clip,
+                    span,
+                    scroll.overscan,
+                    scroll.ready,
+                    moving,
+                );
                 layer.scroll = Some(plane);
             }
         }

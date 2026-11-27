@@ -31,6 +31,8 @@ Overflowing `Scroll` regions get a themed overlay scrollbar automatically. Use `
 
 `overscan` (0..3 viewports, default 1) is how far past its viewport a `Scroll` rasters its content while the host names it in `bead.scrolling`; `0` keeps the viewport only. See [scroll planes](../specs/0286-scroll-planes.md).
 
+`ready={from=,to=}` (content px, `from <= to`, `Scroll` only) is the span a kit has materialized; the plane's `ready` is that span within its interest, and the default is the whole content. `kit-virtual-list` and `kit.VirtualGrid` set it. See the same spec.
+
 Any other node may take `scroll=ui.action(name)`: the action receives the scroll delta as its number argument. Add `scroll_steps={min_interval_ms=0, threshold=40}` (both optional; 0..2000 ms and 1..1000 px) to receive whole `+1` (down or right) and `-1` steps instead of smoothed pixels: a wheel detent is one step, finger travel steps each `threshold` px, and at most one step per `min_interval_ms` is delivered (extra steps are dropped). `scroll_steps` with a store binding, or without a scroll action, is a markup error.
 ```luau
 ui.Box { id="box", width=80, height=40, fill="surface", child }
