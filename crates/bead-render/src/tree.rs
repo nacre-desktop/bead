@@ -2302,8 +2302,19 @@ impl TreeCache {
                 Primitive::Image {
                     bake_size: Some((w, h)),
                     blur,
+                    fit,
+                    radius,
+                    clip_polygon,
                     ..
-                } if *blur == 0. && !raster_hidden && !reshaped_reveal => {
+                } if *blur == 0.
+                    && !raster_hidden
+                    && !reshaped_reveal
+                    // B0428b: a CPU raster stretches only a plain fill; corners, clips and crops stay per rect.
+                    && (self.image_policy != ImagePolicy::Dense
+                        || (*radius == 0.
+                            && clip_polygon.is_none()
+                            && matches!(fit, crate::ImageFit::Fill))) =>
+                {
                     let mut baked = primitive.clone();
                     if let Primitive::Image { rect, .. } = &mut baked {
                         (rect.w, rect.h) = (*w, *h);
@@ -9150,6 +9161,39 @@ mod tests {
             assert_eq!(at(&wide, x), want, "x {x} y {y}");
         }
         assert_eq!(cache.builds, 1);
+    }
+    #[test]
+    fn a_cpu_bake_size_image_with_corners_a_clip_or_a_crop_keeps_its_per_rect_raster() {
+        // B0428b: a stretched bake would squash rounded corners (a host's rounded veil ramp).
+        let shaped = |w: f32, bake, shape: u8| {
+            let mut scene = bar_scene(w, bake);
+            if let Primitive::Image {
+                radius,
+                clip_polygon,
+                fit,
+                ..
+            } = &mut scene.primitives[0]
+            {
+                match shape {
+                    0 => *radius = 2.,
+                    1 => *clip_polygon = Some(vec![[0., 0.], [1., 0.], [0., 1.]]),
+                    _ => *fit = crate::ImageFit::Cover,
+                }
+            }
+            scene
+        };
+        let pixels = |scene: &Scene| {
+            let mut cache = TreeCache::default();
+            cache.prepare(scene, 1.).unwrap();
+            let frame = cache.frame.as_ref().unwrap();
+            let raster = frame.items[0].raster.as_ref().unwrap();
+            assert!(raster.stretch.is_none(), "not stretched");
+            paint_damage(frame, 1., (220, 4), Damage::full(220, 4))
+        };
+        for shape in 0..3 {
+            let baked = pixels(&shaped(200., Some((100., 4.)), shape));
+            assert!(baked == pixels(&shaped(200., None, shape)), "shape {shape}");
+        }
     }
     #[test]
     fn an_upload_cache_never_draws_a_dense_frame_with_a_stretched_shadow() {
