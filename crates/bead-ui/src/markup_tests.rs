@@ -5390,3 +5390,80 @@ fn font_features_parse_validate_and_reach_text_and_measurement() {
     assert_ne!(measured(",400,'sups'"), measured(",400"));
     assert_eq!(measured(",nil,nil"), measured(""));
 }
+
+fn frame_gated_session(
+    f: &Fixture,
+    view: &str,
+    on: bool,
+) -> (Session, std::rc::Rc<std::cell::Cell<u32>>) {
+    fs::write(
+        f.0.join("ui/behavior.luau"),
+        "return {stores={target=0,external=0},actions={},computed={}}",
+    )
+    .unwrap();
+    fs::write(f.0.join("ui/main.luau"), view).unwrap();
+    write_palette(f);
+    let mut s = session(f);
+    s.set_frame_interval(std::time::Duration::from_millis(1));
+    s.set_projector_frames(on);
+    let calls = std::rc::Rc::new(std::cell::Cell::new(0));
+    let count = calls.clone();
+    s.set_projector(Box::new(move |_| {
+        count.set(count.get() + 1);
+        Ok(BTreeMap::new())
+    }));
+    (s, calls)
+}
+
+const PULSE: &str = r#"local ui=require("bead.ui")
+return ui.Panel{id="panel",width=100,height=60,
+ ui.Box{id="dot",width=20,height=20,fill=ui.alpha("primary",ui.pulse("p",1,0.2,1))}}"#;
+
+fn empty_updates(s: &mut Session, n: u32) {
+    for _ in 0..n {
+        std::thread::sleep(std::time::Duration::from_millis(2));
+        if let Some(scene) = s.update_model(BTreeMap::new()).unwrap() {
+            s.commit(scene);
+        }
+    }
+}
+
+#[test]
+fn pulse_stagings_skip_the_projector_when_frames_are_off() {
+    let f = fixture();
+    let (mut s, calls) = frame_gated_session(&f, PULSE, false);
+    empty_updates(&mut s, 5);
+    assert_eq!(calls.get(), 1);
+    // A model change always projects.
+    s.update_model(BTreeMap::from([("external".into(), Value::Number(1.))]))
+        .unwrap();
+    assert_eq!(calls.get(), 2);
+}
+
+#[test]
+fn pulse_stagings_project_every_frame_by_default() {
+    let f = fixture();
+    let (mut s, calls) = frame_gated_session(&f, PULSE, true);
+    empty_updates(&mut s, 5);
+    assert_eq!(calls.get(), 5);
+}
+
+#[test]
+fn a_finished_animation_projects_on_its_last_frame() {
+    let f = fixture();
+    let view = r#"local ui=require("bead.ui")
+return ui.Panel{id="panel",width=300,height=60,
+ ui.Box{id="bar",width=ui.animated("w",ui.resolve_for_check(ui.bind("target")),0.05,"linear"),height=20,fill="primary"}}"#;
+    let (mut s, calls) = frame_gated_session(&f, view, false);
+    let scene = s
+        .update(BTreeMap::from([("target".into(), Value::Number(200.))]))
+        .unwrap()
+        .unwrap();
+    s.commit(scene);
+    let mid = calls.get();
+    empty_updates(&mut s, 3);
+    assert_eq!(calls.get(), mid, "frames inside the animation skip");
+    std::thread::sleep(std::time::Duration::from_millis(60));
+    empty_updates(&mut s, 1);
+    assert_eq!(calls.get(), mid + 1);
+}

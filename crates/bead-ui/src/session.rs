@@ -61,6 +61,8 @@ pub struct Session {
     pointer_seen: bool,
     edge_hover: bead_core::edge_hover::EdgeHover,
     coalesce_projection: bool,
+    projector_frames: bool,
+    last_projection: Option<std::time::Instant>,
     recovery_path: Option<PathBuf>,
     recovered: Option<bead_core::recovery::Restored>,
     recorded_revision: Option<u64>,
@@ -210,6 +212,12 @@ impl Session {
     pub fn set_projection_coalescing(&mut self, enabled: bool) {
         self.coalesce_projection = enabled;
     }
+    /// Opt out of the host projector on animation-only stagings (a looping
+    /// `ui.pulse` stages every display frame). Hosts whose projector reads the
+    /// clock should leave this on.
+    pub fn set_projector_frames(&mut self, on: bool) {
+        self.projector_frames = on;
+    }
     pub fn new(
         root: PathBuf,
         entry: PathBuf,
@@ -234,6 +242,8 @@ impl Session {
             pointer_seen: false,
             edge_hover: Default::default(),
             coalesce_projection: false,
+            projector_frames: true,
+            last_projection: None,
             recovery_path: None,
             recovered: None,
             recorded_revision: None,
@@ -929,8 +939,20 @@ impl Session {
                 )]))
                 .map_err(|e| Diagnostic::new(&self.entry, 1, 1, e))?;
         }
-        if let Some(projector) = &self.projector {
+        // shortcut: fixed 100 ms; make it a session option if a view needs a faster clock read
+        let animation_only = !self.projector_frames
+            && stores.revision() == base
+            && generation
+                .animation_deadline()
+                .is_some_and(|deadline| self.frame_due(deadline, now))
+            && self.last_projection.is_some_and(|at| {
+                now.saturating_duration_since(at) < std::time::Duration::from_millis(100)
+            });
+        if let Some(projector) = &self.projector
+            && !animation_only
+        {
             let _projection_profile = bead_core::profile::Span::new("projection");
+            self.last_projection = Some(now);
             stores
                 .commit(projector(&stores)?)
                 .map_err(|e| Diagnostic::new(&self.entry, 1, 1, e))?;
@@ -1007,7 +1029,9 @@ impl Session {
         } else {
             materialize(&stores)?
         };
-        if self.coalesce_projection
+        // The staging that ends a skipped animation projects once.
+        let ended = animation_only && generation.animation_deadline().is_none();
+        if (ended || self.coalesce_projection && !animation_only)
             && let Some(projector) = &self.projector
         {
             let revision = stores.revision();
