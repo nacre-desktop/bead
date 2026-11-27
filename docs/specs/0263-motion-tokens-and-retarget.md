@@ -64,8 +64,9 @@ once the panel has drawn part of its body: the scene's last drawn progress and t
 (held at the first pose until a frame showing it is committed) are both above 0. Until then the
 frame keeps its plain tiles, so the held first pose, which shows nothing, leaves no rim opening or
 panel edge in the bar strips before the slide. During the reveal the panel's own art draws the
-join in its crop; at rest both agree, and an open panel stays joined. A close drops the join with
-the request, as before, while the panel's art still covers the strips; a reopen mid-close joins
+join in its crop; at rest both agree, and an open panel stays joined. B0421b: a revealing panel's close keeps the join while its drawn progress is above 0 (the
+dashboard's art leaves a 1 px line under the bar title otherwise) and drops it at 0, with the
+companion, or at once for a non-reveal or compositor-drawn panel; a reopen mid-close joins
 at once. The opt-in compositor reveal (`BEAD_LAYER_REVEAL=1`) never poses the client scene and
 keeps joining at once. Test: `the_frame_joins_a_revealing_panel_once_its_reveal_has_drawn`.
 

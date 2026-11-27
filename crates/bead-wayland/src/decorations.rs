@@ -94,6 +94,11 @@ impl RasterCache {
 fn reveal_drawn(posed: f32, clock: Option<(f32, bool)>) -> bool {
     posed > 0. && clock.is_some_and(|(progress, _)| progress > 0.)
 }
+/// B0421/B0421b: the frame joins a panel once its reveal has drawn, and a revealing panel keeps the
+/// join through its close until the drawn progress reaches 0 (its art leaves the strips plain then).
+fn frame_joins(target: bool, reveal: bool, posed: f32, clock: Option<(f32, bool)>) -> bool {
+    (target || reveal) && reveal_drawn(posed, clock)
+}
 /// Raster every tile into owned pixels; also runs on the background thread.
 fn raster_tiles(
     specs: &[Decoration],
@@ -201,7 +206,7 @@ impl App {
         if self.panel_target && on_output && !self.panel_ready && !self.panel_fallback_ready {
             return Ok(());
         }
-        let joined = self.panel_target && on_output && self.panel_reveal_drawn();
+        let joined = on_output && self.panel_joins();
         let engaged = joined
             && self
                 .options
@@ -349,23 +354,24 @@ impl App {
         self.surfaces[index].commit();
         Ok(())
     }
-    /// B0421: whether the companion has drawn part of its body. A reveal's first pose shows
-    /// nothing, so a join made then shows the rim opening and the panel edge in the strips
-    /// before the slide. A compositor-drawn reveal (opt-in) never poses the scene: it joins at once.
-    fn panel_reveal_drawn(&self) -> bool {
+    /// B0421: whether the frame joins the companion. A reveal's first pose shows nothing, so a join
+    /// made then shows the rim opening and the panel edge in the strips before the slide. A
+    /// compositor-drawn reveal (opt-in) never poses the scene: it joins at once while targeted.
+    /// B0421b: a closing reveal keeps the join while it has drawn; no companion left, no join.
+    fn panel_joins(&self) -> bool {
         let Some((scene, _, _)) = &self.companion else {
-            return true;
+            return self.panel_target;
         };
+        if crate::rendering::reveal_contour_capable(scene, self.layer_motion_manager.as_ref()) {
+            return self.panel_target;
+        }
         let now = self.started.elapsed().as_secs_f64();
-        crate::rendering::reveal_contour_capable(scene, self.layer_motion_manager.as_ref())
-            || scene.motion.as_ref().is_some_and(|m| {
-                // The companion's draw swaps the panel's clock into `animations`.
-                let clock = self.animations.value(&m.id, now);
-                reveal_drawn(
-                    m.progress,
-                    clock.or_else(|| self.panel_animations.value(&m.id, now)),
-                )
-            })
+        scene.motion.as_ref().is_some_and(|m| {
+            // The companion's draw swaps the panel's clock into `animations`.
+            let clock = self.animations.value(&m.id, now);
+            let clock = clock.or_else(|| self.panel_animations.value(&m.id, now));
+            frame_joins(self.panel_target, m.reveal, m.progress, clock)
+        })
     }
     /// Start the pending request on one thread; its answer comes back through the calloop channel.
     fn start_decoration_job(&mut self) -> Result<(), String> {
@@ -514,11 +520,8 @@ mod tests {
         });
         let mut clock = Animations::default();
         let joins = |target: bool, scene: &Scene, clock: &Animations, now| {
-            target
-                && reveal_drawn(
-                    scene.motion.as_ref().unwrap().progress,
-                    clock.value("panel", now),
-                )
+            let m = scene.motion.as_ref().unwrap();
+            frame_joins(target, m.reveal, m.progress, clock.value("panel", now))
         };
         let pose = |scene: &mut Scene, clock: &Animations, now, open| {
             let (progress, _) = clock.value("panel", now).unwrap();
@@ -544,16 +547,30 @@ mod tests {
         );
         assert_eq!(pose(&mut scene, &clock, 1., true), 1.);
         assert!(joins(true, &scene, &clock, 1.), "at rest");
-        // The close drops the join with the target, while the panel's own art still covers the
-        // strips (it shows nothing below a pixel of body, where the frame is plain again).
+        // B0421b: the close keeps the join while the body is drawn, and drops it at progress 0.
         clock.open_to("panel", false, 2., 0.2, Curve::EmphasizedAccelerate);
-        assert!(!joins(false, &scene, &clock, 2.), "closing");
+        assert!(
+            joins(false, &scene, &clock, 2.),
+            "close request, body drawn"
+        );
         pose(&mut scene, &clock, 2., false);
         clock.committed("panel", 2., 2.);
         assert!(pose(&mut scene, &clock, 2.1, false) > 0.);
+        assert!(joins(false, &scene, &clock, 2.1), "mid-close");
+        let mut plain = scene.clone();
+        plain.motion.as_mut().unwrap().reveal = false;
+        assert!(
+            !joins(false, &plain, &clock, 2.1),
+            "a non-reveal panel drops at the request"
+        );
         // Reopened mid-close: the body is on screen, so the join comes back at once.
         clock.open_to("panel", true, 2.1, 0.2, Curve::EaseOut);
         assert!(joins(true, &scene, &clock, 2.1), "reopened mid-close");
+        // A close that reaches 0 drops the join.
+        clock.open_to("panel", false, 3., 0.2, Curve::EmphasizedAccelerate);
+        clock.committed("panel", 3., 3.);
+        assert_eq!(pose(&mut scene, &clock, 4., false), 0.);
+        assert!(!joins(false, &scene, &clock, 4.), "closed");
     }
     #[test]
     fn the_cache_keeps_its_own_set_and_six_sets() {
