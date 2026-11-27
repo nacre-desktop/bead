@@ -9,6 +9,7 @@ Two design-review asks from the Nacre bar: status icons drawn in a palette colou
 - Coverage is the source alpha, not luminance: symbolic glyphs are usually dark ink on a transparent ground and a luminance mask would erase them. A full-colour app icon becomes its silhouette in the tint, which is what the review asks for.
 - The raster cache key, the retained-raster fingerprint and the tree hash include the tint, so a tint change re-rasterises and an unchanged tint is a cache hit on the next frame (`tinted_image_is_the_alpha_mask_filled_with_the_tint_and_cached`).
 - `prewarm_image` keeps its public signature and warms untinted rasters; tinted icons are small and go through the ordinary cache.
+- `bead::render::large_image_evictions()` counts large-image cache entries evicted for budget (B0440; explicit clears do not count); a host polls it and re-warms only when it changes.
 - The tree renderer's native cover decode (a `Cover` raster smaller than its target) bypasses `load_image`, so a tinted image never takes it (`tinted_cover_image_skips_the_native_decode`).
 - Memory: no new cache. Tinted rasters are entries in the existing bounded small-image cache (<= 128 px), one per (icon, size, tint).
 

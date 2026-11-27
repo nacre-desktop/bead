@@ -2875,6 +2875,7 @@ struct ImageCache {
     raster_bytes: usize,
     hits: u64,
     misses: u64,
+    evictions: u64,
     budget: bead_core::cache::Budget,
 }
 struct CachedImage {
@@ -2911,6 +2912,7 @@ impl ImageCache {
                 break;
             };
             if let Some(old) = self.entries.remove(&old_key) {
+                self.evictions += 1;
                 self.bytes -= old._charge.bytes();
                 self.raster_bytes -= old.pixels.data().len();
             }
@@ -2941,9 +2943,16 @@ fn image_cache() -> &'static Mutex<ImageCache> {
             raster_bytes: 0,
             hits: 0,
             misses: 0,
+            evictions: 0,
             budget: bead_core::cache::Budget::new("image-raster-cache", IMAGE_CACHE_LIMIT),
         })
     })
+}
+/// Entries the large-image cache has evicted for budget since start; a host re-warms only when it changes.
+pub fn large_image_evictions() -> u64 {
+    large_image_cache()
+        .lock()
+        .map_or(0, |cache| cache.evictions)
 }
 fn large_image_cache() -> &'static Mutex<ImageCache> {
     static CACHE: OnceLock<Mutex<ImageCache>> = OnceLock::new();
@@ -2956,6 +2965,7 @@ fn large_image_cache() -> &'static Mutex<ImageCache> {
             raster_bytes: 0,
             hits: 0,
             misses: 0,
+            evictions: 0,
             budget: bead_core::cache::Budget::new(
                 "large-image-warm-cache",
                 LARGE_IMAGE_CACHE_LIMIT,
@@ -4880,6 +4890,7 @@ mod tests {
             raster_bytes: 0,
             hits: 0,
             misses: 0,
+            evictions: 0,
             budget: bead_core::cache::Budget::new("image-raster-cache-test", IMAGE_CACHE_LIMIT),
         })
     }
@@ -4971,6 +4982,7 @@ mod tests {
             raster_bytes: 0,
             hits: 0,
             misses: 0,
+            evictions: 0,
             budget: bead_core::cache::Budget::new("image-raster-cache-test", 8 * 1024),
         };
         let pixmap = Arc::new(Pixmap::new(8, 8).unwrap());
@@ -5002,6 +5014,39 @@ mod tests {
         assert!(cache.entries.len() <= IMAGE_CACHE_MAX_ENTRIES);
         assert!(cache.raster_bytes <= IMAGE_CACHE_LIMIT);
         assert!(cache.budget.used() <= 8 * 1024);
+    }
+
+    #[test]
+    fn eviction_count_rises_once_per_entry_evicted_for_budget() {
+        let mut cache = ImageCache {
+            entries: HashMap::new(),
+            lru: VecDeque::new(),
+            limit_bytes: 8 * 1024,
+            bytes: 0,
+            raster_bytes: 0,
+            hits: 0,
+            misses: 0,
+            evictions: 0,
+            budget: bead_core::cache::Budget::new("image-evictions-test", 8 * 1024),
+        };
+        let pixmap = Arc::new(Pixmap::new(8, 8).unwrap());
+        let key = |index: u64| ImageCacheKey {
+            path: PathBuf::from(format!("ev-{index}.png")),
+            content_hash: index,
+            width: 8,
+            height: 8,
+            fit: ImageFit::Fill,
+            tint: None,
+        };
+        cache.insert(key(0), pixmap.clone());
+        assert!(cache.get(&key(0)).is_some());
+        assert_eq!(cache.evictions, 0);
+        let fits = cache.entries.len();
+        for index in 1..40 {
+            cache.insert(key(index), pixmap.clone());
+        }
+        assert_eq!(cache.evictions as usize, 40 - cache.entries.len());
+        assert!(cache.evictions > 0 && fits > 0);
     }
 
     #[test]
