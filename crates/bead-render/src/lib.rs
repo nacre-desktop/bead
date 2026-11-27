@@ -591,6 +591,22 @@ pub struct SceneLayer {
     pub own: std::ops::Range<usize>,
     pub subtree_end: usize,
     pub bounds: Rect,
+    /// A `ui.Scroll`'s plane (B0419); its content is `own.end..subtree_end`.
+    pub scroll: Option<ScrollPlane>,
+}
+/// A scroll viewport whose content moves as one (B0419, spec 0286). Rects are in scene px;
+/// `ready` is in content px, where 0 is the content's top (`bounds.y - offset` in the scene).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ScrollPlane {
+    pub offset: f32,
+    pub limit: f32,
+    /// The viewport the content is clipped to.
+    pub clip: Rect,
+    /// Where the content rasters: the clip at rest, `overscan` viewports past it while moving.
+    pub interest: Rect,
+    /// The content span inside `interest`. The bake rasters all its texts in the same pass, so
+    /// none is drawn without pixels; images keep their async decode.
+    pub ready: (f32, f32),
 }
 #[derive(Clone)]
 pub struct Scene {
@@ -3278,6 +3294,7 @@ mod tests {
                 own: 0..1,
                 subtree_end: 3,
                 bounds: Rect::new(0., 0., 60., 20.),
+                scroll: None,
             },
             SceneLayer {
                 id: "child".into(),
@@ -3285,6 +3302,7 @@ mod tests {
                 own: 1..3,
                 subtree_end: 3,
                 bounds: Rect::new(20., 0., 40., 20.),
+                scroll: None,
             },
         ];
         scene.motion = Some(Motion {
@@ -3411,6 +3429,7 @@ mod tests {
             own: 0..3,
             subtree_end: 3,
             bounds: Rect::new(0., 0., 60., 20.),
+            scroll: None,
         }];
         let mut cache = tree::TreeCache::default();
         cache.prepare(&scene, 1.5).unwrap();

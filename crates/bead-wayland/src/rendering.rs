@@ -4880,6 +4880,7 @@ mod input_tests {
                 own: 0..2,
                 subtree_end: 2,
                 bounds: body,
+                scroll: None,
             }],
             prepared: Default::default(),
             font_files: vec![],

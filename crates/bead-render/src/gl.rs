@@ -2474,6 +2474,7 @@ mod texture_budget_tests {
                     own: start..scene.primitives.len(),
                     subtree_end: scene.primitives.len(),
                     bounds: crate::Rect::new(0., 0., 32., 32.),
+                    scroll: None,
                 });
             }
             cache.prepare(&scene, 1.).unwrap();

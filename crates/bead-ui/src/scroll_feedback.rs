@@ -177,6 +177,7 @@ impl Feedback {
                 own: index..index + 1,
                 subtree_end: index + 1,
                 bounds: g.thumb,
+                scroll: None,
             });
         }
         self.activity.retain(|id, a| {

@@ -1838,6 +1838,7 @@ pub fn layout(
             own: own_start..own_start,
             subtree_end: own_start,
             bounds: r,
+            scroll: None,
         });
         let source = &view.source;
         let palette_role = |name: &str, default| palette.get(name).unwrap_or(default);

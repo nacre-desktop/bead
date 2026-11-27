@@ -851,6 +851,7 @@ mod tests {
                     own: 0..1,
                     subtree_end: 1,
                     bounds,
+                    scroll: None,
                 },
                 SceneLayer {
                     id: "fill".into(),
@@ -858,6 +859,7 @@ mod tests {
                     own: 1..2,
                     subtree_end: 3,
                     bounds,
+                    scroll: None,
                 },
                 SceneLayer {
                     id: "fill.gradient".into(),
@@ -865,6 +867,7 @@ mod tests {
                     own: 2..3,
                     subtree_end: 3,
                     bounds,
+                    scroll: None,
                 },
                 SceneLayer {
                     id: "thumb".into(),
@@ -872,6 +875,7 @@ mod tests {
                     own: 3..4,
                     subtree_end: 4,
                     bounds,
+                    scroll: None,
                 },
             ],
             prepared: Default::default(),
@@ -1099,6 +1103,7 @@ mod tests {
                 own: 0..1,
                 subtree_end: 1,
                 bounds,
+                scroll: None,
             }],
             prepared: Default::default(),
             font_files: vec![],

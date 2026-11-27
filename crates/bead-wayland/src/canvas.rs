@@ -1564,6 +1564,7 @@ mod tests {
                 own: 0..1,
                 subtree_end: 1,
                 bounds: Rect::new(96., 96., 88., 34.),
+                scroll: None,
             }],
             prepared: Default::default(),
             font_files: Vec::new(),
