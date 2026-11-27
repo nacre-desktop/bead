@@ -220,11 +220,12 @@ impl FrameDamage {
         for item in &frame.items {
             let source = if let Some(raster) = &item.raster {
                 let original = rect(&item.primitive);
+                let (w, h) = raster.extent(original, frame.scale);
                 Rect::new(
                     original.x + raster.origin.0 as f32 / frame.scale,
                     original.y + raster.origin.1 as f32 / frame.scale,
-                    raster.pixels.width() as f32 / frame.scale,
-                    raster.pixels.height() as f32 / frame.scale,
+                    w as f32 / frame.scale,
+                    h as f32 / frame.scale,
                 )
             } else {
                 rect(&item.primitive)
@@ -322,7 +323,9 @@ impl FrameDamage {
                         }
                         continue;
                     }
+                    // A stretched raster's `changed` is in its own texels, not the drawn ones.
                     if let Some(raster) = &item.raster
+                        && raster.stretch.is_none()
                         && raster.base_key == Some(old.key)
                         && old.geometry.x == next.geometry.x
                         && old.geometry.y == next.geometry.y

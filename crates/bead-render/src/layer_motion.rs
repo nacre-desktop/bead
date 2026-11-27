@@ -419,7 +419,7 @@ pub fn scene_ink_bounds(scene: &Scene, scale: f32, offset: (f32, f32)) -> Option
                     scale,
                     offset,
                     raster.origin,
-                    (raster.pixels.width(), raster.pixels.height()),
+                    raster.extent(crate::tree::rect(&item.primitive), scale),
                 )?
             } else {
                 primitive_ink_bounds(&item.primitive, scale, offset)?
@@ -2110,6 +2110,7 @@ mod tests {
             key: 1,
             base_key: None,
             changed: Damage::full(12, 12),
+            stretch: None,
             _charge: charge,
         });
         let frame = crate::tree::Frame {

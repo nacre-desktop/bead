@@ -155,7 +155,18 @@ pub struct Raster {
     pub base_key: Option<u64>,
     /// Includes removed texels beyond the current extent; uploads must clip.
     pub changed: Damage,
+    /// B0428: drawn at its item's rect size, these texels at each end kept (`stretch_index`).
+    pub(crate) stretch: Option<u32>,
     pub(crate) _charge: bead_core::cache::Charge,
+}
+impl Raster {
+    /// The drawn size in pixels: the raster's own, or its item's rect for a stretched one.
+    pub(crate) fn extent(&self, rect: Rect, scale: f32) -> (u32, u32) {
+        self.stretch
+            .map_or((self.pixels.width(), self.pixels.height()), |_| {
+                crate::dimensions(rect, scale)
+            })
+    }
 }
 /// Worker-prepared image pixels are consumed after upload; the immutable recipe
 /// survives context recreation without retaining a second decoded copy.
@@ -1373,6 +1384,7 @@ impl TreeCache {
                 key: hasher.finish(),
                 base_key: None,
                 changed: Damage::full(w, h),
+                stretch: None,
                 _charge: template.charge.clone(),
             })),
         };
@@ -1733,6 +1745,7 @@ impl TreeCache {
                         origin: (0, 0),
                         key,
                         base_key: None,
+                        stretch: None,
                         _charge: charge,
                     }));
                     if matches!(shaped, Primitive::Shadow { .. }) && item.raster.is_some() {
@@ -2278,7 +2291,27 @@ impl TreeCache {
             let reshaped_reveal = scene.motion.as_ref().is_some_and(|motion| {
                 motion.reveal && motion.parts.iter().any(|(part, _)| *part == index)
             });
-            // shortcut: Dense (CPU) ignores bake_size and rasters per rect, upgrade with a scaled CPU draw.
+            // B0328: bake at bake_size, so the key and payload (B0428: or raster) ignore the rect.
+            let baked = match primitive {
+                Primitive::Image {
+                    bake_size: Some((w, h)),
+                    blur,
+                    ..
+                } if *blur == 0. && !raster_hidden && !reshaped_reveal => {
+                    let mut baked = primitive.clone();
+                    if let Primitive::Image { rect, .. } = &mut baked {
+                        (rect.w, rect.h) = (*w, *h);
+                    }
+                    Some(baked)
+                }
+                _ => None,
+            };
+            let source = baked.as_ref().unwrap_or(primitive);
+            let source_key = if baked.is_some() {
+                signature(scene, source, scale, &mut asset_keys)
+            } else {
+                key
+            };
             let image = if self.image_policy != ImagePolicy::Dense
                 && !raster_hidden
                 && !reshaped_reveal
@@ -2290,25 +2323,11 @@ impl TreeCache {
                     clip_polygon,
                     radius,
                     tint,
-                    bake_size,
                     ..
                 } = primitive
                     && *blur == 0.
                 {
-                    // B0328: bake at bake_size, so the key and payload ignore the rect's size.
-                    let baked = bake_size.map(|(w, h)| {
-                        let mut baked = primitive.clone();
-                        if let Primitive::Image { rect, .. } = &mut baked {
-                            (rect.w, rect.h) = (w, h);
-                        }
-                        baked
-                    });
-                    let source = baked.as_ref().unwrap_or(primitive);
-                    let key = if baked.is_some() {
-                        signature(scene, source, scale, &mut asset_keys)
-                    } else {
-                        key
-                    };
+                    let key = source_key;
                     if let Some(payload) = self.image_payloads.get(&key).and_then(Weak::upgrade) {
                         Some(payload)
                     } else {
@@ -2418,6 +2437,12 @@ impl TreeCache {
                     ..
                 }
             );
+            // B0428: a CPU bake_size image is its bake, which paint stretches.
+            let (key, stretch) = if self.image_policy == ImagePolicy::Dense && baked.is_some() {
+                (source_key, Some(0))
+            } else {
+                (key, None)
+            };
             let raster = if (kind == "fill" && !gradient)
                 || kind == "arc"
                 || kind == "polyline"
@@ -2521,7 +2546,7 @@ impl TreeCache {
                             palette_at_rest: false,
                         });
                         content.primitives.clear();
-                        content.primitives.push(local(primitive));
+                        content.primitives.push(local(source));
                         self.raster.prepare(content, scale)?;
                         let pixels = self
                             .raster
@@ -2612,6 +2637,7 @@ impl TreeCache {
                         key,
                         base_key,
                         changed,
+                        stretch: stretch.filter(|_| !skipped),
                     });
                     let previous = if matches!(kind, "image" | "text") {
                         self.entries
@@ -2981,6 +3007,7 @@ fn sliced_art(
 /// Premultiplied source-over of a raster into a damage strip (identical results to tiny-skia's
 /// pipeline). B0202: rows are walked as runs; opaque runs are copied with `memcpy`, transparent
 /// runs skipped, and only partially covered pixels are blended, in exact integer arithmetic.
+#[allow(clippy::too_many_arguments)] // B0428: the drawn size a stretched raster fills.
 fn blend_over(
     strip: &mut [u8],
     width: u32,
@@ -2989,17 +3016,33 @@ fn blend_over(
     raster: &Raster,
     (dx, dy): (i64, i64),
     opacity: f32,
+    (drawn_w, drawn_h): (u32, u32),
 ) {
-    let source_width = raster.pixels.width() as usize;
+    let (source_width, source_height) = (raster.pixels.width(), raster.pixels.height());
     let source = raster.pixels.data();
     let alpha = (opacity.clamp(0., 1.) * 255.).round() as u32;
     let mut scaled = Vec::new();
+    // B0428: a stretched raster gathers each drawn row through its index maps.
+    let columns = raster.stretch.map(|cut| {
+        (clip.x..clip.x + clip.w)
+            .map(|x| stretch_index((i64::from(x) - dx) as u32, drawn_w, source_width, cut) as usize)
+            .collect::<Vec<_>>()
+    });
+    let mut gathered = Vec::new();
     for row in clip.y..clip.y + clip.h {
-        let from =
-            ((i64::from(row) - dy) as usize * source_width + (i64::from(clip.x) - dx) as usize) * 4;
+        let y = (i64::from(row) - dy) as u32;
         let to = ((row - strip_y) as usize * width as usize + clip.x as usize) * 4;
         let len = clip.w as usize * 4;
-        let source = &source[from..from + len];
+        let source = if let (Some(columns), Some(cut)) = (&columns, raster.stretch) {
+            let y = stretch_index(y, drawn_h, source_height, cut) as usize;
+            let line = &source.as_chunks::<4>().0[y * source_width as usize..];
+            gathered.clear();
+            gathered.extend(columns.iter().flat_map(|&x| line[x]));
+            &gathered[..]
+        } else {
+            let from = (y as usize * source_width as usize + (i64::from(clip.x) - dx) as usize) * 4;
+            &source[from..from + len]
+        };
         if alpha == 255 {
             blend_row(source, &mut strip[to..to + len]);
         } else {
@@ -3013,6 +3056,20 @@ fn blend_over(
             blend_row(&scaled, &mut strip[to..to + len]);
         }
     }
+}
+/// B0428: the texel drawn at `i` of `n` from `s`: `cut` at each end 1:1, the rest nearest in the
+/// f32 math of tiny-skia's Pad/Nearest `draw_pixmap`, so a shadow is `crate::shadow_raster`'s.
+fn stretch_index(i: u32, n: u32, s: u32, cut: u32) -> u32 {
+    if n == s || i < cut {
+        return i;
+    }
+    if i >= n.saturating_sub(cut) {
+        return s - (n - i);
+    }
+    let span = (s - 2 * cut) as f32;
+    let inverse = 1. / ((n - 2 * cut) as f32 / span);
+    let at = (i as f32 + 0.5) * inverse + -(cut as f32) * inverse;
+    cut + at.clamp(0., f32::from_bits(span.to_bits() - 1)) as u32
 }
 /// Length of the leading run of pixels whose alpha is `alpha`, checked eight pixels at a time.
 fn alpha_run(pixels: &[[u8; 4]], alpha: u8) -> usize {
@@ -3224,10 +3281,11 @@ fn paint_items(
             let r = rect(&item.primitive);
             let x = ((r.x + offset.0) * scale).round() as i64 + i64::from(raster.origin.0);
             let y = ((r.y + offset.1) * scale).round() as i64 + i64::from(raster.origin.1);
+            let (w, h) = raster.extent(r, scale);
             let left = i64::from(clip.x).max(x);
             let top = i64::from(clip.y).max(y);
-            let right = i64::from(clip.x + clip.w).min(x + i64::from(raster.pixels.width()));
-            let bottom = i64::from(clip.y + clip.h).min(y + i64::from(raster.pixels.height()));
+            let right = i64::from(clip.x + clip.w).min(x + i64::from(w));
+            let bottom = i64::from(clip.y + clip.h).min(y + i64::from(h));
             if right <= left || bottom <= top {
                 continue;
             }
@@ -3264,6 +3322,7 @@ fn paint_items(
         if !painted
             && item.primitive.opacity() >= 1.
             && let Some(raster) = &item.raster
+            && raster.stretch.is_none()
         {
             // Damage was cleared above. Source-over onto zero is an exact copy,
             // including partial alpha; avoid blending a full shadow-sized image.
@@ -3323,6 +3382,7 @@ fn paint_items(
                     ((r.y + offset.1) * scale).round() as i64 + i64::from(raster.origin.1),
                 ),
                 item.primitive.opacity(),
+                raster.extent(r, scale),
             );
         } else if let Primitive::Arc {
             start_angle,
@@ -4043,6 +4103,7 @@ fn layer_raster(pixels: Pixmap, key: u64, charge: bead_core::cache::Charge) -> R
         origin: (0, 0),
         key,
         base_key: None,
+        stretch: None,
         _charge: charge,
     }
 }
@@ -4476,7 +4537,8 @@ impl TreeCpuRenderer {
                 w: (right - left) as u32,
                 h: (bottom - top) as u32,
             };
-            blend_over(bytes, width, 0, clip, layer, (x, y), 1.);
+            let extent = (layer.pixels.width(), layer.pixels.height());
+            blend_over(bytes, width, 0, clip, layer, (x, y), 1., extent);
         }
         Ok(())
     }
@@ -5184,6 +5246,7 @@ mod tests {
             key: 1,
             base_key: None,
             changed: Damage::full(24, 12),
+            stretch: None,
             _charge: budget.reserve(source.data().len()).unwrap(),
         };
         let (width, rows) = (40u32, 20u32);
@@ -5214,7 +5277,7 @@ mod tests {
                 Some(&mask),
             );
         let mut actual = background;
-        blend_over(&mut actual, width, 0, clip, &raster, (dx, dy), 1.);
+        blend_over(&mut actual, width, 0, clip, &raster, (dx, dy), 1., (24, 12));
         let worst = expected
             .iter()
             .zip(&actual)
@@ -5532,6 +5595,7 @@ mod tests {
                                 key: 1,
                                 base_key: None,
                                 changed: Damage::full(pixels.width(), pixels.height()),
+                                stretch: None,
                                 _charge: budget.reserve(pixels.data().len()).unwrap(),
                             })),
                         });
@@ -5791,6 +5855,7 @@ mod tests {
                     key: 0,
                     base_key: None,
                     changed: Damage::full(10, 6),
+                    stretch: None,
                     _charge: charge,
                 })),
             },
@@ -7555,6 +7620,7 @@ mod tests {
                         origin: (0, 0),
                         key: index as u64,
                         base_key: None,
+                        stretch: None,
                         _charge: charge,
                     })),
                 }
@@ -8796,14 +8862,106 @@ mod tests {
         let plain = payloads(None);
         let keys: std::collections::BTreeSet<_> = plain.iter().map(|p| p.key).collect();
         assert!(keys.len() > 1, "without bake_size every size builds");
-        // The Dense (CPU) path ignores bake_size and stays exact per rect.
+        // B0428: the Dense (CPU) path bakes at bake_size too, and paint stretches it.
         let mut dense = TreeCache::default();
         dense.prepare(&sized(10., Some((16., 16.))), 1.).unwrap();
         let raster = dense.frame.as_ref().unwrap().items[0]
             .raster
             .as_ref()
             .unwrap();
-        assert_eq!((raster.pixels.width(), raster.pixels.height()), (10, 10));
+        assert_eq!((raster.pixels.width(), raster.pixels.height()), (16, 16));
+        assert_eq!(raster.extent(Rect::new(0., 0., 10., 10.), 1.), (10, 10));
+    }
+    fn paint_damage(
+        frame: &Frame,
+        scale: f32,
+        (width, height): (u32, u32),
+        damage: Damage,
+    ) -> Vec<u8> {
+        let mut bytes = vec![0; width as usize * height as usize * 4];
+        let format = PixelFormat::Rgba;
+        let target = ShmTarget {
+            bytes: &mut bytes,
+            width,
+            height,
+            scale,
+            format,
+        };
+        paint(frame, (0., 0.), target, damage).unwrap();
+        bytes
+    }
+    /// B0428: a gradient bar (a volume fill) at `w` x 4 whose width follows its value.
+    fn bar_scene(w: f32, bake_size: Option<(f32, f32)>) -> Scene {
+        let mut bar = Pixmap::new(16, 4).unwrap();
+        for (i, pixel) in bar.pixels_mut().iter_mut().enumerate() {
+            let i = i as u8;
+            *pixel =
+                tiny_skia::PremultipliedColorU8::from_rgba(i * 4, 255 - i * 3, 90, 255).unwrap();
+        }
+        let mut scene = Scene::empty(220., 4.);
+        let png = Arc::from(bar.encode_png().unwrap());
+        scene.asset_data.insert("bar.png".into(), png);
+        scene.primitives = vec![Primitive::Image {
+            opacity: 1.,
+            blur: 0.,
+            fit: crate::ImageFit::Fill,
+            clip_polygon: None,
+            bake_size,
+            radius: 0.,
+            tint: None,
+            rect: Rect::new(0., 0., w, 4.),
+            path: "bar.png".into(),
+        }];
+        scene
+    }
+    #[test]
+    fn a_cpu_bake_size_image_bakes_once_and_draws_its_bake_stretched() {
+        let bake = Some((100., 4.));
+        let mut cache = TreeCache::default();
+        for step in 0..10 {
+            let w = 50. + 150. * step as f32 / 9.;
+            cache.prepare(&bar_scene(w, bake), 1.).unwrap();
+        }
+        assert_eq!(cache.builds, 1, "one bake for 10 widths");
+        // At its bake size it is the per-rect raster, pixel for pixel.
+        let pixels = |cache: &mut TreeCache, scene: &Scene| {
+            cache.prepare(scene, 1.).unwrap();
+            let frame = cache.frame.as_ref().unwrap();
+            paint_damage(frame, 1., (220, 4), Damage::full(220, 4))
+        };
+        let baked = pixels(&mut cache, &bar_scene(100., bake));
+        assert!(baked == pixels(&mut TreeCache::default(), &bar_scene(100., None)));
+        // At twice the bake each texel is drawn twice, and nothing past the rect.
+        let wide = pixels(&mut cache, &bar_scene(200., bake));
+        for (y, x) in (0..4).flat_map(|y| (0..220).map(move |x| (y, x))) {
+            let at = |bytes: &[u8], x: usize| bytes[(y * 220 + x) * 4..][..4].to_vec();
+            let want = if x < 200 {
+                at(&baked, x / 2)
+            } else {
+                vec![0; 4]
+            };
+            assert_eq!(at(&wide, x), want, "x {x} y {y}");
+        }
+        assert_eq!(cache.builds, 1);
+    }
+    #[test]
+    fn a_stretched_raster_damages_its_drawn_extent() {
+        let (scale, (width, height)) = (1.5, (330, 6));
+        let mut cache = TreeCache::default();
+        let mut tracker = crate::damage::FrameDamage::default();
+        for w in [100., 140., 120.] {
+            cache
+                .prepare(&bar_scene(w, Some((100., 4.))), scale)
+                .unwrap();
+            let frame = cache.frame.as_ref().unwrap();
+            let regions = tracker.update(frame, (0., 0.), 1., width, height).unwrap();
+            let drawn = Rect::new(0., 0., w, 4.).pixels(scale, width, height);
+            assert!(
+                regions.iter().any(|d| intersection(*d, drawn) == drawn),
+                "w {w}: {regions:?} misses {drawn:?}"
+            );
+        }
+        assert_eq!(cache.builds, 1);
     }
     #[test]
     fn image_opacity_scales_the_drawn_alpha_and_reuses_the_raster() {
