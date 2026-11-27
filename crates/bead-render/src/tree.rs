@@ -1364,8 +1364,11 @@ impl TreeCache {
                 f.h + 2. * M,
             ),
         };
+        // B0430: both keep the piece's own clip, as at rest and on the slow path: an art clipped out of the
+        // frame strips' rows leaves those to the strips on every frame, so their rim gets one coat.
+        let own = item.clip;
         let mut clipped = item.clone();
-        clipped.clip = Some(clip);
+        clipped.clip = Some(own.map_or(clip, |own| own.intersect(clip)));
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         (template.key, start, band).hash(&mut hasher);
         let (w, h) = (pixels.width(), pixels.height());
@@ -1373,7 +1376,7 @@ impl TreeCache {
             image: None,
             id: format!("{}/edge", item.id),
             primitive: item.primitive.clone(),
-            clip: None,
+            clip: own,
             raster: Some(Arc::new(Raster {
                 pixels,
                 origin: if vertical {
@@ -6531,6 +6534,133 @@ mod tests {
             } else if progress == 1. {
                 assert!(columns(&at_rest, &band).is_empty(), "0.9999 steps to rest");
             }
+        }
+    }
+    #[test]
+    fn a_joined_art_clipped_out_of_the_frame_strip_paints_its_rim_once() {
+        // B0430: a bar (rows 0..50) with a translucent rim along its bottom up to the body. The bar's strip tile
+        // covers rows 48..52; the joined art starts 2 px above the body and 32 px left of it, and is clipped below
+        // the strip's rows (as a host clips it out of its tiles). Strip then panel must give one coat there.
+        let body = Rect::new(300., 50., 600., 300.);
+        let svg = |rev: Rect, r: Rect| -> Arc<[u8]> {
+            let text = format!(
+                "<svg xmlns='http://www.w3.org/2000/svg' width='{}' height='{}' viewBox='{} {} {} {}'>\
+                 <rect width='1000' height='50' fill='#1e1e28'/>\
+                 <rect x='{}' y='{}' width='{}' height='{}' fill='#1e1e28'/>\
+                 <path d='M0 50H{}' stroke='#fff' stroke-width='1' opacity='.25'/></svg>",
+                r.w, r.h, r.x, r.y, r.w, r.h, rev.x, rev.y, rev.w, rev.h, rev.x
+            );
+            Arc::from(text.into_bytes())
+        };
+        let draw: Arc<dyn Fn(Rect, Option<Rect>) -> crate::RevealFrame + Send + Sync> =
+            Arc::new(move |rev, crop| {
+                let r = crop.unwrap_or(Rect::new(rev.x - 32., rev.y - 2., rev.w + 32., rev.h + 2.));
+                (r, svg(rev, r))
+            });
+        let (w, h) = (1500u32, 600u32);
+        let compose = |scene: &Scene| {
+            let mut cache = TreeCache::default();
+            cache.prepare(scene, 1.5).unwrap();
+            let mut bytes = vec![0u8; (w * h * 4) as usize];
+            paint(
+                cache.frame.as_ref().unwrap(),
+                scene.offset,
+                ShmTarget {
+                    bytes: &mut bytes,
+                    width: w,
+                    height: h,
+                    scale: 1.5,
+                    format: PixelFormat::Rgba,
+                },
+                Damage::full(w, h),
+            )
+            .unwrap();
+            (bytes, cache.frame.unwrap())
+        };
+        let strip_rect = Rect::new(0., 48., 1000., 4.);
+        let mut strip = Scene::empty(1000., 400.);
+        strip
+            .asset_data
+            .insert("strip.svg".into(), svg(body, strip_rect));
+        strip.primitives = vec![Primitive::image(strip_rect, "strip.svg")];
+        let strip = compose(&strip).0;
+        let (open_rect, open_svg) = draw(body, None);
+        let mut scene = Scene::empty(1000., 400.);
+        scene.resource_revision = 1;
+        scene.asset_data.insert("open.svg".into(), open_svg);
+        scene.primitives = vec![Primitive::image(open_rect, "open.svg")];
+        scene.clips.insert(
+            0,
+            Rect::new(0., 52., 1000., open_rect.y + open_rect.h - 52.),
+        );
+        let primitive = scene.primitives[0].clone();
+        scene.motion = Some(crate::Motion {
+            id: "one-coat-test".into(),
+            open: true,
+            duration: 0.2,
+            return_duration: None,
+            return_curve: None,
+            auto_open: false,
+            spring: false,
+            curve: None,
+            edge: bead_core::Edge::Right,
+            slide_distance: None,
+            scale_from: None,
+            fade: false,
+            reveal: true,
+            progress: 1.,
+            parts: vec![(0, primitive)],
+            art: Some(crate::RevealArt {
+                body,
+                index: 0,
+                contour: None,
+                draw,
+            }),
+            body: Some(body),
+        });
+        scene.reveal(1.);
+        let mut worker = TreeCache::default();
+        worker.prepare(&scene, 1.5).unwrap();
+        scene
+            .prepared
+            .insert(1.5f32.to_bits(), worker.frame.clone().unwrap());
+        let pixel = |bytes: &[u8], x: f32, y: u32| {
+            let i = (y * w + (x * 1.5) as u32) as usize * 4;
+            [bytes[i], bytes[i + 1], bytes[i + 2], bytes[i + 3]]
+        };
+        let near = |a: [u8; 4], b: [u8; 4]| a.iter().zip(b).all(|(a, b)| a.abs_diff(b) <= 2);
+        // Physical rows 72..78 are the strip's; row 75 holds the rim's translucent outer half.
+        let rim = pixel(&strip, body.x - 16., 75);
+        assert!(
+            rim[3] > 20 && rim[3] < 128,
+            "the strip's rim is translucent: {rim:?}"
+        );
+        for progress in [0.999, 0.9, 1.] {
+            scene.reveal(progress);
+            let (panel, frame) = compose(&scene);
+            if progress < 1. {
+                assert!(
+                    frame.items.iter().any(|item| item.id.ends_with("/edge")),
+                    "progress {progress} draws the art the slow way"
+                );
+            }
+            let mut composed = strip.clone();
+            blend_row(&panel, &mut composed);
+            let rows = 72 * w as usize * 4..78 * w as usize * 4;
+            let coats = composed[rows.clone()]
+                .iter()
+                .zip(&strip[rows])
+                .filter(|(a, b)| a.abs_diff(**b) > 2)
+                .count();
+            let (overlap, left) = (
+                pixel(&composed, body.x - 16., 75),
+                pixel(&composed, body.x - 40., 75),
+            );
+            assert!(
+                coats == 0 && near(overlap, left) && near(overlap, rim),
+                "progress {progress}: {coats} strip channels painted twice; the rim under the art is \
+                 {overlap:?}, left of it {left:?}, one coat {rim:?}"
+            );
         }
     }
     #[test]

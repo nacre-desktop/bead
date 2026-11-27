@@ -70,6 +70,17 @@ companion, or at once for a non-reveal or compositor-drawn panel; a reopen mid-c
 at once. The opt-in compositor reveal (`BEAD_LAYER_REVEAL=1`) never poses the client scene and
 keeps joining at once. Test: `the_frame_joins_a_revealing_panel_once_its_reveal_has_drawn`.
 
+B0430: where the frame's strip tiles and a joined panel's art overlap, each pixel gets one coat. The
+two are on separate surfaces, so a translucent rim drawn by both composes twice (about 1.86x at the
+art's edge, a 1 px seam). The host owns the strip geometry, so it clips the art (`Scene::clips` at
+the art's index) to exclude the rows and columns its tiles cover, and the tiles alone draw them. Bead
+honours that clip on every frame: at rest, on the slow reveal path, and on the edge-template path,
+whose open-raster cut and sliding band are both intersected with it (they dropped it before, so a
+clipped rest art painted the strip rows again in the reveal tail). The tail therefore equals rest,
+and the B0429 band still draws the whole fillet below the strip rows. While a panel slides, the strip
+rows show only the tiles' join at its final place, without the moving art's rim over them. Test:
+`a_joined_art_clipped_out_of_the_frame_strip_paints_its_rim_once`.
+
 Compositor reveal v2 cannot be the mechanism for a growing body: its atlas is baked pixels and a
 plane cannot change shape, so D5 motion runs on the client frame path. v2 stays right for a
 static-body open/close; making it the default needs the compositor side and is not decided here.
