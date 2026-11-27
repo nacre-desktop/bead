@@ -1640,15 +1640,13 @@ impl App {
         }
         self.wallpaper_palette = Some(palette.clone());
         // B0416: parked views bake the newest palette once commits pause; a visible fence goes
-        // first, and its own commit re-arms this. B0417: so do the stale frame-tile shapes.
+        // first, and its own commit re-arms this.
         self.warm_sources
             .debounce_palette(&self.loop_handle, |app, generation| {
                 if app.wallpaper_palette_outputs.is_none()
                     && let Some(palette) = &app.wallpaper_palette
-                    && app.warm_sources.dormant_palette(generation, palette)
-                    && let Err(error) = app.warm_decorations()
                 {
-                    eprintln!("DECORATION_ERROR {error}");
+                    app.warm_sources.dormant_palette(generation, palette);
                 }
             });
         if let Some(control) = &self.options.control {
