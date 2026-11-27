@@ -361,6 +361,16 @@ impl Session {
             })
             .collect()
     }
+    /// B0419: the plane main was moving is at rest; re-bake it (a patch, no Luau).
+    pub fn scroll_settled(&mut self, id: &str) -> Result<Option<Scene>, Diagnostic> {
+        if self.stores.get("bead.scrolling") != Some(&Value::Text(id.into())) {
+            return Ok(None);
+        }
+        self.update(BTreeMap::from([(
+            "bead.scrolling".into(),
+            Value::Text(String::new()),
+        )]))
+    }
     pub fn scroll(&mut self, x: f32, y: f32, delta: f64) -> Result<Option<Scene>, Diagnostic> {
         self.keyboard_scroll = None;
         if let Some(scene) = self.graph_scroll(x, y, delta)? {

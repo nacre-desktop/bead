@@ -1510,6 +1510,7 @@ impl App {
         if matches!(event.kind, PointerEventKind::Press { .. })
             && let Some(target) = self.scroll_surface_target(&event.surface)
         {
+            self.settle_scroll(&target);
             self.scrolls.interrupt(&target);
         }
         bead_core::profile::position(
@@ -1963,6 +1964,7 @@ impl App {
             .as_ref()
             .and_then(|surface| self.scroll_surface_target(surface))
         {
+            self.settle_scroll(&target);
             self.scrolls.interrupt(&target);
         }
         if self.keyboard_surface.is_some()

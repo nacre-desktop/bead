@@ -671,6 +671,63 @@ mod plane_tests {
         assert!(state.planes.0.is_empty());
     }
 
+    fn kinds(events: &[(Target, UiEvent)]) -> Vec<String> {
+        events.iter().map(|(_, e)| format!("{e:?}")).collect()
+    }
+
+    #[test]
+    fn the_start_signal_is_sent_once_per_burst_per_plane_before_the_first_step() {
+        let (mut state, t0) = (State::default(), Instant::now());
+        let scene = layers(300., true);
+        step(&mut state, &scene, 40., t0);
+        let starts = state.take_starts();
+        assert_eq!(
+            kinds(&starts),
+            [r#"Model({"bead.scrolling": Text("list")})"#]
+        );
+        step(&mut state, &scene, 40., t0);
+        assert!(state.take_starts().is_empty(), "not per step");
+        // After the settle the next burst names the plane again.
+        state.settle(&KEY.0, t0);
+        step(&mut state, &scene, 40., t0);
+        assert_eq!(state.take_starts().len(), 1);
+    }
+
+    #[test]
+    fn the_settle_sends_one_scroll_settled_after_the_final_sync() {
+        let (mut state, t0) = (State::default(), Instant::now());
+        step(&mut state, &layers(300., true), 40., t0);
+        let out = state.settle(&KEY.0, t0);
+        let sync = format!(
+            "{:?}",
+            UiEvent::Scroll {
+                x: AT.0,
+                y: AT.1,
+                delta: 40.
+            }
+        );
+        assert_eq!(
+            kinds(&out),
+            [sync, r#"ScrollSettled { id: "list" }"#.into()]
+        );
+        assert!(state.settle(&KEY.0, t0).is_empty(), "once");
+    }
+
+    #[test]
+    fn a_close_flush_settles_only_its_own_target() {
+        let (mut state, t0) = (State::default(), Instant::now());
+        let other = (Target::Panel(2), false);
+        step(&mut state, &layers(300., true), 40., t0);
+        state.content_step(&other, Some(&layers(300., true)), AT, 40., t0);
+        let out = state.settle(&KEY.0, t0);
+        assert!(out.iter().all(|(t, _)| *t == KEY.0) && out.len() == 2);
+        assert_eq!(
+            state.settle(&other.0, t0).len(),
+            2,
+            "the other panel still moves"
+        );
+    }
+
     #[test]
     fn a_renderer_that_cannot_composite_gets_todays_events() {
         let (mut state, t0) = (State::default(), Instant::now());
@@ -678,6 +735,7 @@ mod plane_tests {
             assert_eq!(state.content_step(&KEY, None, AT, delta, t0), Some(delta));
         }
         assert!(state.planes.0.is_empty() && state.syncs(None, true, t0).is_empty());
+        assert!(state.take_starts().is_empty() && state.settle(&KEY.0, t0).is_empty());
         assert!(line(&state).ends_with("worker_frames=3 plane=- main_steps=0 syncs=0 stalls=0"));
     }
 
@@ -730,6 +788,10 @@ pub(super) struct State {
     steps: std::collections::BTreeMap<(Target, String), Steps>,
     bursts: std::collections::BTreeMap<(Target, bool), Burst>,
     planes: Planes,
+    /// B0419: planes the worker was told are moving (`bead.scrolling`), until their settle.
+    named: std::collections::BTreeSet<(Target, String)>,
+    /// Start signals to deliver before the step that caused them.
+    starts: Vec<(Target, UiEvent)>,
 }
 /// One motion burst of a (target, axis): its moved steps, for the SCROLL_FRAMES journal line.
 struct Burst {
@@ -855,6 +917,16 @@ impl State {
             self.adopt(&key.0, layers);
             self.planes.step(&key.0, layers, point, delta, now)
         });
+        if let Some((id, ..)) = &hit
+            && self.named.insert((key.0.clone(), id.clone()))
+        {
+            let model = [(
+                "bead.scrolling".to_string(),
+                bead_core::Value::Text(id.clone()),
+            )];
+            self.starts
+                .push((key.0.clone(), UiEvent::Model(model.into())));
+        }
         // A renderer that stopped compositing (a GL fallback) hands over the unsent motion now,
         // so the content does not snap back to the baked offset until the next flush.
         let delta = match layers {
@@ -888,6 +960,23 @@ impl State {
             }
         }
         hit.map_or(Some(delta), |(_, worker, _)| worker)
+    }
+    /// B0419: the plane start signals to deliver before the step's own event.
+    fn take_starts(&mut self) -> Vec<(Target, UiEvent)> {
+        std::mem::take(&mut self.starts)
+    }
+    /// B0419: the final syncs of `target`, then one settle per plane the worker was told moves.
+    fn settle(&mut self, target: &Target, now: Instant) -> Vec<(Target, UiEvent)> {
+        let mut out = self.syncs(Some(target), true, now);
+        let named = std::mem::take(&mut self.named);
+        for (t, id) in named {
+            if t == *target {
+                out.push((t, UiEvent::ScrollSettled { id }));
+            } else {
+                self.named.insert((t, id));
+            }
+        }
+        out
     }
     /// B0419: a worker write to a plane main was moving ends the motion.
     fn adopt(&mut self, target: &Target, layers: &[bead_render::SceneLayer]) {
@@ -1202,6 +1291,7 @@ fn callback_due(deadline: Instant, now: Instant, interval: Duration) -> bool {
 }
 impl App {
     pub(super) fn cancel_scroll(&mut self, target: &Target) {
+        self.settle_scroll(target);
         if let Some((_, token)) = self.scrolls.wakeups.remove(target) {
             self.loop_handle.remove(token);
         }
@@ -1579,7 +1669,11 @@ impl App {
         let layers =
             surface.and_then(|(scene, r)| r.scroll_shifts(&probe).then_some(&scene.layers[..]));
         let key = (target.clone(), horizontal);
-        match self.scrolls.content_step(&key, layers, point, delta, now) {
+        let step = self.scrolls.content_step(&key, layers, point, delta, now);
+        for (target, start) in self.scrolls.take_starts() {
+            self.deliver_source_event(&target, start);
+        }
+        match step {
             Some(delta) => self.deliver_scroll(target, horizontal, point, delta),
             None => self.redraw_target(target),
         }
@@ -1603,11 +1697,17 @@ impl App {
             }
         }
     }
-    /// The final plane syncs of an ended motion (B0419), then the burst lines.
+    /// B0419: the final syncs of `target`'s planes, then their settles.
+    pub(super) fn settle_scroll(&mut self, target: &Target) {
+        for (target, event) in self.scrolls.settle(target, Instant::now()) {
+            self.deliver_source_event(&target, event);
+        }
+    }
+    /// The final plane syncs and settles of an ended motion (B0419), then the burst lines.
     fn end_motion(&mut self, target: &Target, now: Instant) {
         if self.scrolls.ended(target) {
-            for (target, sync) in self.scrolls.syncs(Some(target), true, now) {
-                self.deliver_source_event(&target, sync);
+            for (target, event) in self.scrolls.settle(target, now) {
+                self.deliver_source_event(&target, event);
             }
             self.scrolls.drop_idle(target);
         }

@@ -2082,6 +2082,31 @@ fn scroll_plane_follows_a_scroll_patch_with_no_luau() {
 }
 
 #[test]
+fn scroll_settled_clears_the_named_plane_with_no_luau_and_ignores_another() {
+    let (_fixture, mut session) = interaction_fixture(PLANE_VIEW, PLANE_BEHAVIOR);
+    let (id, _) = plane_of(&session.current);
+    let moving = session.update(scrolling(&id)).unwrap().unwrap();
+    session.commit(moving);
+    assert!(session.scroll_settled("other").unwrap().is_none());
+    assert_eq!(
+        session.stores.get("bead.scrolling"),
+        Some(&Value::Text(id.clone()))
+    );
+    frontend::reset_eval_calls();
+    let hits = patch_hits();
+    let rest = session.scroll_settled(&id).unwrap().unwrap();
+    assert_eq!(patch_hits(), hits + 1, "the settle is a patch");
+    assert_eq!(frontend::eval_calls(), 0, "and runs no Luau");
+    let (_, plane) = plane_of(&rest);
+    assert_eq!(plane.interest, plane.clip);
+    session.commit(rest);
+    assert_eq!(
+        session.stores.get("bead.scrolling"),
+        Some(&Value::Text(String::new()))
+    );
+}
+
+#[test]
 fn scroll_plane_at_rest_adds_no_primitive_or_raster() {
     use bead_render::tree::TreeCache;
     let (_fixture, mut session) = interaction_fixture(PLANE_VIEW, PLANE_BEHAVIOR);

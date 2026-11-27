@@ -151,3 +151,27 @@ Tests (no Wayland, `scroll.rs` `plane_tests`): `a_step_inside_ready_sends_no_ui_
 `a_renderer_that_stops_compositing_mid_burst_sends_the_pending_motion_at_once`,
 `one_surface_shifts_never_reach_another`; the SCROLL_FRAMES line in
 `burst_lines_report_gaps_and_skip_single_steps`.
+
+## U2b2: the switch-on
+
+- Start: the first step of a burst that hits a plane on a compositing surface (the U2b1 probe)
+  sends the worker `UiEvent::Model({"bead.scrolling": id})` once, before that step's
+  `UiEvent::Scroll`. The worker re-bakes with interest = viewport ± overscan, so `ready` grows
+  and the next steps stay on main. Not per step; not on CPU, wgpu or frozen surfaces (no
+  plane state, today's events exactly).
+- Settle: at motion end, after the final sync, one `UiEvent::ScrollSettled { id }` per named
+  plane. It is a worker barrier like any non-scroll event (never merged into a `ContentScroll`).
+  `Session::scroll_settled(id)` clears a matching `bead.scrolling` (a patch, no Luau, like
+  `bead.hovered`) and ignores another id; the plane re-bakes at rest, so overscan rasters live
+  only between the start and the settle.
+- Close/park flush: a panel close (`close_panel`, before `PanelVisibility(false)`), a panel
+  release, a removed output session, and a pointer press or key that interrupts the motion first
+  deliver the target's final sync and ScrollSettled (`settle_scroll`), then drop its planes: a
+  parked worker's last bake is at rest, a reopen starts at the store offset, and a press no
+  longer drops unsent motion.
+- A host's `UiEvent` match must add `UiEvent::ScrollSettled { id } => session.scroll_settled(&id)?`
+  (bead's own host has it). The start signal is an ordinary `Model` store key.
+- Tests: `the_start_signal_is_sent_once_per_burst_per_plane_before_the_first_step`,
+  `the_settle_sends_one_scroll_settled_after_the_final_sync`,
+  `a_close_flush_settles_only_its_own_target`, `a_renderer_that_cannot_composite_gets_todays_events`
+  (no start, no settle), bead-ui `scroll_settled_clears_the_named_plane_with_no_luau_and_ignores_another`.

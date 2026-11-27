@@ -1532,6 +1532,7 @@ impl SceneSource for FolderView {
             UiEvent::Drag { x, y } => self.session.drag(x, y)?,
             UiEvent::Key { text, backspace } => self.session.key(&text, backspace)?,
             UiEvent::Scroll { x, y, delta } => self.session.scroll(x, y, delta)?,
+            UiEvent::ScrollSettled { id } => self.session.scroll_settled(&id)?,
             UiEvent::Ime {
                 preedit,
                 commit,

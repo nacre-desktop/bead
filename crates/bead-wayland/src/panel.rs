@@ -1432,6 +1432,8 @@ impl App {
         {
             motion.open = false;
         }
+        // The panel's planes sync and settle first, so a parked worker's last bake is at rest.
+        self.settle_scroll(&scroll::Target::Panel(self.panel_epoch));
         self.panel_ui(UiEvent::PanelVisibility(false));
         if self
             .options

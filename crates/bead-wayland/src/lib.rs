@@ -493,6 +493,10 @@ pub enum UiEvent {
         y: f32,
         delta: f64,
     },
+    /// A scroll plane main was moving came to rest (B0419): the worker re-bakes it at rest.
+    ScrollSettled {
+        id: String,
+    },
     Key {
         text: String,
         backspace: bool,
