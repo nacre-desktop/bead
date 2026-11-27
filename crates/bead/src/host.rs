@@ -1466,7 +1466,8 @@ impl SceneSource for FolderView {
             | UiEvent::Hover { x, y }
             | UiEvent::Drag { x, y }
             | UiEvent::LocalDrag { x, y }
-            | UiEvent::Scroll { x, y, .. } => self.pointer = Some((*x, *y)),
+            | UiEvent::Scroll { x, y, .. }
+            | UiEvent::HorizontalScroll { x, y, .. } => self.pointer = Some((*x, *y)),
             _ => {}
         }
         // A closed, kept-alive panel stops receiving service wakeups; reopening registers
@@ -1531,7 +1532,8 @@ impl SceneSource for FolderView {
             UiEvent::Hover { x, y } => self.session.hover(x, y)?,
             UiEvent::Drag { x, y } => self.session.drag(x, y)?,
             UiEvent::Key { text, backspace } => self.session.key(&text, backspace)?,
-            UiEvent::Scroll { x, y, delta } => self.session.scroll(x, y, delta)?,
+            UiEvent::Scroll { x, y, delta } => self.session.scroll(x, y, delta, false)?,
+            UiEvent::HorizontalScroll { x, y, delta } => self.session.scroll(x, y, delta, true)?,
             UiEvent::ScrollSettled { id } => self.session.scroll_settled(&id)?,
             UiEvent::Ime {
                 preedit,
@@ -2008,6 +2010,52 @@ mod tests {
         );
         view.commit();
         assert!(view.wakeup_at().is_some());
+        drop(view);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn folder_source_dispatches_horizontal_scroll_to_an_x_scroll() {
+        let root = std::env::temp_dir().join(format!(
+            "bead-scroll-x-host-{}-{}",
+            std::process::id(),
+            TEMP_ID.fetch_add(1, Ordering::Relaxed)
+        ));
+        std::fs::create_dir_all(root.join("view")).unwrap();
+        std::fs::write(
+            root.join("palette.json"),
+            r#"{"formatVersion":1,"colours":{"surface":"202020"}}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            root.join("view/behavior.luau"),
+            "return {stores={offset=0},actions={},computed={}}",
+        )
+        .unwrap();
+        std::fs::write(root.join("view/main.luau"),"local ui=require('bead.ui');return ui.Scroll{id='strip',axis='x',width=200,height=100,scroll=ui.bind('offset'),ui.Row{width=600,height=100,shrink=0}}").unwrap();
+        let mut view = FolderView::load(
+            root.clone(),
+            "view/main.luau".into(),
+            "palette.json".into(),
+            "Scroll x host",
+            (200, 100),
+        )
+        .unwrap();
+        view.stage(UiEvent::Reload).unwrap();
+        assert!(view.commit());
+        let (x, y, delta) = (20., 40., 30.);
+        assert!(
+            view.stage(UiEvent::Scroll { x, y, delta })
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            view.stage(UiEvent::HorizontalScroll { x, y, delta })
+                .unwrap()
+                .is_some()
+        );
+        view.commit();
+        assert_eq!(view.session.stores.get("offset"), Some(&Value::Number(30.)));
         drop(view);
         std::fs::remove_dir_all(root).unwrap();
     }

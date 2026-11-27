@@ -371,13 +371,25 @@ impl Session {
             Value::Text(String::new()),
         )]))
     }
-    pub fn scroll(&mut self, x: f32, y: f32, delta: f64) -> Result<Option<Scene>, Diagnostic> {
+    /// A wheel or finger delta along y, or along x when `horizontal` (B0419 U5a): a viewport takes
+    /// only its own axis; scroll actions and graphs take y only, as before.
+    pub fn scroll(
+        &mut self,
+        x: f32,
+        y: f32,
+        delta: f64,
+        horizontal: bool,
+    ) -> Result<Option<Scene>, Diagnostic> {
         self.keyboard_scroll = None;
-        if let Some(scene) = self.graph_scroll(x, y, delta)? {
+        if !horizontal && let Some(scene) = self.graph_scroll(x, y, delta)? {
             return Ok(scene);
         }
         let Some(generation) = &self.generation else {
             return Ok(None);
+        };
+        let axis = |node: &Node| match node.scroll {
+            Some(_) => !horizontal,
+            None => node.scroll_horizontal == horizontal,
         };
         let node = if generation.markup_entry.is_some() {
             let mut layer_id = self.hit(x, y, true).map(|node| node.id.clone());
@@ -388,7 +400,9 @@ impl Session {
                     .iter()
                     .find(|node| node.id == id && node.contains(x, y))
                 {
-                    let can_consume = if node.scroll.is_some() {
+                    let can_consume = if !axis(node) {
+                        false
+                    } else if node.scroll.is_some() {
                         true
                     } else if let Some(store) = &node.scroll_store {
                         match self.stores.get(store) {
@@ -416,7 +430,7 @@ impl Session {
             }
             target
         } else {
-            self.hit(x, y, true)
+            self.hit(x, y, true).filter(|&node| axis(node))
         };
         let Some(node) = node else {
             return Ok(None);

@@ -1476,7 +1476,7 @@ graph=ui.graph({{id="b",label="Beta"},{id="c"},{id="a",label="Alpha",weight=5}},
         assert_eq!(s.graphs["root.canvas"].selected, Some(0));
 
         let zoom = s.graphs["root.canvas"].camera.zoom;
-        let scene = s.scroll(200., 150., -300.).unwrap().unwrap();
+        let scene = s.scroll(200., 150., -300., false).unwrap().unwrap();
         s.commit(scene);
         assert!(s.graphs["root.canvas"].camera.zoom > zoom);
         let positions = s.graphs["root.canvas"].positions.to_vec();

@@ -239,7 +239,7 @@ impl Harness {
                 Input::Backspace => self.session.key("", true)?,
                 Input::Tab { backwards } => self.session.focus_next(backwards)?,
                 Input::Edit { key, shift } => self.session.edit_key(key, shift)?,
-                Input::Scroll { x, y, delta } => self.session.scroll(x, y, delta)?,
+                Input::Scroll { x, y, delta } => self.session.scroll(x, y, delta, false)?,
             };
             if let Some(scene) = scene {
                 self.commit(scene)?;

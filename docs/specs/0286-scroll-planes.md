@@ -2,9 +2,9 @@
 
 Composited scrolling: every `ui.Scroll` becomes a plane whose content main can move as one, with
 text rastered ahead of the viewport while it moves. Status: U1 (planes in the scene), U2a (GL
-shifts) and U2b1 (main stepping, switched off) landed; later units (U2b2 the switch-on, U2b3 thumb
-and windows, U3 CPU fallback, U4 kits, U5a axis x/snap/motion/on_settle, U5b `ui.scrolled`) append
-their contracts here.
+shifts), U4 (kits), U2b1 and U2b2 (main stepping and its switch-on) and U5a1 (`axis="x"`) landed;
+later units (U2b3 thumb and windows, U3 CPU fallback, U5a2 `on_settle`, U5a3 snap and motion, U5b
+`ui.scrolled`) append their contracts here.
 
 ## U1 contract: planes in the scene
 
@@ -45,7 +45,7 @@ Known limits (U1):
 - Clip boxes inside a moving plane raster by the plane's interest, also over-admission.
 - Under a `scale` track the offset stays in layout px, so a moving plane's interest and ready are
   approximate there.
-- Vertical only; the x axis is U5a.
+- Vertical only: an `axis="x"` Scroll carries no plane (U5a1).
 
 Tests: bead-ui `materialized_tests` `scroll_plane_*` (geometry at rest and moving, overscan
 validation, the text 150 px below the clip rasters only while `bead.scrolling` names the plane,
@@ -175,3 +175,26 @@ Tests (no Wayland, `scroll.rs` `plane_tests`): `a_step_inside_ready_sends_no_ui_
   `the_settle_sends_one_scroll_settled_after_the_final_sync`,
   `a_close_flush_settles_only_its_own_target`, `a_renderer_that_cannot_composite_gets_todays_events`
   (no start, no settle), bead-ui `scroll_settled_clears_the_named_plane_with_no_luau_and_ignores_another`.
+
+## U5a1: `axis="x"`
+
+- `ui.Scroll{axis="x"|"y"}` (default `"y"`; a markup error on another node or value). An x
+  Scroll's offset runs along x: children are placed at `x - offset`, the limit is the content
+  width minus the viewport (Taffy `scroll_width`), and a store patch moves them with no Luau
+  (`Topology::place` takes a dx and a dy scroll per layer).
+- Nodes carry `scroll_horizontal` (their own or inherited viewport). `Session::scroll(x, y,
+  delta, horizontal)`: a viewport takes only deltas along its axis; scroll actions and graphs
+  take y only, as before. Bead's host dispatches `UiEvent::HorizontalScroll` to it (it was
+  dropped).
+- An x Scroll draws no scrollbar (the overlay bar is vertical); the vertical keys (Up/Down,
+  PgUp/PgDn, Home/End) skip it for the nearest y viewport; AccessKit reports `scroll_x`.
+- No x plane yet: an x Scroll's layer has `scroll: None`, so main never steps it and a vertical
+  wheel can never move an x plane on main; its `overscan` and `ready` are inert. x deltas keep
+  today's worker path. Main-side x stepping needs `ScrollPlane.horizontal` (bead-render).
+- A host's pin bump: `session.scroll(x, y, delta)` becomes `session.scroll(x, y, delta, false)`,
+  and `UiEvent::HorizontalScroll { x, y, delta }` goes to `session.scroll(x, y, delta, true)`.
+- Known limits: no Left/Right key scrolling; a vertical wheel over an x Scroll scrolls its y
+  ancestor; a Scroll lays out as a column, so the content is a Row (or `direction="row"`).
+- Tests: bead-ui `materialized_tests` `axis_x_places_content_by_the_x_offset_and_takes_only_x_deltas`
+  (placement, limit, no plane, the patch equals a full layout, each axis moves only its viewport,
+  keys, AccessKit, validation); bead `host` `folder_source_dispatches_horizontal_scroll_to_an_x_scroll`.

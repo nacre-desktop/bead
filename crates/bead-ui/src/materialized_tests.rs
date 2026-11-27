@@ -2200,6 +2200,94 @@ fn scroll_plane_ready_is_the_declared_span_within_the_interest() {
     assert_eq!(ready("{from=-50,to=2000}"), ((100., 300.), (0., 500.)));
 }
 
+/// B0419 U5a: an x Scroll (`strip`, 180 px over 1000 px, at 100) at the top of a y Scroll.
+const AXIS_VIEW: &str = r#"local ui=require('bead.ui')
+return ui.Column{id='root',width=200,height=300,fill='surface',
+ ui.Scroll{id='page',scroll=ui.bind('sy'),width=200,height=200,
+  ui.Column{id='body',width=200,height=600,shrink=0,
+   ui.Scroll{id='strip',axis='x',scroll=ui.bind('sx'),width=180,height=100,shrink=0,
+    ui.Row{id='cells',width=1000,height=100,shrink=0,
+     ui.Box{id='gap',width=450,height=100,shrink=0},
+     ui.Text{id='far',text='Far cell',width=100,height=20,shrink=0}}}}}}"#;
+const AXIS_BEHAVIOR: &str = "return {stores={sx=100,sy=0},actions={},computed={}}";
+
+#[test]
+fn axis_x_places_content_by_the_x_offset_and_takes_only_x_deltas() {
+    let (_fixture, mut session) = interaction_fixture(AXIS_VIEW, AXIS_BEHAVIOR);
+    let (_reference_fixture, mut reference) = interaction_fixture(AXIS_VIEW, AXIS_BEHAVIOR);
+    let far = |scene: &Scene| *text_of(scene, "Far cell").0;
+    let node = |s: &Session, id: &str| {
+        let n = s.view_nodes().iter().find(|n| n.id.ends_with(id)).unwrap();
+        (n.scroll_limit, n.scroll_horizontal, n.scrollbar)
+    };
+    let store = |s: &Session, id: &str| s.stores.get(id).cloned();
+    assert_eq!(node(&session, "strip"), (Some(820.), true, false));
+    assert_eq!(node(&session, "page"), (Some(400.), false, true));
+    let plane = |s: &Session, id: &str| {
+        let layer = s.current.layers.iter().find(|l| l.id.ends_with(id));
+        layer.unwrap().scroll.is_some()
+    };
+    assert!(!plane(&session, "strip"), "no x plane until main steps x");
+    assert!(plane(&session, "page"));
+    assert_eq!(
+        far(&session.current).x,
+        350.,
+        "450 px in, scrolled 100 along x"
+    );
+    let y = far(&session.current).y;
+    // An x delta over the strip moves it, as a patch that equals a full layout.
+    let hits = patch_hits();
+    let scene = session.scroll(90., 50., 50., true).unwrap().unwrap();
+    assert_eq!(patch_hits(), hits + 1, "the x step is a patch");
+    session.commit(scene.clone());
+    assert_eq!((far(&scene).x, far(&scene).y), (300., y));
+    assert_eq!(store(&session, "sx"), Some(Value::Number(150.)));
+    let full = rebuilt(
+        &mut reference,
+        BTreeMap::from([("sx".into(), Value::Number(150.))]),
+    );
+    assert_close(
+        &frame(&session, &scene),
+        &frame(&reference, &full),
+        "x patch",
+    );
+    let x_scroll = |s: &Session| {
+        let tree = s.accessibility_tree();
+        tree.nodes.iter().find_map(|(_, n)| n.scroll_x())
+    };
+    assert_eq!(x_scroll(&session), Some(150.));
+    // A y delta over the strip passes to the page; an x delta over the page alone moves nothing.
+    let scene = session.scroll(90., 50., 30., false).unwrap().unwrap();
+    session.commit(scene);
+    assert_eq!(
+        (store(&session, "sx"), store(&session, "sy")),
+        (Some(Value::Number(150.)), Some(Value::Number(30.)))
+    );
+    assert!(session.scroll(100., 150., 40., true).unwrap().is_none());
+    assert_eq!(store(&session, "sy"), Some(Value::Number(30.)));
+    // Vertical keys over the strip move the page.
+    session
+        .scroll_key("page-down", false, Some((90., 50.)))
+        .unwrap();
+    assert_eq!(session.keyboard_scroll.as_ref().unwrap().store, "sy");
+    for (view, message) in [
+        (AXIS_VIEW.replace("axis='x'", "axis='z'"), "axis must be"),
+        (
+            AXIS_VIEW.replace("id='gap',", "id='gap',axis='x',"),
+            "axis needs a Scroll",
+        ),
+    ] {
+        let fixture = Fixture::new();
+        fs::create_dir_all(fixture.0.join("ui")).unwrap();
+        fs::write(fixture.0.join("ui/behavior.luau"), AXIS_BEHAVIOR).unwrap();
+        fs::write(fixture.0.join("ui/main.luau"), view).unwrap();
+        let mut session = fixture.session();
+        session.entry = "ui/main.luau".into();
+        let error = session.reload().err().expect("a markup error");
+        assert!(error.message.contains(message), "{}", error.message);
+    }
+}
+
 /// B0419 U4: bands of half a viewport. Luau runs once per band crossing, not per step.
 fn band_evals(main: &str, steps: &[f64]) -> (Fixture, Session, Vec<usize>) {
     let behavior = "local rows={};for i=1,400 do rows[i]={id=tostring(i)} end;\

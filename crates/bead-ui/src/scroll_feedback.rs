@@ -194,7 +194,8 @@ impl Feedback {
 
 impl Session {
     /// Scroll keys target the focused viewport, or the pointer viewport with no focus.
-    /// Editing inputs retain their own cursor navigation.
+    /// Editing inputs retain their own cursor navigation. These keys are vertical, so they
+    /// skip `axis="x"` viewports for the nearest y one (B0419 U5a).
     pub fn scroll_key(
         &mut self,
         command: &str,
@@ -222,7 +223,7 @@ impl Session {
             if let Some(node) = self
                 .current_nodes
                 .iter()
-                .find(|n| n.scrollable && n.id == id)
+                .find(|n| n.scrollable && !n.scroll_horizontal && n.id == id)
             {
                 focused_region = Some(node);
                 break;
@@ -239,7 +240,7 @@ impl Session {
                 self.current_nodes
                     .iter()
                     .rev()
-                    .find(|n| n.scrollable && n.contains(x, y))
+                    .find(|n| n.scrollable && !n.scroll_horizontal && n.contains(x, y))
             })
         });
         let Some(node) = node else { return Ok(None) };
@@ -510,7 +511,7 @@ return ui.Panel{id='panel',width=200,height=120,ui.Scroll{id='list',width=200,he
         std::fs::write(path, view).unwrap();
         let scene = s.reload().unwrap();
         s.commit(scene);
-        let scene = s.scroll(10., 50., 100.).unwrap().unwrap();
+        let scene = s.scroll(10., 50., 100., false).unwrap().unwrap();
         assert!(!scene.layers.iter().any(|l| l.id.starts_with("@scrollbar:")));
         assert!(s.scroll_feedback.activity.is_empty());
     }

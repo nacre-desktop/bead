@@ -33,6 +33,8 @@ Overflowing `Scroll` regions get a themed overlay scrollbar automatically. Use `
 
 `ready={from=,to=}` (content px, `from <= to`, `Scroll` only) is the span a kit has materialized; the plane's `ready` is that span within its interest, and the default is the whole content. `kit-virtual-list` and `kit.VirtualGrid` set it. See the same spec.
 
+`axis="x"` (`Scroll` only, default `"y"`) scrolls along x: the store is the x offset, only horizontal wheel and touchpad deltas move it, and it draws no scrollbar. Lay its content out as a `Row`. See the same spec.
+
 Any other node may take `scroll=ui.action(name)`: the action receives the scroll delta as its number argument. Add `scroll_steps={min_interval_ms=0, threshold=40}` (both optional; 0..2000 ms and 1..1000 px) to receive whole `+1` (down or right) and `-1` steps instead of smoothed pixels: a wheel detent is one step, finger travel steps each `threshold` px, and at most one step per `min_interval_ms` is delivered (extra steps are dropped). `scroll_steps` with a store binding, or without a scroll action, is a markup error.
 ```luau
 ui.Box { id="box", width=80, height=40, fill="surface", child }

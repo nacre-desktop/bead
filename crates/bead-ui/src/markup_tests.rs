@@ -801,7 +801,7 @@ fn empty_nested_scroll_falls_through_to_outer_scroll() {
             > 0.
     );
     let (x, y) = scroll_center(&s, "inner");
-    let scene = s.scroll(x, y, 10.).unwrap().unwrap();
+    let scene = s.scroll(x, y, 10., false).unwrap().unwrap();
     s.commit(scene);
     assert_eq!(s.stores.get("inner"), Some(&Value::Number(0.)));
     assert_eq!(s.stores.get("scroll"), Some(&Value::Number(10.)));
@@ -829,11 +829,11 @@ fn nested_scroll_at_edge_bubbles_and_reverse_input_returns_to_inner() {
         .unwrap();
     s.commit(scene);
     let (x, y) = scroll_center(&s, "inner");
-    let scene = s.scroll(x, y, 10.).unwrap().unwrap();
+    let scene = s.scroll(x, y, 10., false).unwrap().unwrap();
     s.commit(scene);
     assert_eq!(s.stores.get("inner"), Some(&Value::Number(limit)));
     assert_eq!(s.stores.get("scroll"), Some(&Value::Number(10.)));
-    let scene = s.scroll(x, y, -10.).unwrap().unwrap();
+    let scene = s.scroll(x, y, -10., false).unwrap().unwrap();
     s.commit(scene);
     assert_eq!(s.stores.get("inner"), Some(&Value::Number(limit - 10.)));
     assert_eq!(s.stores.get("scroll"), Some(&Value::Number(10.)));
@@ -861,7 +861,7 @@ fn stale_inner_offset_uses_clamped_visible_pose_for_reversal() {
         Some(20.)
     );
     let (x, y) = scroll_center(&s, "inner");
-    let scene = s.scroll(x, y, -5.).unwrap().unwrap();
+    let scene = s.scroll(x, y, -5., false).unwrap().unwrap();
     s.commit(scene);
     assert_eq!(s.stores.get("inner"), Some(&Value::Number(15.)));
     assert_eq!(s.stores.get("scroll"), Some(&Value::Number(0.)));
@@ -904,7 +904,7 @@ return ui.Panel{id="panel",width=220,height=150,
         Some(0.)
     );
     let (x, y) = scroll_center(&s, "front");
-    assert!(s.scroll(x, y, 10.).unwrap().is_none());
+    assert!(s.scroll(x, y, 10., false).unwrap().is_none());
     assert_eq!(s.stores.get("front"), Some(&Value::Number(0.)));
     assert_eq!(s.stores.get("back"), Some(&Value::Number(0.)));
 }
@@ -2628,7 +2628,7 @@ fn overflowing_scroll_grid_keeps_rows_visible_beyond_its_assigned_container_box(
         .unwrap();
     let r = rect(&scroll.draw);
     let scene = session
-        .scroll(r.x + r.w / 2., r.y + r.h / 2., 350.)
+        .scroll(r.x + r.w / 2., r.y + r.h / 2., 350., false)
         .unwrap()
         .unwrap();
     assert!(
@@ -4497,7 +4497,7 @@ fn scroll_notches_clamp_at_both_content_edges() {
     assert!(limit > 0.);
     for (delta, expected) in [(100_000., limit), (-100_000., 0.)] {
         let scene = session
-            .scroll(r.x + r.w / 2., r.y + r.h / 2., delta)
+            .scroll(r.x + r.w / 2., r.y + r.h / 2., delta, false)
             .unwrap()
             .unwrap();
         session.commit(scene);
@@ -5319,7 +5319,7 @@ fn scroll_steps_prop_parses_validates_and_reaches_the_action() {
     assert!(load("scroll=ui.bind('seen'),scroll_steps={}").is_err());
     assert!(load("scroll_steps={}").is_err());
     let mut s = load("scroll=ui.action('bump'),scroll_steps={}").unwrap();
-    let scene = s.scroll(25., 25., 1.).unwrap().unwrap();
+    let scene = s.scroll(25., 25., 1., false).unwrap().unwrap();
     s.commit(scene);
     assert_eq!(s.stores.get("seen"), Some(&Value::Number(1.)));
 }

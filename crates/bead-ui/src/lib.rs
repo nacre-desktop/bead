@@ -124,6 +124,9 @@ pub struct Node {
     /// Content extent minus viewport, inherited by scrollable descendants.
     #[serde(skip)]
     pub scroll_limit: Option<f64>,
+    /// B0419 U5a: that viewport moves along x (`axis="x"`), so it takes horizontal deltas.
+    #[serde(skip)]
+    pub scroll_horizontal: bool,
     #[serde(default)]
     pub focusable: bool,
     #[serde(default)]

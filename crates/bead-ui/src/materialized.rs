@@ -29,6 +29,7 @@ struct Scroll {
     /// B0419: the plane's `overscan`, so a patch can re-place it.
     overscan: f32,
     ready: Option<(f32, f32)>,
+    horizontal: bool,
 }
 struct Floating {
     index: usize,
@@ -160,8 +161,8 @@ struct Topology {
 /// A layer's map p -> k*p + o.
 type Map = (f32, [f32; 2]);
 const IDENTITY: Map = (1., [0., 0.]);
-/// A layer's own [scale, dx, dy, the dy its children scroll by] for `Topology::place`.
-const UNMOVED: [f32; 4] = [1., 0., 0., 0.];
+/// A layer's own [scale, dx, dy, the dx and dy its children scroll by] for `Topology::place`.
+const UNMOVED: [f32; 5] = [1., 0., 0., 0., 0.];
 impl Topology {
     /// `None` when a primitive or node has no layer to follow.
     fn new(view: &ViewSpec, scene: &Scene, nodes: &[Node], floating: &[Floating]) -> Option<Self> {
@@ -213,18 +214,18 @@ impl Topology {
     /// One pre-order pass (B0364): a layer's map is its parent's, after the parent's scroll, of
     /// its own scale about its laid-out centre plus its translate delta. Primitives, layer bounds
     /// and node boxes follow their layer once; clips are rebuilt below a clipping layer that moved.
-    fn place(&self, scene: &mut Scene, nodes: &mut [Node], own: &[[f32; 4]]) -> Vec<Map> {
+    fn place(&self, scene: &mut Scene, nodes: &mut [Node], own: &[[f32; 5]]) -> Vec<Map> {
         let mut maps: Vec<Map> = Vec::with_capacity(own.len());
         // The clip each layer's children get, and whether it moved.
         let mut clips: Vec<(Option<Rect>, bool)> = Vec::with_capacity(own.len());
         for (index, layer) in scene.layers.iter_mut().enumerate() {
-            let [s, dx, dy, _] = own[index];
+            let [s, dx, dy, ..] = own[index];
             let (_, [x, y]) = about(layer.bounds, s);
             let (map, (clip, moved)) = match self.parents[index] {
                 Some(p) => {
-                    let (k, [px, py]) = maps[p];
+                    let ((k, [px, py]), [.., sx, sy]) = (maps[p], own[p]);
                     (
-                        (k * s, [k * (x + dx) + px, k * (y + dy + own[p][3]) + py]),
+                        (k * s, [k * (x + dx + sx) + px, k * (y + dy + sy) + py]),
                         clips[p],
                     )
                 }
@@ -642,6 +643,7 @@ impl Cached {
                     limit: node.scroll_limit.unwrap_or(0.),
                     overscan: view.overscan,
                     ready: view.ready,
+                    horizontal: view.horizontal,
                 });
             }
             for child in &view.children {
@@ -1057,7 +1059,7 @@ impl Cached {
                     Some(Value::Number(v)) => *v,
                     _ => 0.,
                 };
-                own[scroll.layer][3] =
+                own[scroll.layer][3 + usize::from(!scroll.horizontal)] =
                     old.clamp(0., scroll.limit) as f32 - new.clamp(0., scroll.limit) as f32;
             }
         }

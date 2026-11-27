@@ -36,9 +36,15 @@ pub fn tree_for_app(views: &[Node], stores: &Stores, app_label: &str) -> TreeUpd
                 Some(Value::Number(value)) => *value,
                 _ => 0.,
             };
-            node.set_scroll_y(position.clamp(0., maximum));
-            node.set_scroll_y_min(0.);
-            node.set_scroll_y_max(maximum);
+            if view.scroll_horizontal {
+                node.set_scroll_x(position.clamp(0., maximum));
+                node.set_scroll_x_min(0.);
+                node.set_scroll_x_max(maximum);
+            } else {
+                node.set_scroll_y(position.clamp(0., maximum));
+                node.set_scroll_y_min(0.);
+                node.set_scroll_y_max(maximum);
+            }
         }
         let r = rect(&view.draw);
         node.set_bounds(accesskit::Rect {

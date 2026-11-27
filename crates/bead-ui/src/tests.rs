@@ -329,7 +329,7 @@ fn focused_input_open_panel_and_scroll_survive_recreated_views() {
     session.commit(scene);
     let scene = session.key("saved 😀", false).unwrap().unwrap();
     session.commit(scene);
-    let scene = session.scroll(5., 5., 42.).unwrap().unwrap();
+    let scene = session.scroll(5., 5., 42., false).unwrap().unwrap();
     session.commit(scene);
     let focused = session.stores.get("bead.focused").cloned();
     fixture.behavior("new default must not reset the input");
@@ -726,7 +726,7 @@ fn feedback_frames_keep_the_committed_nodes_and_repaint_only_the_thumb() {
     session.entry = "ui/main.luau".into();
     let first = session.reload().unwrap();
     session.commit(first);
-    let scrolled = session.scroll(50., 20., 12.).unwrap().unwrap();
+    let scrolled = session.scroll(50., 20., 12., false).unwrap().unwrap();
     session.commit(scrolled);
     let boxes = |s: &Session| {
         s.view_nodes()

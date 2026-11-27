@@ -132,6 +132,7 @@ pub const PROPERTIES: &[&str] = &[
     "scroll_steps",
     "overscan",
     "ready",
+    "axis",
     "scrollbar",
     "fill",
     "radial",
@@ -257,6 +258,8 @@ pub struct ViewSpec {
     pub overscan: f32,
     /// B0419: the content span (px) a kit has materialized; `None` is the whole content.
     pub ready: Option<(f32, f32)>,
+    /// B0419 U5a: `axis="x"`: the Scroll moves its content along x.
+    pub horizontal: bool,
     pub scrollbar: bool,
     pub fill: Option<Json>,
     /// The fill amount is an animation marker: draw the box even while it is transparent,
@@ -1254,6 +1257,14 @@ impl ViewSpec {
                 return Err(source.error("overscan must be 0..3"));
             }
             let ready = ready_span(p, raw.kind == Widget::Scroll, source)?;
+            if raw.kind != Widget::Scroll && p.contains_key("axis") {
+                return Err(source.error("axis needs a Scroll"));
+            }
+            let horizontal = match text(p, "axis", "y", source)? {
+                "y" => false,
+                "x" => true,
+                _ => return Err(source.error("axis must be \"x\" or \"y\"")),
+            };
             // A graph's `on_activate` takes a node id from its canvas, not the generic action.
             let action = p
                 .get("on_activate")
@@ -1444,6 +1455,7 @@ impl ViewSpec {
                 scroll_steps,
                 overscan,
                 ready,
+                horizontal,
                 scrollbar: boolean(p, "scrollbar", true, source)?,
                 fill: p.get("fill").cloned(),
                 animated_fill: raw
@@ -1876,6 +1888,7 @@ pub fn layout(
         retain_offscreen: bool,
         scroll_store: Option<&str>,
         scroll_limit: Option<f64>,
+        scroll_x: bool,
         resolve: &Resolve<'_>,
         palette: &Palette,
         (hover, scrolling): (&str, &str),
@@ -2135,10 +2148,15 @@ pub fn layout(
         out.scene.layers[layer_index].own.end = out.scene.primitives.len();
         let inherited_scroll = view.scroll.as_deref().or(scroll_store);
         let scroll_limit = if view.scroll.is_some() {
-            Some(f64::from(l.scroll_height()))
+            Some(f64::from(if view.horizontal {
+                l.scroll_width()
+            } else {
+                l.scroll_height()
+            }))
         } else {
             scroll_limit
         };
+        let scroll_x = view.horizontal || (view.scroll.is_none() && scroll_x);
         if (own_visible || retain_offscreen)
             && (view.action.is_some()
                 || view.input.is_some()
@@ -2187,8 +2205,9 @@ pub fn layout(
                 action_arg: view.argument.clone(),
                 scroll_store: inherited_scroll.map(str::to_owned),
                 scrollable: view.scroll.is_some(),
-                scrollbar: view.scroll.is_some() && view.scrollbar,
+                scrollbar: view.scroll.is_some() && view.scrollbar && !view.horizontal,
                 scroll_limit,
+                scroll_horizontal: scroll_x,
                 focusable: view.action.is_some() || view.input.is_some() || view.graph.is_some(),
                 multiline: view.multiline && view.input.is_some(),
                 masked: view.masked && view.input.is_some(),
@@ -2221,13 +2240,19 @@ pub fn layout(
                 return Err(source.error("scroll must bind a number"));
             };
             let offset = offset.clamp(0., scroll_limit.unwrap_or(f64::MAX)) as f32;
-            children_pos.1 -= offset;
+            if view.horizontal {
+                children_pos.0 -= offset;
+            } else {
+                children_pos.1 -= offset;
+            }
             let clip = child_clip.map_or(r, |c| c.intersect(r));
             child_clip = Some(clip);
             let span = (offset, scroll_limit.unwrap_or(0.) as f32);
             let moving = !scrolling.is_empty() && scrolling == view.id;
             let plane = plane(r, clip, span, view.overscan, view.ready, moving);
-            out.scene.layers[layer_index].scroll = Some(plane);
+            // U5a: no x plane until main steps x (that needs ScrollPlane.horizontal), so a
+            // vertical wheel can never move an x plane on main.
+            out.scene.layers[layer_index].scroll = (!view.horizontal).then_some(plane);
         }
         for child in &view.children {
             draw(
@@ -2240,6 +2265,7 @@ pub fn layout(
                 retain_offscreen || view.scroll.is_some(),
                 inherited_scroll,
                 scroll_limit,
+                scroll_x,
                 resolve,
                 palette,
                 (hover, scrolling),
@@ -2259,6 +2285,7 @@ pub fn layout(
         false,
         None,
         None,
+        false,
         resolve,
         palette,
         (&hover, &scrolling),
