@@ -84,7 +84,7 @@ ui.Group { id="group", child }
 -- Groups children; layout behavior depends on group properties.
 ```
 
-`Arc` and `Polyline` are drawing primitives; their property contract is unstable. `Panel` is the root panel, `Row` lays out horizontally, and `Column` vertically. `Box` is a container. `Button` exposes `on_activate`; `TextInput.text` must be a mutable store binding. `Scroll.scroll` must bind a mutable numeric store. See source validation for additional fields on each element; this short reference is not an exhaustive property schema.
+`Arc` and `Polyline` are drawing primitives; their property contract is unstable. `Arc` `start_angle` and `sweep_angle` accept a numeric `ui.bind(...)`; a store change repaints the arc with no Luau run (values outside -360..360 fall back to a full layout, which reports the usual error). `Panel` is the root panel, `Row` lays out horizontally, and `Column` vertically. `Box` is a container. `Button` exposes `on_activate`; `TextInput.text` must be a mutable store binding. `Scroll.scroll` must bind a mutable numeric store. See source validation for additional fields on each element; this short reference is not an exhaustive property schema.
 
 ## Bindings and behavior
 
