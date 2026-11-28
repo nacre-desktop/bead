@@ -2606,3 +2606,128 @@ fn staged_plane_syncs_add_up_and_the_thumb_settles_with_the_rows() {
     assert_eq!(plane_of(&settled).1.offset, plane_of(&expected).1.offset);
     assert_eq!(thumb(&settled), thumb(&expected));
 }
+
+/// B0450: an overflowing list of 20 rows; the first three run a forever `ui.pulse` on a halo and a
+/// dot with a radial sheen (a raster item), each through `ui.track` on an alpha.
+const PULSE_BEHAVIOR: &str = "local rows={};for i=1,20 do rows[i]={key=tostring(i),running=i<=3,\
+    title='Chat '..i,sub='provider · 2 min'} end;return {stores={open=false,scroll=0,rows=rows},actions={},computed={}}";
+const PULSE_VIEW: &str = "local ui=require('bead.ui');local kit=require('bead.kit');local list=require('bead.widgets.kit.virtual-list')
+return kit.Panel{id='panel',edge='top',open=ui.bind('open'),reveal=true,fade=false,width=360,height=420,padding=0,
+ ui.Text{id='head',position='absolute',left=12,top=12,width=300,height=24,text='Chats',font_size=16,color='onSurface'},
+ list{id='rows',scroll=ui.bind('scroll'),position='absolute',left=12,top=48,width=336,height=340,gap=4,row_height=56,
+  model=ui.bind('rows'),key='key',render=function(item)
+   local p=item.running and ui.pulse('dot:'..item.key,1.6,0,1)
+   return ui.Row{id='row',width=336,height=56,gap=8,align='center',
+    ui.Box{id='halo',width=16,height=16,radius=8,align='center',justify='center',
+     fill=p and ui.alpha('primary',ui.track(p,{0,1},{.14,.25})) or ui.alpha('primary',.25),
+     ui.Box{id='dot',width=8,height=8,radius=4,fill=p and ui.alpha('primary',ui.track(p,{0,1},{.55,1})) or 'primary',
+      radial={{cx=.35,cy=.3,rx=.6,ry=.6,stops={{0,ui.alpha('onSurface',.5)},{1,ui.alpha('onSurface',0)}}}}}},
+    ui.Column{id='text',width=300,height=40,gap=0,
+     ui.Text{id='title',text=item.title,width=300,height=22,font_size=14,color='onSurface'},
+     ui.Text{id='sub',text=item.sub,width=300,height=18,font_size=12,color='onSurfaceVariant'}}}
+  end}}";
+/// The pulse view, opened; a 1 ms frame interval, so each update after a sleep stages a tick.
+fn pulse_session() -> (Fixture, Session) {
+    let (fixture, mut session) = interaction_fixture(PULSE_VIEW, PULSE_BEHAVIOR);
+    session.set_frame_interval(std::time::Duration::from_millis(1));
+    let open = session.update(BTreeMap::from([("open".into(), Value::Bool(true))]));
+    session.commit(open.unwrap().unwrap());
+    (fixture, session)
+}
+/// A fresh CPU presenter's full paint of `scene` posed at rest (its prepared frame, if any).
+fn rest_pixels(scene: &Scene, scale: f32) -> Vec<u8> {
+    use bead_render::{Damage, PixelFormat, Renderer, ShmTarget, tree::TreeCpuRenderer};
+    let mut scene = scene.clone();
+    scene.panel_offset(1., true);
+    scene.offset = (-scene.bounds.x, -scene.bounds.y);
+    let (width, height) = (
+        (scene.bounds.w * scale).ceil() as u32,
+        (scene.bounds.h * scale).ceil() as u32,
+    );
+    let mut bytes = vec![0; (width * height * 4) as usize];
+    let mut renderer = TreeCpuRenderer::default();
+    renderer.prepare_on_ui(&scene, scale).unwrap();
+    let target = ShmTarget {
+        bytes: &mut bytes,
+        width,
+        height,
+        scale,
+        format: PixelFormat::Rgba,
+    };
+    renderer
+        .render(&scene, target, Damage::full(width, height))
+        .unwrap();
+    bytes
+}
+
+/// B0450: a pulse tick on a resting panel re-prepares only the primitives it repaints (the running
+/// rows' halos and dots, plus any shadow or image, which never carry); every other item, key and
+/// raster carries over, and the frame paints as a full prepare of the same scene.
+#[test]
+fn a_pulse_tick_re_prepares_only_the_pulsing_primitives() {
+    let scale = 1.5;
+    let (_fixture, mut session) = pulse_session();
+    let mut cache = bead_render::tree::TreeCache::default();
+    cache.prepare(&session.current, scale).unwrap();
+    // Into the pulses' steep middle, so every 25 ms tick repaints them (an unchanged tick may take
+    // the fill-tail path, which drops the carry for one tick).
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    let mut ticks = 0;
+    for _ in 0..6 {
+        std::thread::sleep(std::time::Duration::from_millis(25));
+        let Some(mut scene) = session.update_model(BTreeMap::new()).unwrap() else {
+            continue;
+        };
+        session.commit(scene.clone());
+        let carried = cache.carried;
+        cache.prepare(&scene, scale).unwrap();
+        let fresh = scene.primitives.len() - (cache.carried - carried);
+        assert!(
+            fresh <= 10,
+            "a tick re-prepared {fresh} of {}",
+            scene.primitives.len()
+        );
+        let expected = rest_pixels(&scene, scale);
+        scene
+            .prepared
+            .insert(scale.to_bits(), cache.frame.clone().unwrap());
+        assert!(
+            rest_pixels(&scene, scale) == expected,
+            "tick {ticks} differs from a full prepare"
+        );
+        ticks += 1;
+    }
+    assert!(ticks >= 4, "{ticks} pulse ticks staged");
+}
+
+/// B0450 timing (release, --ignored --nocapture): per resting pulse tick, the session staging, the
+/// worker bake and the primitives it re-prepared.
+#[test]
+#[ignore]
+fn pulse_tick_cost() {
+    let (scale, ticks) = (1.5, 600);
+    let (_fixture, mut session) = pulse_session();
+    let mut cache = bead_render::tree::TreeCache::default();
+    let (mut stage, mut bake, mut fresh, mut staged) = (0u128, 0u128, 0, 0);
+    for _ in 0..ticks {
+        std::thread::sleep(std::time::Duration::from_micros(8333));
+        let at = std::time::Instant::now();
+        let Some(scene) = session.update_model(BTreeMap::new()).unwrap() else {
+            continue;
+        };
+        stage += at.elapsed().as_micros();
+        let (at, carried) = (std::time::Instant::now(), cache.carried);
+        cache.prepare(&scene, scale).unwrap();
+        bake += at.elapsed().as_micros();
+        fresh += scene.primitives.len() - (cache.carried - carried);
+        session.commit(scene);
+        staged += 1;
+    }
+    let n = staged.max(1) as f64;
+    println!(
+        "PULSE_TICK staged={staged} stage_us={:.0} bake_us={:.0} re_prepared={:.1}",
+        stage as f64 / n,
+        bake as f64 / n,
+        fresh as f64 / n
+    );
+}

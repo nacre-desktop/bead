@@ -451,3 +451,25 @@ already band-only (`clip_difference`, `grown_band`).
 ### Bound Arc angles (B0448)
 
 A numeric `ui.bind` on `ui.Arc` `start_angle` or `sweep_angle` is a patch slot like bound text: a store change rewrites the Arc primitive's angle with zero Luau runs and one patch hit, and equals a full layout at that value. A value outside -360..360 (or NaN) misses the patch, so the relayout reports the literal's error.
+
+### Pulse ticks re-prepare only what they repaint (B0450)
+
+A forever `ui.pulse` through `ui.track` (a chat list's running dots) stages every display frame. Each
+tick already runs zero Luau and zero layout (the cached markup patch), but it was still a whole-view
+transaction: the session re-materialized the scene, the worker's `TreeCache` re-prepared every
+primitive (re-keyed, looked up every raster), and main diffed every item for damage. The cost
+scaled with the panel, not with the dots (harness, 70 primitives, 3 pulsing rows, release: stage
+99 us + bake 144 us + main 58 us per tick; a tick that changes nothing still cost stage + bake).
+
+- The full prepare carries over each fill, arc, line or text whose id, key (paint at the origin),
+  placed rect and clip match the frame before. It is matched at its own index, or by id when rows
+  moved. A carried raster is that slot's cache entry (only at its own index, where the full path
+  also returns that entry); a moved slot's raster, images, shadows and graphs take the full path.
+  The carry holds the last generated frame's address, key and primitive keys; any other frame
+  (a worker-prepared hand-off, the B8 fill tail) or another scale drops it.
+- A resting tick re-prepares only the running rows' halos and dots; the frame paints exactly as a
+  full prepare of the same scene (`a_pulse_tick_re_prepares_only_the_pulsing_primitives`); release
+  timing `pulse_tick_cost` (`PULSE_TICK stage_us= bake_us= re_prepared=`).
+- Not done (over this unit's size gate): skipping an animation-only staging whose scene did not
+  change; a tick that patches the presented frame without a staging (the session still copies and
+  main still diffs the whole scene per tick); a host's own per-stage hooks.

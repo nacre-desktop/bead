@@ -576,6 +576,10 @@ pub struct TreeCache {
     validated_frame: Weak<Frame>,
     /// B8: the frame hash of the last generated frame before its trailing fill layers.
     fill_tail: Option<FillTail>,
+    /// B0450: the last generated frame (address, key) and its primitives' keys, for carry-over.
+    carry: Option<((usize, u64), Vec<u64>)>,
+    /// Primitives a prepare kept from the frame before instead of re-preparing them (B0450).
+    pub carried: usize,
 }
 #[cfg(test)]
 thread_local! {
@@ -2264,6 +2268,15 @@ impl TreeCache {
         let mut transient = (0usize, Vec::new());
         let mut prefetch = Vec::new();
         let planes = moving_planes(scene);
+        // B0450: the frame before, if this cache generated it at this scale.
+        let last = self
+            .carry
+            .take()
+            .zip(self.frame.clone())
+            .filter(|((at, _), frame)| {
+                *at == (Arc::as_ptr(frame) as usize, frame.key) && frame.scale == scale
+            });
+        let mut by_id: Option<std::collections::HashMap<&str, usize>> = None;
         for (index, primitive) in scene.primitives.iter().enumerate() {
             if index == tail_start {
                 tail_hash = Some(frame_hash.clone());
@@ -2293,6 +2306,52 @@ impl TreeCache {
                 }
             }
             let raster_hidden = raster_hidden_by_own_clip(scene, index, primitive, &planes);
+            // B0450: a fill, arc, line or text unchanged since the frame before (id, key, place and
+            // clip) keeps its item and cached raster, so a ui.pulse tick re-prepares only its paints.
+            let plain = match primitive {
+                Primitive::Text { .. } => raster_hidden,
+                Primitive::Rounded { radial, .. } => radial.is_none(),
+                _ => true,
+            };
+            if let Some(((_, last_keys), last_frame)) = &last
+                && !matches!(kind, "image" | "shadow" | "graph")
+                && let Some(at) = last_frame
+                    .items
+                    .get(index)
+                    .is_some_and(|item| item.id == id)
+                    .then_some(index)
+                    .or_else(|| {
+                        let ids = by_id.get_or_insert_with(|| {
+                            let ids = last_frame.items.iter().enumerate();
+                            ids.map(|(i, item)| (item.id.as_str(), i)).collect()
+                        });
+                        ids.get(id.as_str()).copied()
+                    })
+                && last_keys.get(at) == Some(&key)
+                && last_frame.items[at].clip == clip
+                && rect(&last_frame.items[at].primitive) == {
+                    let (dx, dy) = scene.content_offset(index);
+                    rect(primitive).translated(dx, dy)
+                }
+                && let Some(raster) = if plain {
+                    Some(None)
+                } else if at != index {
+                    None // a moved slot's raster is a delta against another item: the full path
+                } else {
+                    let serial = self.serial;
+                    let entry = self.entries.get_mut(&(id.clone(), scale.to_bits()));
+                    entry.filter(|e| e.raster.key == key).map(|e| {
+                        e.touched = serial;
+                        Some(e.raster.clone())
+                    })
+                }
+            {
+                self.carried += 1;
+                let mut item = last_frame.items[at].clone();
+                item.raster = raster;
+                items.push(item);
+                continue;
+            }
             // Reshaped reveal artwork uses the existing exact growing-edge path.
             let reshaped_reveal = scene.motion.as_ref().is_some_and(|motion| {
                 motion.reveal && motion.parts.iter().any(|(part, _)| *part == index)
@@ -2789,6 +2848,7 @@ impl TreeCache {
         }
         self.remember_asset_hashes(scene, &asset_keys);
         let frame = self.finish_frame(scene, scale, items, layers, assets, frame_hash.finish())?;
+        self.carry = Some(((Arc::as_ptr(&frame) as usize, frame.key), keys));
         self.prefetch.retain(|payload| payload.scale != scale);
         self.prefetch.extend(prefetch);
         self.fill_tail = Some(FillTail {
