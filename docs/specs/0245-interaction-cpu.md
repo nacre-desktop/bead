@@ -412,3 +412,34 @@ before the next comparison; why the base drops the wheel is not yet understood.
   (largest render-side item, 365 ms of 990 ms): follow-up unit.
 - The heavy bar still paints 2 frames per seconds tick; the driver must wait for the
   panel's first frame before scrolling.
+
+## Slide frames reuse last frame's pixels (B0442a)
+A sliding reveal (launcher, control centre: `slide_distance` = the body's extent) damages the whole
+visible panel every frame, since every content item moves; `paint_slide` painted the body (the host's
+art raster, or a fill through tiny-skia's mask at its AA edge) and blended the content layer there
+each frame (`blend_row`, `mask_u8` in the interaction profile). A stationary reveal (dashboard) is
+already band-only (`clip_difference`, `grown_band`).
+- Where the last body item under the layer paints one opaque colour (`flat_colour`: a solid opaque
+  fill covering the region, or a 1:1 opaque raster of one texel value there, checked once per raster
+  key over the open body's inset), the pixel is that colour over the layer. `TreeCpuRenderer` keeps
+  that region as last painted (`SlideCopy`: layer key, colour, layer position, rect) and copies it
+  moved by the layer's integer delta (the pose is rounded); the damage around it composes as before.
+  The copy is saved where each call painted, so rotating buffers and several rects per frame stay exact.
+- Fallbacks (full compose): no flat colour (radial or translucent fill, a stretched or non-flat
+  raster, a later body item over the region), a new layer key (a content edit mid-slide), another
+  colour, no copy. Fade/opacity slides never reach `paint_slide`.
+- Freed: the copy is taken at the top of `render`, so every non-slide path drops it; the end of a
+  slide also drops the flatness check and logs `CPU_SLIDE_STEPS steps= copy= full= unproven=`
+  (`unproven` > 0 on a live slide means the body under the content was not one flat colour).
+- Memory: the copy is at most the visible body × 4 B (a 1100×590 launcher at 1.5 ≈ 5.8 MB), only
+  while sliding, uncharged like U3b's plane copy.
+- Tests: `slide_frames_over_flat_art_copy_last_frame_and_equal_a_full_compose` (bottom and right
+  edges, open and close, s1 and s1.5, a content edit mid-slide, freed at the end),
+  `slide_frames_over_striped_art_compose_fully`; release timing `cpu_slide_step_paint_time`.
+- Release timing (laptop, a 35-frame open over flat art, per-frame compose p50 copy vs full):
+  launcher 1164×654 at 1 0.64 vs 0.91 ms, 1746×981 at 1.5 1.84 vs 2.69 ms; control centre
+  504×1080 at 1 0.50 vs 0.67 ms, 756×1620 at 1.5 1.89 vs 2.05 ms; p95 (the first frames) 5.5-8.8
+  vs 6.2-10.0 ms. Only the render call holding the flat region copies, and a later small damage
+  rect of the same frame replaces the copy, so few frames copy (12-28 of 35).
+- Later (B0442b): solid-fill hosts' measurements, keeping the larger copy across several damage
+  rects of one frame; U3b's plane band path can take `flat_colour` for a host's art body too.

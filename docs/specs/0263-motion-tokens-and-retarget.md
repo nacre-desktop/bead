@@ -142,6 +142,9 @@ static-body open/close; making it the default needs the compositor side and is n
   so the close's first frames show what the open's last frames show there. Tests:
   `sliding_reveal_close_is_the_open_pose_for_pose` (4 edges, pixel-equal poses, no travel),
   `sliding_reveal_close_plan_is_the_reversed_open`, `sliding_reveal_close_sends_a_visible_contour_once`.
+- B0442: on the CPU path a sliding reveal's frame keeps, where its content layer lies over one flat
+  opaque colour (the posed body inset 48 px, past the growing edge's band, inside the window), last frame's composite and copies it
+  moved by the layer's whole-pixel delta; only the damage around it composes (spec 0245, B0442).
 
 
 ## Slide pacing and terminal pose (B0283)
