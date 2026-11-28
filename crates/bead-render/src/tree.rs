@@ -2911,9 +2911,11 @@ fn plane_copy_plan(
         let r = Rect::new(r.x - pad, r.y - pad, r.w + 2. * pad, r.h + 2. * pad);
         px(r).w > 0 && px(r).h > 0
     };
+    // B0447: an item its own clip cuts away from the plane's clip paints nothing there.
+    let seen = |item: &Item| item.clip.is_none_or(|c| px(c).w > 0 && px(c).h > 0);
     let item = items[..range.start]
         .iter()
-        .rfind(|item| reaches(item, 0.))
+        .rfind(|item| reaches(item, 0.) && seen(item))
         .ok_or("none")?;
     let under = &item.primitive;
     let whole = item.clip.is_none_or(|c| px(c) == clip);
@@ -2924,6 +2926,8 @@ fn plane_copy_plan(
         Primitive::Rounded { fill, .. } if fill[3] < 255 => "rounded_alpha",
         Primitive::Rounded { .. } => "rounded_partial",
         Primitive::Image { .. } => "image",
+        Primitive::Text { .. } => "text",
+        Primitive::Shadow { .. } => "shadow",
         _ => "other",
     };
     if !kind.is_empty() || shift.0 != 0. {
@@ -9409,6 +9413,41 @@ mod tests {
             clip_step(&mut renderer, &tight, shift, 1., false);
         }
         assert_eq!(renderer.plane_steps.counts[0], 0);
+    }
+    /// B0447: an item before the plane whose own clip lies off the plane's clip paints nothing
+    /// there, so the flat fill under it still decides; one that reaches the clip still falls back.
+    #[test]
+    fn a_plane_over_an_item_clipped_away_takes_the_band_path_and_one_in_the_clip_falls_back() {
+        let label = |rect| Primitive::Text {
+            rect,
+            text: "Header".into(),
+            family: "IBM Plex Sans".into(),
+            size: 6.,
+            color: [240, 240, 240, 255],
+            weight: 400,
+            align: None,
+            shadow: None,
+            features: Vec::new(),
+        };
+        // The label's box lies over the plane's clip; its own clip is the strip above it.
+        let mut away = thumbed_list(100., 20.);
+        away.primitives[1] = label(Rect::new(4., 20., 50., 8.));
+        away.clips.insert(1, Rect::new(0., 0., 60., 10.));
+        band_steps_equal_full_paints(&away, 2);
+        let mut over = away.clone();
+        over.clips.remove(&1);
+        let mut renderer = TreeCpuRenderer::default();
+        for shift in [-10., -24., -40.] {
+            clip_step(&mut renderer, &over, shift, 1., false);
+        }
+        assert_eq!(
+            renderer.plane_steps.counts[0], 0,
+            "a label in the clip paints whole"
+        );
+        assert_eq!(
+            renderer.end_plane_steps().unwrap().rsplit("under=").next(),
+            Some("text")
+        );
     }
     #[test]
     fn plane_copy_fallbacks_paint_the_whole_clip() {

@@ -272,6 +272,8 @@ frame was a worker round trip (`plane=- main_steps=0`).
     only clear of the corner squares), or a 1:1 opaque raster is one value there (`flat_colour`);
     the plane's layer is the one with a scroll plane, so a wrapper layer over the same range
     does not hide it (that kept the launcher's results on the whole-clip path).
+    B0447: an item before the plane whose own clip lies off the plane's clip paints nothing
+    there, so it is not the item under the clip; `under=` now names `text` and `shadow` too.
   - The signature hashes the clip, scale, format, panel offset, the fill under the clip, and the
     plane's items in content coordinates (y + the plane offset; inner clips the same way). A
     worker re-bake at the new offset that main's shift compensates keeps it, a changed row or
