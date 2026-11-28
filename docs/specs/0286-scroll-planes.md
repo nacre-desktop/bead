@@ -3,7 +3,7 @@
 Composited scrolling: every `ui.Scroll` becomes a plane whose content main can move as one, with
 text rastered ahead of the viewport while it moves. Status: U1 (planes in the scene), U2a (GL
 shifts), U4 (kits), U2b1 and U2b2 (main stepping and its switch-on), U5a1 (`axis="x"`), U5a2 (`on_settle`) and U5a3a
-(`snap`) landed; later units (U2b3 thumb and windows, U3 CPU fallback, U5a3b `motion`, U5b
+(`snap`) and U5a3b (`motion`) landed; later units (U2b3 thumb and windows, U3 CPU fallback, U5b
 `ui.scrolled`) append their contracts here.
 
 ## U1 contract: planes in the scene
@@ -343,3 +343,16 @@ beyond the clip, content change), `the_plane_copy_is_dropped_on_an_empty_set_and
   `a_slow_release_settles_on_the_nearest_multiple`,
   `a_vertical_wheel_moves_an_x_snap_strip_unless_a_y_parent_can_scroll`; bead-ui
   `snap_reaches_the_scroll_viewport_and_is_validated`.
+
+## U5a3b: `motion` and `Session::scroll_to`
+
+- `ui.Scroll{motion=<seconds | {duration=, curve=}>}` (Scroll only; seconds 0..10; `curve` a
+  `ui.motion.curve` name, default `ease` = out-cubic; a markup error otherwise). `ScrollViewport`
+  carries it as `motion: Option<(f32, Curve)>`.
+- Main (`scroll.rs`): a wheel or snap move of that viewport runs over the motion's duration and
+  curve; without `motion` it is the 125 ms cubic. Finger flings keep their physics.
+- `Session::scroll_to(store, target)`: an opt-in eased programmatic move through the keyboard-scroll
+  animation with the viewport's `motion` (125 ms cubic without); target clamped to the limit;
+  reduced motion and a plain store write are instant. Nothing at idle; no new timers.
+- Tests: bead-wayland `a_motion_token_sets_the_wheel_duration_and_curve`; bead-ui
+  `motion_reaches_the_viewport_and_scroll_to_eases_with_it`.

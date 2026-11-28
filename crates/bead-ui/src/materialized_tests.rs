@@ -2191,6 +2191,71 @@ fn snap_reaches_the_scroll_viewport_and_is_validated() {
     }
 }
 
+/// B0419 U5a3b: `motion` reaches the viewport record; `scroll_to` eases with it, a store write is
+/// instant; a bad value or a non-Scroll is a markup error.
+#[test]
+fn motion_reaches_the_viewport_and_scroll_to_eases_with_it() {
+    let view = PLANE_VIEW.replace(
+        "height=200,",
+        "height=200,motion={duration=0.4,curve='linear'},",
+    );
+    let (_fixture, mut session) = interaction_fixture(&view, PLANE_BEHAVIOR);
+    let motion = session.scroll_viewports()[0].motion;
+    assert_eq!(motion, Some((0.4, bead_core::animation::Curve::Linear)));
+    let at = |session: &Session| match session.stores.get("scroll") {
+        Some(Value::Number(n)) => *n,
+        other => panic!("{other:?}"),
+    };
+    let scene = session.scroll_to("scroll", 500.).unwrap().unwrap();
+    session.commit(scene);
+    // Real time passes between the start and this sample, so allow a fraction of a pixel.
+    assert!(
+        (at(&session) - 100.).abs() < 1.,
+        "the first frame starts from the offset: {}",
+        at(&session)
+    );
+    for (fraction, want) in [(0.5, 300.), (1., 500.)] {
+        let m = session.keyboard_scroll.as_mut().unwrap();
+        m.started = std::time::Instant::now() - std::time::Duration::from_secs_f64(0.4 * fraction);
+        let scene = session.update(BTreeMap::new()).unwrap().unwrap();
+        session.commit(scene);
+        assert!(
+            (at(&session) - want).abs() < 5.,
+            "{fraction}: {}",
+            at(&session)
+        );
+    }
+    assert!(session.keyboard_scroll.is_none());
+    session.keyboard_scroll = None;
+    let write = BTreeMap::from([("scroll".into(), Value::Number(700.))]);
+    let scene = session.update(write).unwrap().unwrap();
+    session.commit(scene);
+    assert_eq!(at(&session), 700., "a plain store write is instant");
+    for (view, message) in [
+        (
+            PLANE_VIEW.replace("height=200,", "height=200,motion=-1,"),
+            "motion must be",
+        ),
+        (
+            PLANE_VIEW.replace("height=200,", "height=200,motion={curve='x'},"),
+            "motion must be",
+        ),
+        (
+            PLANE_VIEW.replace("id='gap',", "id='gap',motion=0.2,"),
+            "motion needs a Scroll",
+        ),
+    ] {
+        let fixture = Fixture::new();
+        fs::create_dir_all(fixture.0.join("ui")).unwrap();
+        fs::write(fixture.0.join("ui/behavior.luau"), PLANE_BEHAVIOR).unwrap();
+        fs::write(fixture.0.join("ui/main.luau"), view).unwrap();
+        let mut session = fixture.session();
+        session.entry = "ui/main.luau".into();
+        let error = session.reload().err().expect("a markup error");
+        assert!(error.message.contains(message), "{}", error.message);
+    }
+}
+
 /// B0419 U5a2: `on_settle` runs once per settle of a viewport that moved, with the final offset.
 #[test]
 fn on_settle_runs_once_with_the_final_offset_after_a_burst() {

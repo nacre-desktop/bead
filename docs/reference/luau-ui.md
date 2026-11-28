@@ -39,6 +39,8 @@ Overflowing `Scroll` regions get a themed overlay scrollbar automatically. Use `
 
 `snap=<pitch px>` (`Scroll` only, `>= 0`) makes a wheel detent move one pitch and finger releases come to rest on a multiple of it. A vertical wheel that no vertical `Scroll` under the pointer can take moves an `axis="x"` `Scroll` with `snap`. See the same spec.
 
+`motion=<seconds | {duration=, curve=}>` (`Scroll` only) sets the ease of its wheel and snap moves (default 125 ms out-cubic; a `ui.motion.duration` token works as seconds). `session.scroll_to(store, target)` (host API) moves a scroll store with that ease; a plain store write stays instant. See spec 0286.
+
 Any other node may take `scroll=ui.action(name)`: the action receives the scroll delta as its number argument. Add `scroll_steps={min_interval_ms=0, threshold=40}` (both optional; 0..2000 ms and 1..1000 px) to receive whole `+1` (down or right) and `-1` steps instead of smoothed pixels: a wheel detent is one step, finger travel steps each `threshold` px, and at most one step per `min_interval_ms` is delivered (extra steps are dropped). `scroll_steps` with a store binding, or without a scroll action, is a markup error.
 ```luau
 ui.Box { id="box", width=80, height=40, fill="surface", child }

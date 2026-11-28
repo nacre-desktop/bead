@@ -160,6 +160,7 @@ mod tests {
             delivered: 100.,
             point: (4., 5.),
             snap: None,
+            ease: None,
         };
         assert_eq!(remaining_distance(Some(&previous), (4., 5.), -1.), 0.);
         assert_eq!(remaining_distance(Some(&previous), (4., 5.), 1.), 1100.);
@@ -278,6 +279,7 @@ mod tests {
                     delivered: 0.,
                     point: (4., 5.),
                     snap: None,
+                    ease: None,
                 },
             );
             let mut frames = 0;
@@ -356,6 +358,7 @@ mod tests {
                 delivered: 0.,
                 point: (40.5, 70.25),
                 snap: None,
+                ease: None,
             },
         );
         assert!(
@@ -471,6 +474,7 @@ mod tests {
                 delivered: 0.,
                 point: (1., 2.),
                 snap: None,
+                ease: None,
             },
         );
         let now = start + Duration::from_millis(50);
@@ -484,6 +488,7 @@ mod tests {
             delivered: 0.,
             point: (1., 2.),
             snap: None,
+            ease: None,
         };
         let (rest, _) = state
             .step(&target, false, now + Duration::from_millis(125))
@@ -629,6 +634,7 @@ mod plane_tests {
                 delivered: 40.,
                 point: AT,
                 snap: None,
+                ease: None,
             },
         );
         step(&mut state, &layers(300., true), 40., t0);
@@ -649,6 +655,7 @@ mod plane_tests {
                 delivered: 0.,
                 point: AT,
                 snap: None,
+                ease: None,
             },
         );
         for delta in [10., 20., 30.] {
@@ -745,6 +752,7 @@ mod plane_tests {
             limit: 800.,
             settle,
             snap: 0.,
+            motion: None,
         }]
     }
 
@@ -753,6 +761,32 @@ mod plane_tests {
         let (mut v, rect) = (viewport(false).remove(0), Rect::new(0., 0., 100., 200.));
         (v.horizontal, v.rect, v.offset, v.limit, v.snap) = (horizontal, rect, offset, limit, snap);
         v
+    }
+
+    #[test]
+    fn a_motion_token_sets_the_wheel_duration_and_curve() {
+        let (t0, target) = (Instant::now(), Target::Overlay(2));
+        let mut view = snap_view(false, 0., 800., 0.);
+        view.motion = Some((0.4, bead_core::animation::Curve::Linear));
+        let mut state = State::default();
+        let motion = wheel_motion(None, Some(&view), AT, 100., t0);
+        state.motions.insert((target.clone(), false), motion);
+        let (half, _) = state
+            .step(&target, false, t0 + Duration::from_millis(200))
+            .unwrap();
+        assert!(
+            (half - 50.).abs() < 1e-6,
+            "linear over 0.4 s, not the 125 ms cubic: {half}"
+        );
+        let plain = wheel_motion(None, Some(&snap_view(false, 0., 800., 0.)), AT, 100., t0);
+        state.motions.insert((target.clone(), false), plain);
+        let (done, _) = state
+            .step(&target, false, t0 + Duration::from_millis(125))
+            .unwrap();
+        assert!(
+            (done - 100.).abs() < 1e-6,
+            "without motion: the 125 ms cubic"
+        );
     }
 
     #[test]
@@ -1220,9 +1254,14 @@ impl State {
             if t != target || *h != horizontal {
                 return true;
             }
-            let progress =
-                (now.duration_since(motion.started).as_secs_f64() / WHEEL_DURATION).min(1.);
-            let next = motion.distance * (1. - (1. - progress).powi(3));
+            let (duration, curve) = motion.ease.map_or((WHEEL_DURATION, None), |(d, c)| {
+                (f64::from(d).max(1e-3), Some(c))
+            });
+            let progress = (now.duration_since(motion.started).as_secs_f64() / duration).min(1.);
+            let eased = curve.map_or(1. - (1. - progress).powi(3), |c| {
+                c.ease(progress as f32).into()
+            });
+            let next = motion.distance * eased;
             result = Some((next - motion.delivered, motion.point));
             motion.delivered = next;
             progress < 1.
@@ -1452,6 +1491,8 @@ struct Motion {
     point: (f32, f32),
     /// B0419 U5a3: on a `snap` viewport, (the offset this motion starts from, its unsnapped aim).
     snap: Option<(f64, f64)>,
+    /// B0419 U5a3b: the viewport's `motion` (seconds, curve); None is the 125 ms cubic.
+    ease: Option<(f32, bead_core::animation::Curve)>,
 }
 type Viewport = bead_render::ScrollViewport;
 fn contains(r: Rect, (x, y): (f32, f32)) -> bool {
@@ -1521,6 +1562,7 @@ fn wheel_motion(
         delivered: 0.,
         point,
         snap,
+        ease: v.and_then(|v| v.motion),
     }
 }
 /// A finger release: a fast one flings. On a `snap` viewport (`pitch` > 0) a fling ends on the

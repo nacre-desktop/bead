@@ -673,6 +673,8 @@ pub struct ScrollViewport {
     pub settle: bool,
     /// U5a3: `snap` pitch in px (0: none).
     pub snap: f32,
+    /// U5a3b: `motion` (seconds, curve) for its wheel and snap moves; None is the 125 ms cubic.
+    pub motion: Option<(f32, bead_core::animation::Curve)>,
 }
 impl Scene {
     /// A fully opaque scene of this size with nothing in it.

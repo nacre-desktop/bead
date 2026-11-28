@@ -376,6 +376,7 @@ impl Session {
                 limit: node.scroll_limit.unwrap_or(0.) as f32,
                 settle: node.on_settle.is_some(),
                 snap: node.snap,
+                motion: node.motion,
             })
         };
         let nodes = self.current_nodes.iter().filter(|node| node.scrollable);

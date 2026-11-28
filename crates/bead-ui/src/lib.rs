@@ -133,6 +133,9 @@ pub struct Node {
     /// B0419 U5a3: a viewport's `snap` pitch (0: none).
     #[serde(skip)]
     pub snap: f32,
+    /// B0419 U5a3b: `motion` (seconds, curve) of a Scroll; None is the 125 ms cubic.
+    #[serde(skip)]
+    pub motion: Option<(f32, bead_core::animation::Curve)>,
     #[serde(default)]
     pub focusable: bool,
     #[serde(default)]

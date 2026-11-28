@@ -26,14 +26,17 @@ pub(super) struct KeyboardMotion {
     pub from: f64,
     pub target: f64,
     pub next: Instant,
+    /// B0419 U5a3b: a `scroll_to` uses the viewport's `motion`; None is the 125 ms cubic.
+    pub ease: Option<(f32, bead_core::animation::Curve)>,
 }
 impl KeyboardMotion {
     pub fn value(&self, now: Instant) -> (f64, bool) {
-        let t = (now.saturating_duration_since(self.started).as_secs_f64() / 0.125).min(1.);
-        (
-            self.from + (self.target - self.from) * (1. - (1. - t).powi(3)),
-            t >= 1.,
-        )
+        let (duration, curve) = self
+            .ease
+            .map_or((0.125, None), |(d, c)| (f64::from(d).max(1e-3), Some(c)));
+        let t = (now.saturating_duration_since(self.started).as_secs_f64() / duration).min(1.);
+        let eased = curve.map_or(1. - (1. - t).powi(3), |c| f64::from(c.ease(t as f32)));
+        (self.from + (self.target - self.from) * eased, t >= 1.)
     }
 }
 impl Feedback {
@@ -281,6 +284,32 @@ impl Session {
             from: *offset,
             target,
             next: now,
+            ease: None,
+        });
+        self.update(BTreeMap::new())
+    }
+    /// B0419 U5a3b: a programmatic write of scroll store `store` that eases with its viewport's
+    /// `motion` (or the 125 ms cubic); a plain store write stays instant.
+    pub fn scroll_to(&mut self, store: &str, target: f64) -> Result<Option<Scene>, Diagnostic> {
+        let nodes = &self.current_nodes;
+        let node = nodes
+            .iter()
+            .find(|n| n.scrollable && n.scroll_store.as_deref() == Some(store));
+        let (Some(node), Some(Value::Number(from))) = (node, self.stores.get(store)) else {
+            return Ok(None);
+        };
+        let target = target.clamp(0., node.scroll_limit.unwrap_or(0.));
+        if bead_core::animation::reduced_motion() {
+            return self.update(BTreeMap::from([(store.to_owned(), Value::Number(target))]));
+        }
+        let now = Instant::now();
+        self.keyboard_scroll = Some(KeyboardMotion {
+            store: store.to_owned(),
+            started: now,
+            from: *from,
+            target,
+            next: now,
+            ease: node.motion,
         });
         self.update(BTreeMap::new())
     }

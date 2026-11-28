@@ -135,6 +135,7 @@ pub const PROPERTIES: &[&str] = &[
     "axis",
     "on_settle",
     "snap",
+    "motion",
     "scrollbar",
     "fill",
     "radial",
@@ -264,6 +265,7 @@ pub struct ViewSpec {
     pub horizontal: bool,
     pub on_settle: Option<String>,
     pub snap: f32,
+    pub scroll_motion: Option<(f32, bead_core::animation::Curve)>,
     pub scrollbar: bool,
     pub fill: Option<Json>,
     /// The fill amount is an animation marker: draw the box even while it is transparent,
@@ -706,6 +708,23 @@ fn scroll_steps(
         }
     }
     Ok(Some(out))
+}
+/// A Scroll's `motion` (B0419 U5a3b): seconds (a `ui.motion.duration` token, eased out-cubic) or
+/// `{duration=, curve=}` with a `ui.motion.curve` name.
+fn scroll_motion(
+    v: Option<&Json>,
+    source: &Source,
+) -> Result<Option<(f32, bead_core::animation::Curve)>, Diagnostic> {
+    use bead_core::animation::Curve;
+    let Some(v) = v else { return Ok(None) };
+    let duration = v.as_f64().or_else(|| v.get("duration")?.as_f64());
+    let curve = v
+        .get("curve")
+        .map_or(Some(Curve::EaseOut), |c| c.as_str().and_then(Curve::parse));
+    match (duration.filter(|d| (0. ..=10.).contains(d)), curve) {
+        (Some(d), Some(c)) => Ok(Some((d as f32, c))),
+        _ => Err(source.error("motion must be seconds (0..10) or {duration=, curve=}")),
+    }
 }
 /// A Scroll's `ready={from=,to=}`: content px that exist, `from <= to`.
 fn ready_span(
@@ -1316,7 +1335,7 @@ impl ViewSpec {
                         })
                         .transpose()
                 };
-            let scroll_only = ["on_settle", "snap"]
+            let scroll_only = ["on_settle", "snap", "motion"]
                 .into_iter()
                 .find(|k| p.contains_key(k));
             if let Some(k) = scroll_only.filter(|_| raw.kind != Widget::Scroll) {
@@ -1327,6 +1346,7 @@ impl ViewSpec {
             if snap < 0. {
                 return Err(source.error("snap must be >= 0"));
             }
+            let scroll_motion = scroll_motion(p.get("motion"), source)?;
             let graph = if raw.kind == Widget::Graph {
                 Some(std::sync::Arc::new(crate::graph::GraphData::parse(
                     &|name| p.get(name),
@@ -1473,6 +1493,7 @@ impl ViewSpec {
                 horizontal,
                 on_settle,
                 snap,
+                scroll_motion,
                 scrollbar: boolean(p, "scrollbar", true, source)?,
                 fill: p.get("fill").cloned(),
                 animated_fill: raw
@@ -2240,6 +2261,7 @@ pub fn layout(
                 scroll_horizontal: scroll_x,
                 on_settle: view.on_settle.clone(),
                 snap: view.snap,
+                motion: view.scroll_motion,
                 focusable: view.action.is_some() || view.input.is_some() || view.graph.is_some(),
                 multiline: view.multiline && view.input.is_some(),
                 masked: view.masked && view.input.is_some(),
