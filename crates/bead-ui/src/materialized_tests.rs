@@ -501,7 +501,7 @@ return ui.Column{id='root',width=100,height=100,fill='surface',
     assert_eq!(angles, [(360., -360.), (-90., 90.)], "the literal stays");
     // Out of range falls back to the full layout, which reports the literal's error.
     let miss = session.update(BTreeMap::from([("sweep".into(), Value::Number(400.))]));
-    assert!(miss.is_err(), "{miss:?}");
+    assert!(miss.is_err(), "an out-of-range bound angle must be the literal's error");
 }
 
 #[test]
