@@ -2833,12 +2833,17 @@ fn fill_covers(primitive: &Primitive, offset: (f32, f32), scale: f32, clip: Dama
         (clip.x + clip.w) as f32,
         (clip.y + clip.h) as f32,
     );
+    // B0445: each clip corner lies inside the fill's rounded corner (a rectangle inside the
+    // shape needs no more), not merely clear of the corner squares.
+    let arc = |dx: f32, dy: f32| dx.max(0.).hypot(dy.max(0.)) <= (radius - inset).max(0.);
     x >= left + inset
         && x1 <= right - inset
         && y >= top + inset
         && y1 <= bottom - inset
-        && ((y >= top + radius + inset && y1 <= bottom - radius - inset)
-            || (x >= left + radius + inset && x1 <= right - radius - inset))
+        && arc(left + radius - x, top + radius - y)
+        && arc(x1 - (right - radius), top + radius - y)
+        && arc(left + radius - x, y1 - (bottom - radius))
+        && arc(x1 - (right - radius), y1 - (bottom - radius))
 }
 /// A scroll plane: its item range, its clip (the viewport) and the shift (baked - live).
 pub(crate) type Shift = (std::ops::Range<usize>, Rect, (f32, f32));
@@ -2892,10 +2897,11 @@ fn plane_copy_plan(
     let [(range, plane, shift)] = shifts else {
         return Err("");
     };
+    // The plane's own layer: a wrapper layer can span the same range (B0445).
     let layer = scene
         .layers
         .iter()
-        .find(|l| (l.own.end..l.subtree_end) == *range);
+        .find(|l| l.scroll.is_some() && (l.own.end..l.subtree_end) == *range);
     let p = layer.and_then(|l| l.scroll).ok_or("")?;
     let content = items.get(range.clone()).ok_or("")?;
     let at = scene.offset;
@@ -2905,15 +2911,17 @@ fn plane_copy_plan(
         let r = Rect::new(r.x - pad, r.y - pad, r.w + 2. * pad, r.h + 2. * pad);
         px(r).w > 0 && px(r).h > 0
     };
-    let under = &items[..range.start]
+    let item = items[..range.start]
         .iter()
         .rfind(|item| reaches(item, 0.))
-        .ok_or("none")?
-        .primitive;
+        .ok_or("none")?;
+    let under = &item.primitive;
+    let whole = item.clip.is_none_or(|c| px(c) == clip);
+    let flat = flat_colour(item, clip, at, scale).filter(|_| whole);
     let kind = match under {
+        _ if flat.is_some() => "",
         Primitive::Rounded { radial, .. } if radial.is_some() => "rounded_radial",
         Primitive::Rounded { fill, .. } if fill[3] < 255 => "rounded_alpha",
-        Primitive::Rounded { .. } if fill_covers(under, at, scale, clip) => "",
         Primitive::Rounded { .. } => "rounded_partial",
         Primitive::Image { .. } => "image",
         _ => "other",
@@ -2924,6 +2932,7 @@ fn plane_copy_plan(
     let mut hash = std::collections::hash_map::DefaultHasher::new();
     let bits = [at.0, at.1, scale].map(f32::to_bits);
     (clip, format == PixelFormat::Bgra, bits).hash(&mut hash);
+    (flat, item.raster.as_ref().map(|r| r.key)).hash(&mut hash);
     hash_primitive(under, false, &mut hash);
     for item in content {
         hash_primitive(&item.primitive, true, &mut hash);
@@ -9339,6 +9348,67 @@ mod tests {
                 "scale {scale}: every step after the first moved the copy"
             );
         }
+    }
+    /// B0445: `scene` stepped through down shifts at both scales; the band steps equal full paints.
+    fn band_steps_equal_full_paints(scene: &Scene, bands: u32) {
+        for scale in [1_f32, 1.5] {
+            let mut renderer = TreeCpuRenderer::default();
+            for shift in [-10., -24., -40.] {
+                let band = clip_step(&mut renderer, scene, shift, scale, false);
+                let full = clip_step(&mut TreeCpuRenderer::default(), scene, shift, scale, false);
+                assert!(band == full, "scale {scale} shift {shift}");
+            }
+            assert_eq!(renderer.plane_steps.counts[0], bands, "scale {scale}");
+        }
+    }
+    #[test]
+    fn a_plane_over_a_rounded_fill_or_flat_art_or_a_wrapper_layer_takes_the_band_path() {
+        let rounded = |radius| Primitive::Rounded {
+            rect: Rect::new(-4., -4., 68., 108.),
+            radius,
+            fill: [20, 20, 30, 255],
+            border: None,
+            radial: None,
+        };
+        // The clip (0..60 x 10..90) lies inside the corners' arcs of a radius 14 fill, though
+        // neither its columns nor its rows clear the corner squares.
+        let mut scene = thumbed_list(100., 20.);
+        scene.primitives[0] = rounded(14.);
+        band_steps_equal_full_paints(&scene, 2);
+        let mut art = thumbed_list(100., 20.);
+        art.primitives[0] = Primitive::image(Rect::new(-4., -4., 68., 108.), "art.svg");
+        art.asset_data = BTreeMap::from([(
+            "art.svg".into(),
+            Arc::from(
+                b"<svg xmlns='http://www.w3.org/2000/svg' width='68' height='108'><rect width='68' height='108' fill='#14141e'/></svg>"
+                    .to_vec(),
+            ),
+        )]);
+        art.resource_revision = 1;
+        band_steps_equal_full_paints(&art, 2);
+        // A layer spanning the plane's own range (the launcher's shape) is not the plane.
+        let mut wrapped = thumbed_list(100., 20.);
+        let end = wrapped.layers[1].subtree_end;
+        wrapped.layers.insert(
+            1,
+            crate::SceneLayer {
+                id: "wrapper".into(),
+                parent: None,
+                own: 2..2,
+                subtree_end: end,
+                bounds: wrapped.bounds,
+                scroll: None,
+            },
+        );
+        band_steps_equal_full_paints(&wrapped, 2);
+        // A radius that puts the clip's corners outside the arcs still paints whole.
+        let mut tight = thumbed_list(100., 20.);
+        tight.primitives[0] = rounded(40.);
+        let mut renderer = TreeCpuRenderer::default();
+        for shift in [-10., -24.] {
+            clip_step(&mut renderer, &tight, shift, 1., false);
+        }
+        assert_eq!(renderer.plane_steps.counts[0], 0);
     }
     #[test]
     fn plane_copy_fallbacks_paint_the_whole_clip() {

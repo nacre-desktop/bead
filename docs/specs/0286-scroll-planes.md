@@ -265,6 +265,10 @@ frame was a worker round trip (`plane=- main_steps=0`).
   - Proof it needs, else the whole clip is painted (and the copy kept, freshly painted): one
     plane and no x shift; one solid opaque fill (no radial) covering the clip as the last item
     under it; the same signature; an integral delta; damage that is exactly the clip.
+    B0445: "covering the clip" means each clip corner lies inside a rounded fill's arc (not
+    only clear of the corner squares), or a 1:1 opaque raster is one value there (`flat_colour`);
+    the plane's layer is the one with a scroll plane, so a wrapper layer over the same range
+    does not hide it (that kept the launcher's results on the whole-clip path).
   - The signature hashes the clip, scale, format, panel offset, the fill under the clip, and the
     plane's items in content coordinates (y + the plane offset; inner clips the same way). A
     worker re-bake at the new offset that main's shift compensates keeps it, a changed row or
