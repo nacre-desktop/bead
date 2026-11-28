@@ -4045,6 +4045,9 @@ pub struct TreeCpuRenderer {
     slide_copy: Option<SlideCopy>,
     /// B0442: slide paints by path: copy, full, unproven (CPU_SLIDE_STEPS; a test hook).
     slide_steps: [u32; 3],
+    /// B0442b: full-compose slide paints over a flat region by why no copy served: first frame, new
+    /// layer key, other colour, damage off the region, damage the copy does not reach.
+    slide_why: [u32; 5],
     /// B0442: the body raster (key, region) last checked for one flat colour, and the colour.
     flat_under: Option<((u64, Damage), Option<Flat>)>,
 }
@@ -4743,10 +4746,12 @@ impl TreeCpuRenderer {
     fn end_slide_steps(&mut self) {
         self.flat_under = None;
         let [copy, full, unproven] = std::mem::take(&mut self.slide_steps);
+        let [first, key, colour, off, short] = std::mem::take(&mut self.slide_why);
         let steps = copy + full + unproven;
         if steps > 0 {
             bead_core::profile::eline(format_args!(
-                "CPU_SLIDE_STEPS steps={steps} copy={copy} full={full} unproven={unproven}"
+                "CPU_SLIDE_STEPS steps={steps} copy={copy} full={full} unproven={unproven} \
+                 why_first={first} why_key={key} why_colour={colour} why_off={off} why_short={short}"
             ));
         }
     }
@@ -4935,6 +4940,12 @@ impl TreeCpuRenderer {
             (intersection(whole, r) == r).then_some((r, colour))
         })();
         // What the copy holds of this frame (its layer moved by the pose delta) is copied.
+        let miss = flat.and_then(|(_, under)| match &copy {
+            None => Some(0),
+            Some(c) if c.key.0 != *key => Some(1),
+            Some(c) if c.key.1 != under => Some(2),
+            _ => None,
+        });
         let reuse = copy.filter(|c| flat.is_some_and(|(_, under)| c.key == (*key, under)));
         let mut moved = Damage::full(0, 0);
         if let (Some(c), Some((r, _))) = (&reuse, flat) {
@@ -4954,6 +4965,10 @@ impl TreeCpuRenderer {
         // Copy, full (no copy matched or reached, or no flat region), or unproven.
         let unproven = flat.is_none() && r.w * r.h > 0;
         self.slide_steps[usize::from(!copied) + usize::from(unproven)] += 1;
+        if let (false, Some((r, _))) = (copied, flat) {
+            let off = intersection(r, damage).w * intersection(r, damage).h == 0;
+            self.slide_why[miss.unwrap_or(3 + usize::from(!off))] += 1;
+        }
         // The damage around what was copied composes as before.
         let (d, cut) = (damage, |x, y, w, h| Damage { x, y, w, h });
         let m = if copied {
@@ -4975,7 +4990,13 @@ impl TreeCpuRenderer {
         };
         // Saved where this call painted, so several damage rects per frame stay exact.
         let s = intersection(r, damage);
-        if s.w == 0 || s.h == 0 {
+        // A later, smaller damage rect keeps the larger copy (its own pose stays exact).
+        if s.w == 0
+            || s.h == 0
+            || reuse
+                .as_ref()
+                .is_some_and(|c| c.rect.w * c.rect.h > s.w * s.h)
+        {
             self.slide_copy = reuse;
         } else {
             let mut pixels = reuse.map_or_else(Vec::new, |c| c.pixels);
@@ -7865,6 +7886,14 @@ mod tests {
                 copy >= 5 && unproven == 0,
                 "{edge:?} s{scale} open={open}: copy={copy} full={whole} unproven={unproven}"
             );
+            // The first flat frame has no copy, the content edit re-keys once, the rest copy.
+            let [first, key, colour, ..] = renderer.slide_why;
+            assert_eq!(
+                (first, key, colour),
+                (1, 1, 0),
+                "{edge:?} s{scale} open={open}: {:?}",
+                renderer.slide_why
+            );
             // A close ends with the body too small for a flat region, which drops the copy.
             assert!(!open || renderer.slide_copy.is_some() && renderer.flat_under.is_some());
             // The slide ends: the copy, the flatness check and the counts go.
@@ -7885,6 +7914,55 @@ mod tests {
             renderer.render(&rest, target, Damage::full(w, h)).unwrap();
             assert!(renderer.slide_copy.is_none() && renderer.flat_under.is_none());
             assert_eq!(renderer.slide_steps, [0; 3]);
+        }
+    }
+    #[test]
+    fn a_later_smaller_damage_rect_keeps_the_larger_slide_copy() {
+        for scale in [1., 1.5] {
+            let base = art_slide(bead_core::Edge::Bottom, (560., 300.), true, scale);
+            let (w, h) = (
+                (base.bounds.w * scale) as u32,
+                (base.bounds.h * scale) as u32,
+            );
+            // Each frame: the whole surface, then a small rect inside the flat body.
+            let small = Damage {
+                x: w / 2,
+                y: h / 2,
+                w: 40,
+                h: 40,
+            };
+            let run = |full: bool| {
+                let mut renderer = TreeCpuRenderer::default();
+                let mut bytes = vec![7u8; (w * h * 4) as usize];
+                let mut shown = Vec::new();
+                for step in 1..=12u16 {
+                    let mut scene = base.clone();
+                    scene.panel_offset(f32::from(step) / 13., true);
+                    renderer.prepare_on_ui(&scene, scale).unwrap();
+                    for region in [Damage::full(w, h), small] {
+                        if full {
+                            renderer.slide_copy = None;
+                        }
+                        let target = ShmTarget {
+                            bytes: &mut bytes,
+                            width: w,
+                            height: h,
+                            scale,
+                            format: PixelFormat::Bgra,
+                        };
+                        renderer.render(&scene, target, region).unwrap();
+                    }
+                    shown.push(bytes.clone());
+                }
+                (renderer, shown)
+            };
+            let (renderer, copied) = run(false);
+            assert!(
+                copied == run(true).1,
+                "s{scale}: differs from a full compose"
+            );
+            let rect = renderer.slide_copy.as_ref().unwrap().rect;
+            assert!(rect.w * rect.h > 100 * 100, "s{scale}: kept {rect:?}");
         }
     }
     #[test]

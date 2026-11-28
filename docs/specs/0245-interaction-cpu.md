@@ -441,8 +441,12 @@ already band-only (`clip_difference`, `grown_band`).
   504×1080 at 1 0.50 vs 0.67 ms, 756×1620 at 1.5 1.89 vs 2.05 ms; p95 (the first frames) 5.5-8.8
   vs 6.2-10.0 ms. Only the render call holding the flat region copies, and a later small damage
   rect of the same frame replaces the copy, so few frames copy (12-28 of 35).
-- Later (B0442b): solid-fill hosts' measurements, keeping the larger copy across several damage
-  rects of one frame; U3b's plane band path can take `flat_colour` for a host's art body too.
+- B0442b: the saved copy stays when a later damage rect of the frame (or the next frame) is
+  smaller, so the larger copy keeps serving (its own pose stays exact). `CPU_SLIDE_STEPS` appends
+  why each full compose over a flat region had no copy: `why_first` (none saved), `why_key` (layer
+  key changed), `why_colour` (flat colour changed), `why_off` (damage off the flat region),
+  `why_short` (damage the copy does not reach). Test: `a_later_smaller_damage_rect_keeps_the_larger_slide_copy`.
+- Later: U3b's plane band path can take `flat_colour` for a host's art body too.
 
 ### Bound Arc angles (B0448)
 
