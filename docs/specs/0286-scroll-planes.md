@@ -140,6 +140,9 @@ Known limits (U2b1):
   takes the scene's offset (as for a worker write) and its motion stops.
 - The focus ring of a focused node inside a moving plane stays at its baked place until the next
   sync (≤ 50 ms); the thumb follows the syncs (its shift is U2b3, with windows).
+- B0444: `Session::scroll` builds on the staged stores (as `update` does), so a sync that arrives
+  while the one before still awaits its commit adds to it; it used to drop the earlier delta, and
+  the thumb settled short of the rows main showed.
 - Nested planes: only the plane main moves is shifted; the U2a shortcut on cut inner clips holds.
 
 Tests (no Wayland, `scroll.rs` `plane_tests`): `a_step_inside_ready_sends_no_ui_event`,

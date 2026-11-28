@@ -2459,3 +2459,29 @@ fn kit_lists_at_rest_show_the_same_rows_at_the_same_positions() {
     assert_eq!(rows(LIST_FIXED, 0.), [0., 32., 64., 96.]);
     assert_eq!(rows(LIST_FIXED, 500.), [-20., 12., 44., 76.]);
 }
+
+/// B0444: plane syncs that arrive before the scene of the one before is committed still add up, so
+/// the settled thumb sits where the worker-only path puts it for the same rows.
+#[test]
+fn staged_plane_syncs_add_up_and_the_thumb_settles_with_the_rows() {
+    let thumb = |scene: &Scene| {
+        let layer = scene.layers.iter().find(|l| l.id == "@scrollbar:root.list");
+        layer.expect("a visible thumb").bounds
+    };
+    let (_fixture, mut session) = interaction_fixture(PLANE_VIEW, PLANE_BEHAVIOR);
+    let (_reference_fixture, mut reference) = interaction_fixture(PLANE_VIEW, PLANE_BEHAVIOR);
+    // No fade, so the first reveal already paints the thumb.
+    session.scrollbar_config.fade_ms = 0.;
+    reference.scrollbar_config.fade_ms = 0.;
+    let (id, _) = plane_of(&session.current);
+    let moving = session.update(scrolling(&id)).unwrap().unwrap();
+    session.commit(moving);
+    // Two syncs, the second staged while the first awaits its commit; then the settle.
+    session.scroll(90., 100., 10., false).unwrap().unwrap();
+    let synced = session.scroll(90., 100., 20., false).unwrap().unwrap();
+    assert_eq!(plane_of(&synced).1.offset, 130.);
+    let settled = session.scroll_settled(&id).unwrap().unwrap();
+    let expected = reference.scroll(90., 100., 30., false).unwrap().unwrap();
+    assert_eq!(plane_of(&settled).1.offset, plane_of(&expected).1.offset);
+    assert_eq!(thumb(&settled), thumb(&expected));
+}

@@ -1156,6 +1156,13 @@ impl Session {
         });
         Ok(Some(scene))
     }
+    /// The stores a new change builds on: the staged ones while a scene is awaiting its commit.
+    pub(super) fn staged_stores(&self) -> Stores {
+        match &self.pending {
+            Some(pending) if pending.generation.is_none() => pending.stores.clone(),
+            _ => self.stores.clone(),
+        }
+    }
     /// External model updates use the same staged view transaction as input.
     pub fn update(
         &mut self,
@@ -1166,10 +1173,7 @@ impl Session {
         }
         // A change in the same event (a hover, then a service value) builds on the staged state, not on the
         // committed one, so the later scene still carries the earlier change.
-        let mut stores = match &self.pending {
-            Some(pending) if pending.generation.is_none() => pending.stores.clone(),
-            _ => self.stores.clone(),
-        };
+        let mut stores = self.staged_stores();
         let base = stores.revision();
         stores
             .commit(changes)

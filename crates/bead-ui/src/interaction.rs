@@ -470,12 +470,13 @@ impl Session {
         let stores = if node.scroll.is_none()
             && let Some(id) = &node.scroll_store
         {
-            let Some(Value::Number(value)) = self.stores.get(id) else {
+            // A sync right behind another still awaits its commit: build on that staged offset.
+            let mut stores = self.staged_stores();
+            let Some(Value::Number(value)) = stores.get(id) else {
                 return Err(node.diagnostic("scroll store not a number"));
             };
             let limit = node.scroll_limit.unwrap_or(f64::MAX);
             let offset = value.clamp(0., limit);
-            let mut stores = self.stores.clone();
             stores
                 .commit(BTreeMap::from([(
                     id.clone(),
