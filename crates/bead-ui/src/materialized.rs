@@ -22,12 +22,6 @@ struct Text {
     foreground: [u8; 4],
     muted: [u8; 4],
 }
-/// A `ui.Arc` angle bound to a numeric store: the patch rewrites the primitive's angle.
-struct Angle {
-    binding: String,
-    index: usize,
-    sweep: bool,
-}
 struct Scroll {
     layer: usize,
     binding: String,
@@ -146,7 +140,6 @@ pub(super) struct Cached {
     values: BTreeMap<String, Value>,
     structural: BTreeSet<String>,
     text: Vec<Text>,
-    angles: Vec<Angle>,
     hover: Vec<Hover>,
     scroll: Vec<Scroll>,
     panel_open: Option<String>,
@@ -382,7 +375,6 @@ impl Cached {
             values: BTreeMap::new(),
             structural: BTreeSet::new(),
             text: vec![],
-            angles: vec![],
             hover: vec![],
             scroll: vec![],
             panel_open: None,
@@ -596,15 +588,6 @@ impl Cached {
                     } else {
                         cached.structural.extend(names);
                     }
-                } else if let ("start_angle" | "sweep_angle", Widget::Arc, true) =
-                    (property.as_str(), view.kind, value.get("__bind").is_some())
-                    && let Some(index) = primitive(|p| matches!(p, Primitive::Arc { .. }))
-                {
-                    cached.angles.push(Angle {
-                        binding: names.first().cloned().unwrap_or_default(),
-                        index,
-                        sweep: property == "sweep_angle",
-                    });
                 } else if property == "scroll" && view.kind == Widget::Scroll {
                     // Scroll is the only numeric binding that changes geometry
                     // without changing the layout tree; resolve it after traversal.
@@ -704,7 +687,6 @@ impl Cached {
             .iter()
             .map(String::as_str)
             .chain(cached.text.iter().map(|t| t.binding.as_str()))
-            .chain(cached.angles.iter().map(|a| a.binding.as_str()))
             .chain(cached.panel_open.as_deref())
             .chain(INTERACTION)
         {
@@ -851,8 +833,7 @@ impl Cached {
                     "bead.focus_visible" => matches!(value, Value::Bool(_)),
                     _ => {
                         matches!(value, Value::Text(_))
-                            || ((scroll_binding || self.angles.iter().any(|a| &a.binding == name))
-                                && matches!(value, Value::Number(_)))
+                            || (scroll_binding && matches!(value, Value::Number(_)))
                             || (panel_open_binding && matches!(value, Value::Bool(_)))
                     }
                 };
@@ -956,25 +937,6 @@ impl Cached {
                 if let Some(node) = text.node {
                     nodes[node].label = paint.clone();
                 }
-            }
-        }
-        for angle in &self.angles {
-            if let Some(Value::Number(value)) = changed.get(&angle.binding)
-                && let Primitive::Arc {
-                    start_angle,
-                    sweep_angle,
-                    ..
-                } = &mut scene.primitives[angle.index]
-            {
-                // Out of the literal's -360..360 range (or NaN): a relayout reports its error.
-                if !(-360. ..=360.).contains(value) {
-                    return Ok(None);
-                }
-                *(if angle.sweep {
-                    sweep_angle
-                } else {
-                    start_angle
-                }) = *value as f32;
             }
         }
         if let Some(Value::Text(next)) = changed.get("bead.hovered") {

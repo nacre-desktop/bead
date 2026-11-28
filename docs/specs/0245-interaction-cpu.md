@@ -443,7 +443,3 @@ already band-only (`clip_difference`, `grown_band`).
   rect of the same frame replaces the copy, so few frames copy (12-28 of 35).
 - Later (B0442b): solid-fill hosts' measurements, keeping the larger copy across several damage
   rects of one frame; U3b's plane band path can take `flat_colour` for a host's art body too.
-
-### Bound Arc angles (B0448)
-
-A numeric `ui.bind` on `ui.Arc` `start_angle` or `sweep_angle` is a patch slot like bound text: a store change rewrites the Arc primitive's angle with zero Luau runs and one patch hit, and equals a full layout at that value. A value outside -360..360 (or NaN) misses the patch, so the relayout reports the literal's error.

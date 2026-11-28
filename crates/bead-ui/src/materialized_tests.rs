@@ -451,63 +451,6 @@ fn hover_patch_recolours_in_place_and_equals_a_full_rebuild() {
 }
 
 #[test]
-fn bound_arc_angles_patch_without_luau_and_match_a_full_layout() {
-    let view = r#"local ui=require('bead.ui')
-return ui.Column{id='root',width=100,height=100,fill='surface',
- ui.Arc{id='arc',width=40,height=40,stroke_width=3,color='primary',
-  start_angle=ui.bind('start'),sweep_angle=ui.bind('sweep')},
- ui.Arc{id='fixed',width=40,height=40,stroke_width=3,color='primary',sweep_angle=90}}"#;
-    let behavior = "return {stores={start=-90,sweep=100},actions={},computed={}}";
-    let (_fixture, mut session) = interaction_fixture(view, behavior);
-    let (_reference_fixture, mut reference) = interaction_fixture(view, behavior);
-    let mut hits = patch_hits();
-    frontend::reset_eval_calls();
-    for (name, value) in [
-        ("sweep", 250.),
-        ("start", 30.),
-        ("sweep", -360.),
-        ("start", 360.),
-    ] {
-        let changes = BTreeMap::from([(name.into(), Value::Number(value))]);
-        let scene = session.update(changes.clone()).unwrap().unwrap();
-        session.commit(scene.clone());
-        let expected = rebuilt(&mut reference, changes);
-        assert_eq!(
-            painted(&scene, session.view_nodes()),
-            painted(&expected, reference.view_nodes()),
-            "{name}={value}"
-        );
-        assert_eq!(patch_hits(), hits + 1, "{name}={value}");
-        hits = patch_hits();
-    }
-    assert_eq!(
-        frontend::eval_calls(),
-        0,
-        "a bound angle patches with zero Luau"
-    );
-    let angles: Vec<_> = session
-        .current
-        .primitives
-        .iter()
-        .filter_map(|p| match p {
-            Primitive::Arc {
-                start_angle,
-                sweep_angle,
-                ..
-            } => Some((*start_angle, *sweep_angle)),
-            _ => None,
-        })
-        .collect();
-    assert_eq!(angles, [(360., -360.), (-90., 90.)], "the literal stays");
-    // Out of range falls back to the full layout, which reports the literal's error.
-    let miss = session.update(BTreeMap::from([("sweep".into(), Value::Number(400.))]));
-    assert!(
-        miss.is_err(),
-        "an out-of-range bound angle must be the literal's error"
-    );
-}
-
-#[test]
 fn hover_bound_in_markup_stays_structural() {
     let view = r#"local ui=require('bead.ui')
 return ui.Column{id='root',width=200,height=100,fill='surface',
